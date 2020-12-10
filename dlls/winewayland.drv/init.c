@@ -102,6 +102,22 @@ static INT CDECL WAYLAND_GetDeviceCaps(PHYSDEV dev, INT cap)
     }
 }
 
+/**********************************************************************
+ *           WAYLAND_wine_get_wgl_driver
+ */
+static struct opengl_funcs * CDECL WAYLAND_wine_get_wgl_driver(PHYSDEV dev, UINT version)
+{
+    struct opengl_funcs *ret;
+
+    if (!(ret = wayland_get_wgl_driver(version)))
+    {
+        dev = GET_NEXT_PHYSDEV(dev, wine_get_wgl_driver);
+        ret = dev->funcs->wine_get_wgl_driver(dev, version);
+    }
+
+    return ret;
+}
+
 static const struct gdi_dc_funcs wayland_gdi_dc_funcs =
 {
     NULL,                               /* pAbortDoc */
@@ -233,7 +249,7 @@ static const struct gdi_dc_funcs wayland_gdi_dc_funcs =
     NULL,                               /* pWidenPath */
     NULL,                               /* pD3DKMTCheckVidPnExclusiveOwnership */
     NULL,                               /* pD3DKMTSetVidPnSourceOwner */
-    NULL,                               /* wine_get_wgl_driver */
+    WAYLAND_wine_get_wgl_driver,        /* wine_get_wgl_driver */
     NULL,                               /* wine_get_vulkan_driver */
     GDI_PRIORITY_GRAPHICS_DRV           /* priority */
 };

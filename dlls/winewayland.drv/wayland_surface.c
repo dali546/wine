@@ -242,6 +242,9 @@ err:
  *
  * Configures the position and size of a wayland surface. Depending on the
  * surface type, either repositioning or resizing may have no effect.
+ *
+ * Note that this doesn't configure any associated GL subsurface,
+ * wayland_surface_reconfigure_gl() needs to be called separately.
  */
 void wayland_surface_reconfigure(struct wayland_surface *surface,
                                  int x, int y,
@@ -393,6 +396,16 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     surface->crit.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection(&surface->crit);
 
+    wayland_surface_destroy_gl(surface);
+
+    if (surface->wl_egl_window) {
+        wl_egl_window_destroy(surface->wl_egl_window);
+        surface->wl_egl_window = NULL;
+    }
+
+    if (surface->wp_viewport)
+        wp_viewport_destroy(surface->wp_viewport);
+
     if (surface->xdg_toplevel) {
         xdg_toplevel_destroy(surface->xdg_toplevel);
         surface->xdg_toplevel = NULL;
@@ -414,6 +427,101 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     wl_list_remove(&surface->link);
 
     heap_free(surface);
+}
+
+/**********************************************************************
+ *          wayland_surface_create_gl
+ *
+ * Creates a GL subsurface for this wayland surface.
+ */
+BOOL wayland_surface_create_gl(struct wayland_surface *surface)
+{
+    struct wayland_surface *surface_gl;
+
+    TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+
+    surface_gl = wayland_surface_create_common(surface->wayland);
+    if (!surface_gl)
+        goto err;
+
+    surface_gl->wl_subsurface =
+        wl_subcompositor_get_subsurface(surface_gl->wayland->wl_subcompositor,
+                                        surface_gl->wl_surface,
+                                        surface->wl_surface);
+    if (!surface_gl->wl_subsurface)
+        goto err;
+    wl_subsurface_set_desync(surface_gl->wl_subsurface);
+
+    surface_gl->wl_egl_window = wl_egl_window_create(surface_gl->wl_surface, 1, 1);
+    if (!surface_gl->wl_egl_window)
+        goto err;
+
+    surface->gl = surface_gl;
+
+    wl_surface_commit(surface_gl->wl_surface);
+
+    surface_gl->hwnd = surface->hwnd;
+
+    return TRUE;
+
+err:
+    if (surface_gl)
+        wayland_surface_destroy(surface_gl);
+
+    return FALSE;
+}
+
+/**********************************************************************
+ *          wayland_surface_destroy_gl
+ *
+ * Destroys the associated GL subsurface for this wayland surface.
+ */
+void wayland_surface_destroy_gl(struct wayland_surface *surface)
+{
+    if (!surface->gl)
+        return;
+
+    TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+
+    wayland_surface_destroy(surface->gl);
+    surface->gl = NULL;
+}
+
+/**********************************************************************
+ *          wayland_surface_reconfigure_gl
+ *
+ * Configures the position and size of the GL subsurface associated with
+ * a wayland surface.
+ */
+void wayland_surface_reconfigure_gl(struct wayland_surface *surface,
+                                    int x, int y,
+                                    int width, int height)
+{
+    if (!surface->gl)
+        return;
+
+    TRACE("surface=%p hwnd=%p %d,%d+%dx%d\n",
+          surface, surface->hwnd, x, y, width, height);
+
+    surface->gl->offset_x = x;
+    surface->gl->offset_y = y;
+
+    wl_subsurface_set_position(surface->gl->wl_subsurface, x, y);
+    wl_egl_window_resize(surface->gl->wl_egl_window, width, height, 0, 0);
+
+    /* Use a viewport, if supported, to ensure GL surfaces remain inside
+     * their parent's boundaries when resizing. */
+    if (!surface->gl->wp_viewport && surface->wayland->wp_viewporter)
+    {
+        surface->gl->wp_viewport =
+            wp_viewporter_get_viewport(surface->wayland->wp_viewporter,
+                                       surface->gl->wl_surface);
+    }
+
+    if (surface->gl->wp_viewport)
+        wp_viewport_set_destination(surface->gl->wp_viewport, width, height);
+
+    wl_surface_commit(surface->gl->wl_surface);
 }
 
 /**********************************************************************

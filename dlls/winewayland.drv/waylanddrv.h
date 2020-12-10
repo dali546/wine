@@ -19,7 +19,9 @@
  */
 
 #include <wayland-client.h>
+#include <wayland-egl.h>
 #include "xdg-shell-client-protocol.h"
+#include "viewporter-client-protocol.h"
 
 #include "windef.h"
 #include "winbase.h"
@@ -84,6 +86,7 @@ struct wayland
     struct xdg_wm_base *xdg_wm_base;
     struct wl_shm *wl_shm;
     struct wl_seat *wl_seat;
+    struct wp_viewporter *wp_viewporter;
     struct wl_list output_list;
     struct wl_list surface_list;
     struct wayland_keyboard keyboard;
@@ -139,6 +142,11 @@ struct wayland_surface
     struct wl_subsurface *wl_subsurface;
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *xdg_toplevel;
+    struct wp_viewport *wp_viewport;
+    struct wl_egl_window *wl_egl_window;
+    struct wayland_surface *gl;
+    /* The offset of this surface relative to its owning win32 window */
+    int offset_x, offset_y;
     HWND hwnd;
     CRITICAL_SECTION crit;
     struct wayland_surface_configure pending;
@@ -235,6 +243,10 @@ void wayland_surface_reconfigure(struct wayland_surface *surface, int x, int y,
 void wayland_surface_commit_buffer(struct wayland_surface *surface,
                                    struct wayland_shm_buffer *shm_buffer,
                                    HRGN surface_damage_region);
+BOOL wayland_surface_create_gl(struct wayland_surface *surface);
+void wayland_surface_destroy_gl(struct wayland_surface *surface);
+void wayland_surface_reconfigure_gl(struct wayland_surface *surface, int x, int y,
+                                    int width, int height);
 void wayland_surface_ack_configure(struct wayland_surface *surface);
 void wayland_surface_unmap(struct wayland_surface *surface);
 BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *conf,
@@ -267,6 +279,13 @@ void wayland_keyboard_emit(uint32_t key, uint32_t state, HWND hwnd);
 
 void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer, HCURSOR handle);
 void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor);
+
+/**********************************************************************
+ *          OpenGL support
+ */
+
+struct opengl_funcs *wayland_get_wgl_driver(UINT version);
+void wayland_destroy_gl_drawable(HWND hwnd);
 
 /**********************************************************************
  *          Debugging helpers

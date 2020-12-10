@@ -1,0 +1,428 @@
+/*
+ * Wayland surfaces
+ *
+ * Copyright 2020 Alexandros Frantzis for Collabora Ltd
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+ */
+
+#include "config.h"
+
+#include "waylanddrv.h"
+#include "wine/debug.h"
+#include "wine/heap.h"
+#include "wine/unicode.h"
+#include "winuser.h"
+#include <linux/input.h>
+
+#include <errno.h>
+#include <assert.h>
+
+WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
+
+/* Change to 1 to dump committed buffer contents to disk */
+#define DEBUG_DUMP_COMMIT_BUFFER 0
+
+static void handle_xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
+			                 uint32_t serial)
+{
+    struct wayland_surface *surface = data;
+    uint32_t last_serial = surface->pending.serial;
+
+    TRACE("hwnd=%p serial=%u\n", surface->hwnd, serial);
+
+    surface->pending.serial = serial;
+
+    /* If we already have a pending configure event, no need to repost */
+    if (last_serial)
+    {
+        TRACE("not reposting, last_serial=%u\n", last_serial);
+        return;
+    }
+
+    if (surface->hwnd)
+        PostMessageW(surface->hwnd, WM_WAYLAND_CONFIGURE, 0, 0);
+    else
+        wayland_surface_ack_configure(surface);
+}
+
+void wayland_surface_ack_configure(struct wayland_surface *surface)
+{
+    if (!surface->xdg_surface || !surface->pending.serial)
+        return;
+
+    TRACE("Setting current serial=%u size=%dx%d flags=%#x\n",
+          surface->pending.serial, surface->pending.width,
+          surface->pending.height, surface->pending.configure_flags);
+
+    /* Guard setting current config, so that we only commit acceptable
+     * buffers. Also see wayland_surface_commit_buffer(). */
+    EnterCriticalSection(&surface->crit);
+
+    surface->current = surface->pending;
+    xdg_surface_ack_configure(surface->xdg_surface, surface->current.serial);
+
+    LeaveCriticalSection(&surface->crit);
+
+    memset(&surface->pending, 0, sizeof(surface->pending));
+}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+    handle_xdg_surface_configure,
+};
+
+static void handle_xdg_toplevel_configure(void *data,
+                                          struct xdg_toplevel *xdg_toplevel,
+                                          int32_t width, int32_t height,
+                                          struct wl_array *states)
+{
+    struct wayland_surface *surface = data;
+    uint32_t *state;
+    int flags = 0;
+
+    wl_array_for_each(state, states)
+    {
+        switch(*state)
+        {
+        case XDG_TOPLEVEL_STATE_MAXIMIZED:
+            flags |= WAYLAND_CONFIGURE_FLAG_MAXIMIZED;
+            break;
+        case XDG_TOPLEVEL_STATE_ACTIVATED:
+            flags |= WAYLAND_CONFIGURE_FLAG_ACTIVATED;
+            break;
+        case XDG_TOPLEVEL_STATE_RESIZING:
+            flags |= WAYLAND_CONFIGURE_FLAG_RESIZING;
+            break;
+        case XDG_TOPLEVEL_STATE_FULLSCREEN:
+            flags |= WAYLAND_CONFIGURE_FLAG_FULLSCREEN;
+            break;
+        default:
+            break;
+        }
+    }
+
+    surface->pending.width = width;
+    surface->pending.height = height;
+    surface->pending.configure_flags = flags;
+
+    TRACE("%dx%d flags=%#x\n", width, height, flags);
+}
+
+static void handle_xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel)
+{
+    TRACE("\n");
+}
+
+static const struct xdg_toplevel_listener xdg_toplevel_listener = {
+    handle_xdg_toplevel_configure,
+    handle_xdg_toplevel_close,
+};
+
+static struct wayland_surface *wayland_surface_create_common(struct wayland *wayland)
+{
+    struct wayland_surface *surface;
+
+    surface = heap_alloc_zero(sizeof(*surface));
+    if (!surface)
+        goto err;
+
+    InitializeCriticalSection(&surface->crit);
+    surface->crit.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": wayland_surface");
+
+    surface->wayland = wayland;
+
+    surface->wl_surface = wl_compositor_create_surface(wayland->wl_compositor);
+    if (!surface->wl_surface)
+        goto err;
+
+    wl_list_insert(&wayland->surface_list, &surface->link);
+
+    return surface;
+
+err:
+    if (surface)
+        wayland_surface_destroy(surface);
+    return NULL;
+}
+
+/**********************************************************************
+ *          wayland_surface_create_toplevel
+ *
+ * Creates a toplevel wayland surface, optionally associated with a parent
+ * surface.
+ */
+struct wayland_surface *wayland_surface_create_toplevel(struct wayland *wayland,
+                                                        struct wayland_surface *parent)
+{
+    struct wayland_surface *surface;
+
+    TRACE("parent=%p\n", parent);
+
+    surface = wayland_surface_create_common(wayland);
+    if (!surface)
+        goto err;
+
+    surface->xdg_surface =
+        xdg_wm_base_get_xdg_surface(wayland->xdg_wm_base, surface->wl_surface);
+    if (!surface->xdg_surface)
+        goto err;
+
+    xdg_surface_add_listener(surface->xdg_surface, &xdg_surface_listener, surface);
+
+    surface->xdg_toplevel = xdg_surface_get_toplevel(surface->xdg_surface);
+    if (!surface->xdg_toplevel)
+        goto err;
+    xdg_toplevel_add_listener(surface->xdg_toplevel, &xdg_toplevel_listener, surface);
+
+    if (parent && parent->xdg_toplevel)
+        xdg_toplevel_set_parent(surface->xdg_toplevel, parent->xdg_toplevel);
+
+    wl_surface_commit(surface->wl_surface);
+
+    /* Wait for the first configure event. */
+    while (!surface->current.serial)
+        wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
+
+    return surface;
+
+err:
+    if (surface)
+        wayland_surface_destroy(surface);
+    return NULL;
+}
+
+/**********************************************************************
+ *          wayland_surface_create_subsurface
+ *
+ * Creates a wayland subsurface with the specified parent.
+ */
+struct wayland_surface *wayland_surface_create_subsurface(struct wayland *wayland,
+                                                          struct wayland_surface *parent)
+{
+    struct wayland_surface *surface;
+
+    TRACE("parent=%p\n", parent);
+
+    surface = wayland_surface_create_common(wayland);
+    if (!surface)
+        goto err;
+
+    surface->wl_subsurface =
+        wl_subcompositor_get_subsurface(wayland->wl_subcompositor,
+                                        surface->wl_surface,
+                                        parent->wl_surface);
+    if (!surface->wl_subsurface)
+        goto err;
+    wl_subsurface_set_desync(surface->wl_subsurface);
+
+    wl_surface_commit(surface->wl_surface);
+
+    return surface;
+
+err:
+    if (surface)
+        wayland_surface_destroy(surface);
+    return NULL;
+}
+
+/**********************************************************************
+ *          wayland_surface_reconfigure
+ *
+ * Configures the position and size of a wayland surface. Depending on the
+ * surface type, either repositioning or resizing may have no effect.
+ */
+void wayland_surface_reconfigure(struct wayland_surface *surface,
+                                 int x, int y,
+                                 int width, int height)
+{
+    TRACE("surface=%p hwnd=%p %d,%d+%dx%d\n", surface, surface->hwnd, x, y, width, height);
+
+    if (surface->wl_subsurface)
+    {
+        wl_subsurface_set_position(surface->wl_subsurface, x, y);
+        wl_surface_commit(surface->wl_surface);
+    }
+
+    if (surface->xdg_surface)
+        xdg_surface_set_window_geometry(surface->xdg_surface, 0, 0, width, height);
+}
+
+static void dump_commit_buffer(struct wayland_shm_buffer *shm_buffer)
+{
+    static int dbgid = 0;
+
+    dbgid++;
+
+    dump_pixels("/tmp/winedbg/commit-%.3d.pam", dbgid, shm_buffer->map_data,
+                shm_buffer->width, shm_buffer->height,
+                shm_buffer->format == WL_SHM_FORMAT_ARGB8888,
+                shm_buffer->damage_region, NULL);
+}
+
+static RGNDATA *get_region_data(HRGN region)
+{
+    RGNDATA *data = NULL;
+    DWORD size;
+
+    if (!(size = GetRegionData(region, 0, NULL))) goto err;
+    if (!(data = heap_alloc_zero(size))) goto err;
+
+    if (!GetRegionData(region, size, data)) goto err;
+
+    return data;
+
+err:
+    if (data)
+        heap_free(data);
+    return NULL;
+}
+
+/**********************************************************************
+ *          wayland_surface_configure_is_compatible
+ *
+ * Checks whether a wayland_surface_configure object is compatible with the
+ * the provided arguments.
+ *
+ * If flags is zero, only the width and height are checked for compatibility,
+ * otherwise, the configure objects flags must also match the passed flags.
+ */
+BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *conf,
+                                             int width, int height,
+                                             enum wayland_configure_flags flags)
+{
+    BOOL compat_flags = flags ? (flags & conf->configure_flags) : TRUE;
+    BOOL compat_with_max =
+        !(conf->configure_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED) ||
+        (width == conf->width && height == conf->height);
+    BOOL compat_with_full =
+        !(conf->configure_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN) ||
+        (width <= conf->width && height <= conf->height);
+
+    return compat_flags && compat_with_max && compat_with_full;
+}
+
+/**********************************************************************
+ *          wayland_surface_commit_buffer
+ *
+ * Commits a SHM buffer on a wayland surface.
+ */
+void wayland_surface_commit_buffer(struct wayland_surface *surface,
+                                   struct wayland_shm_buffer *shm_buffer,
+                                   HRGN surface_damage_region)
+{
+    RGNDATA *surface_damage;
+
+    /* Since multiple threads can commit a buffer to a wayland surface
+     * (e.g., subwindows in different threads), we guard this function
+     * to ensure we don't commit buffers that are not acceptable by the
+     * compositor (see below, and also wayland_surface_ack_configure()). */
+    EnterCriticalSection(&surface->crit);
+
+    TRACE("surface=%p (%dx%d) flags=%#x buffer=%p (%dx%d)\n", surface,
+            surface->current.width, surface->current.height,
+            surface->current.configure_flags,
+            shm_buffer, shm_buffer->width, shm_buffer->height);
+
+    /* Maximized surfaces are very strict about the dimensions of buffers
+     * they accept. To avoid wayland protocol errors, drop buffers not matching
+     * the expected dimensions of maximized surfaces. This typically happens
+     * transiently during resizing operations. */
+    if (!wayland_surface_configure_is_compatible(&surface->current,
+                                                 shm_buffer->width,
+                                                 shm_buffer->height,
+                                                 surface->current.configure_flags))
+    {
+        LeaveCriticalSection(&surface->crit);
+        TRACE("surface=%p buffer=%p dropping buffer\n", surface, shm_buffer);
+        shm_buffer->busy = FALSE;
+        return;
+    }
+
+    if (DEBUG_DUMP_COMMIT_BUFFER)
+        dump_commit_buffer(shm_buffer);
+
+    wl_surface_attach(surface->wl_surface, shm_buffer->wl_buffer, 0, 0);
+
+    /* Add surface damage, i.e., which parts of the surface have changed since
+     * the last surface commit. Note that this is different from the buffer
+     * damage returned by wayland_shm_buffer_get_damage(). */
+    surface_damage = get_region_data(surface_damage_region);
+    if (surface_damage)
+    {
+        RECT *rgn_rect = (RECT *)surface_damage->Buffer;
+        RECT *rgn_rect_end = rgn_rect + surface_damage->rdh.nCount;
+
+        for (;rgn_rect < rgn_rect_end; rgn_rect++)
+        {
+            wl_surface_damage_buffer(surface->wl_surface,
+                                     rgn_rect->left, rgn_rect->top,
+                                     rgn_rect->right - rgn_rect->left,
+                                     rgn_rect->bottom - rgn_rect->top);
+        }
+        heap_free(surface_damage);
+    }
+
+    wl_surface_commit(surface->wl_surface);
+
+    LeaveCriticalSection(&surface->crit);
+
+    wl_display_flush(surface->wayland->wl_display);
+}
+
+/**********************************************************************
+ *          wayland_surface_destroy
+ *
+ * Destroys a wayland surface.
+ */
+void wayland_surface_destroy(struct wayland_surface *surface)
+{
+    TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+
+    surface->crit.DebugInfo->Spare[0] = 0;
+    DeleteCriticalSection(&surface->crit);
+
+    if (surface->xdg_toplevel) {
+        xdg_toplevel_destroy(surface->xdg_toplevel);
+        surface->xdg_toplevel = NULL;
+    }
+    if (surface->xdg_surface) {
+        xdg_surface_destroy(surface->xdg_surface);
+        surface->xdg_surface = NULL;
+    }
+
+    if (surface->wl_subsurface) {
+        wl_subsurface_destroy(surface->wl_subsurface);
+        surface->wl_subsurface = NULL;
+    }
+    if (surface->wl_surface) {
+        wl_surface_destroy(surface->wl_surface);
+        surface->wl_surface = NULL;
+    }
+
+    wl_list_remove(&surface->link);
+
+    heap_free(surface);
+}
+
+/**********************************************************************
+ *          wayland_surface_unmap
+ *
+ * Unmaps (i.e., hides) this surface.
+ */
+void wayland_surface_unmap(struct wayland_surface *surface)
+{
+    wl_surface_attach(surface->wl_surface, NULL, 0, 0);
+    wl_surface_commit(surface->wl_surface);
+}

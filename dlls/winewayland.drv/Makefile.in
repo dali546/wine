@@ -1,0 +1,26 @@
+MODULE    = winewayland.drv
+IMPORTS   = uuid setupapi rpcrt4 user32 gdi32 advapi32
+DELAYIMPORTS = comctl32 ole32 shell32 imm32
+EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS)
+EXTRALIBS = $(WAYLAND_CLIENT_LIBS)
+EXTRADLLFLAGS =
+CFLAGS = -std=c11 -Wno-declaration-after-statement
+EXTRACFLAGS = -std=c11 -Wno-declaration-after-statement
+CPPFLAGS = -std=c11 -Wno-declaration-after-statement
+EXTRACROSSCFLAGS = -std=c11 -Wno-declaration-after-statement
+
+C_SRCS = \
+	display.c \
+	dump_pixels.c \
+	init.c \
+	keyboard.c \
+	wayland.c \
+	wayland_cursor.c \
+	wayland_shm.c \
+	wayland_surface.c \
+	wayland_buffer_queue.c \
+	waylanddrv_main.c \
+	window.c \
+	xdg-shell-protocol.c \
+
+RC_SRCS = version.rc

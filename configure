@@ -700,6 +700,8 @@ XSLT_CFLAGS
 XML2_LIBS
 XML2_CFLAGS
 PCAP_LIBS
+WAYLAND_CLIENT_LIBS
+WAYLAND_CLIENT_CFLAGS
 X_EXTRA_LIBS
 X_LIBS
 X_PRE_LIBS
@@ -900,6 +902,7 @@ with_xshape
 with_xshm
 with_xslt
 with_xxf86vm
+with_wayland
 with_wine_tools
 with_wine64
 enable_largefile
@@ -1672,6 +1675,7 @@ enable_winepulse_drv
 enable_wineqtdecoder
 enable_wineusb_sys
 enable_winevulkan
+enable_winewayland_drv
 enable_winex11_drv
 enable_wing32
 enable_winhttp
@@ -1880,6 +1884,8 @@ OBJC
 OBJCFLAGS
 OBJCPP
 XMKMF
+WAYLAND_CLIENT_CFLAGS
+WAYLAND_CLIENT_LIBS
 XML2_CFLAGS
 XML2_LIBS
 XSLT_CFLAGS
@@ -2641,6 +2647,7 @@ Optional Packages:
   --without-xshm          do not use XShm (shared memory extension)
   --without-xslt          do not use XSLT
   --without-xxf86vm       do not use XFree video mode extension
+  --with-wayland          build with wayland support
   --with-wine-tools=DIR   use Wine tools from directory DIR
   --with-wine64=DIR       use the 64-bit Wine in DIR for a Wow64 build
   --with-x                use the X Window System
@@ -2660,6 +2667,10 @@ Some influential environment variables:
   OBJCFLAGS   Objective C compiler flags
   OBJCPP      Objective C preprocessor
   XMKMF       Path to xmkmf, Makefile generator for X Window System
+  WAYLAND_CLIENT_CFLAGS
+              C compiler flags for wayland-client, overriding pkg-config
+  WAYLAND_CLIENT_LIBS
+              Linker flags for wayland-client, overriding pkg-config
   XML2_CFLAGS C compiler flags for libxml-2.0, overriding pkg-config
   XML2_LIBS   Linker flags for libxml-2.0, overriding pkg-config
   XSLT_CFLAGS C compiler flags for libxslt, overriding pkg-config
@@ -4256,6 +4267,12 @@ fi
 # Check whether --with-xxf86vm was given.
 if test "${with_xxf86vm+set}" = set; then :
   withval=$with_xxf86vm; if test "x$withval" = "xno"; then ac_cv_header_X11_extensions_xf86vmode_h=no; ac_cv_header_X11_extensions_xf86vmproto_h=no; fi
+fi
+
+
+# Check whether --with-wayland was given.
+if test "${with_wayland+set}" = set; then :
+  withval=$with_wayland;
 fi
 
 
@@ -12658,6 +12675,39 @@ enable_winex11_drv=${enable_winex11_drv:-no}
 fi
 fi
 
+if test "x$with_wayland" = "xyes"
+then
+    if ${WAYLAND_CLIENT_CFLAGS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  WAYLAND_CLIENT_CFLAGS=`$PKG_CONFIG --cflags wayland-client 2>/dev/null`
+fi
+fi
+
+if ${WAYLAND_CLIENT_LIBS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  WAYLAND_CLIENT_LIBS=`$PKG_CONFIG --libs wayland-client 2>/dev/null`
+fi
+fi
+
+
+$as_echo "$as_me:${as_lineno-$LINENO}: wayland-client cflags: $WAYLAND_CLIENT_CFLAGS" >&5
+$as_echo "$as_me:${as_lineno-$LINENO}: wayland-client libs: $WAYLAND_CLIENT_LIBS" >&5
+ac_save_CPPFLAGS=$CPPFLAGS
+CPPFLAGS="$CPPFLAGS $WAYLAND_CLIENT_CFLAGS"
+
+CPPFLAGS=$ac_save_CPPFLAGS
+
+fi
+if test -z "$WAYLAND_CLIENT_LIBS"; then :
+  case "x$with_wayland" in
+  x)   as_fn_append wine_notices "|Wayland ${notice_platform}development files not found, the Wayland driver won't be supported." ;;
+  xno) ;;
+  *)   as_fn_error $? "Wayland ${notice_platform}development files not found, the Wayland driver won't be supported.
+This is an error since --with-wayland was requested." "$LINENO" 5 ;;
+esac
+enable_winewayland_drv=${enable_winewayland_drv:-no}
+fi
+
 if test "$ac_cv_header_CL_cl_h" = "yes"
 then
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for clGetPlatformInfo in -lOpenCL" >&5
@@ -19698,6 +19748,8 @@ X_CFLAGS = $X_CFLAGS
 X_PRE_LIBS = $X_PRE_LIBS
 X_LIBS = $X_LIBS
 X_EXTRA_LIBS = $X_EXTRA_LIBS
+WAYLAND_CLIENT_CFLAGS = $WAYLAND_CLIENT_CFLAGS
+WAYLAND_CLIENT_LIBS = $WAYLAND_CLIENT_LIBS
 PCAP_LIBS = $PCAP_LIBS
 XML2_CFLAGS = $XML2_CFLAGS
 XML2_LIBS = $XML2_LIBS
@@ -20831,6 +20883,7 @@ wine_fn_config_makefile dlls/winepulse.drv enable_winepulse_drv
 wine_fn_config_makefile dlls/wineqtdecoder enable_wineqtdecoder
 wine_fn_config_makefile dlls/wineusb.sys enable_wineusb_sys
 wine_fn_config_makefile dlls/winevulkan enable_winevulkan
+wine_fn_config_makefile dlls/winewayland.drv enable_winewayland_drv
 wine_fn_config_makefile dlls/winex11.drv enable_winex11_drv
 wine_fn_config_makefile dlls/wing.dll16 enable_win16
 wine_fn_config_makefile dlls/wing32 enable_wing32

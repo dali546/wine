@@ -1313,6 +1313,10 @@ dnl **** Check for Wayland ****
 if test "x$with_wayland" = "xyes"
 then
     WINE_PACKAGE_FLAGS(WAYLAND_CLIENT,[wayland-client])
+    WINE_PACKAGE_FLAGS(WAYLAND_EGL,[wayland-egl])
+    WINE_CHECK_SONAME(EGL,eglGetProcAddress)
+    WINE_CHECK_SONAME(GL,glFlush)
+    WINE_CHECK_SONAME(GLESv2,glFlush)
 fi
 WINE_NOTICE_WITH(wayland, [test -z "$WAYLAND_CLIENT_LIBS"],
                  [Wayland ${notice_platform}development files not found, the Wayland driver won't be supported.],

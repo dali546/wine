@@ -312,6 +312,12 @@ static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
 
     GetWindowRect(focused_hwnd, &window_rect);
 
+    /* Some wayland surfaces are offset relative to their window rect,
+     * e.g., GL subsurfaces. */
+    OffsetRect(&window_rect,
+               wayland->pointer.focused_surface->offset_x,
+               wayland->pointer.focused_surface->offset_y);
+
     TRACE("hwnd=%p x=%d y=%d rect %s => %d,%d\n",
           focused_hwnd, x, y, wine_dbgstr_rect(&window_rect),
           x + window_rect.left, y + window_rect.top);
@@ -537,6 +543,10 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
                                             version < 5 ? version : 5);
         wl_seat_add_listener(wayland->wl_seat, &seat_listener, wayland);
     }
+    else if (strcmp(interface, "wp_viewporter") == 0)
+    {
+        wayland->wp_viewporter = wl_registry_bind(registry, id, &wp_viewporter_interface, 1);
+    }
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
@@ -755,6 +765,14 @@ void wayland_deinit(struct wayland *wayland)
 
     wl_list_for_each_safe(output, output_tmp, &wayland->output_list, link)
         wayland_output_destroy(output);
+
+    /* GL surfaces will be destroyed along with their parent surface, so
+     * remove them from the list to avoid direct destruction. */
+    wl_list_for_each_safe(surface, surface_tmp, &wayland->surface_list, link)
+    {
+        if (surface->wl_egl_window)
+            wl_list_remove(&surface->link);
+    }
 
     wl_list_for_each_safe(surface, surface_tmp, &wayland->surface_list, link)
         wayland_surface_destroy(surface);

@@ -605,7 +605,8 @@ static int WINAPI wayland_wglDescribePixelFormat(HDC hdc, int fmt, UINT size,
     memset(pfd, 0, sizeof(*pfd));
     pfd->nSize = sizeof(*pfd);
     pfd->nVersion = 1;
-    pfd->dwFlags = PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW | PFD_DOUBLEBUFFER;
+    pfd->dwFlags = PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW | PFD_DOUBLEBUFFER |
+                   PFD_SUPPORT_COMPOSITION;
     pfd->iPixelType = PFD_TYPE_RGBA;
     pfd->iLayerType = PFD_MAIN_PLANE;
 

@@ -10,6 +10,7 @@ CPPFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRACROSSCFLAGS = -std=c11 -Wno-declaration-after-statement
 
 C_SRCS = \
+	data_device.c \
 	display.c \
 	dump_pixels.c \
 	init.c \

@@ -56,6 +56,7 @@ struct wayland_keyboard
     int repeat_interval_ms;
     int repeat_delay_ms;
     uint32_t pressed_key;
+    uint32_t enter_serial;
 };
 
 struct wayland_cursor
@@ -87,6 +88,8 @@ struct wayland
     struct wl_shm *wl_shm;
     struct wl_seat *wl_seat;
     struct wp_viewporter *wp_viewporter;
+    struct wl_data_device_manager *wl_data_device_manager;
+    struct wl_data_device *wl_data_device;
     struct wl_list output_list;
     struct wl_list surface_list;
     struct wayland_keyboard keyboard;
@@ -96,6 +99,7 @@ struct wayland
     DWORD last_event_type;
     int event_notification_pipe[2];
     struct wl_list thread_link;
+    HWND clipboard_hwnd;
     CRITICAL_SECTION crit;
 };
 
@@ -266,6 +270,13 @@ void wayland_shm_buffer_destroy(struct wayland_shm_buffer *shm_buffer);
 void wayland_shm_buffer_clear_damage(struct wayland_shm_buffer *shm_buffer);
 void wayland_shm_buffer_add_damage(struct wayland_shm_buffer *shm_buffer, HRGN damage);
 RGNDATA *wayland_shm_buffer_get_damage(struct wayland_shm_buffer *shm_buffer);
+
+/**********************************************************************
+ *          Wayland data device
+ */
+
+void wayland_data_device_init(struct wayland *wayland);
+HWND wayland_data_device_create_clipboard_window(void);
 
 /**********************************************************************
  *          Keyboard helpers

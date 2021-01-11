@@ -391,6 +391,7 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
  */
 void wayland_surface_destroy(struct wayland_surface *surface)
 {
+    struct wayland *wayland = surface->wayland;
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
     surface->crit.DebugInfo->Spare[0] = 0;
@@ -427,6 +428,10 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     wl_list_remove(&surface->link);
 
     heap_free(surface);
+
+    /* Destroying the surface can lead to events that we need to handle
+     * immediately to get the latest state, so force a round trip. */
+    wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
 }
 
 /**********************************************************************

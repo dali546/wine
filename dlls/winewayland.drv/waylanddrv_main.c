@@ -136,6 +136,11 @@ struct wayland_thread_data *wayland_init_thread_data(void)
     set_queue_fd(&data->wayland);
     TlsSetValue(thread_data_tls_index, data);
 
+    /* Create the clipboard window after setting the thread tls, to avoid infinite
+     * recursion. */
+    data->wayland.clipboard_hwnd =
+        wayland_data_device_create_clipboard_window();
+
     return data;
 }
 

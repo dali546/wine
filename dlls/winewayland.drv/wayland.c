@@ -169,6 +169,7 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
     {
         TRACE("surface=%p hwnd=%p\n", wayland_surface, wayland_surface->hwnd);
         wayland->keyboard.focused_surface = wayland_surface;
+        wayland->keyboard.enter_serial = serial;
         SetFocus(wayland_surface->hwnd);
     }
 }
@@ -186,6 +187,7 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
               wayland->keyboard.focused_surface->hwnd);
         KillTimer(wayland->keyboard.focused_surface->hwnd, (UINT_PTR)keyboard);
         wayland->keyboard.focused_surface = NULL;
+        wayland->keyboard.enter_serial = 0;
     }
 }
 
@@ -547,6 +549,12 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     {
         wayland->wp_viewporter = wl_registry_bind(registry, id, &wp_viewporter_interface, 1);
     }
+    else if (strcmp(interface, "wl_data_device_manager") == 0)
+    {
+        wayland->wl_data_device_manager =
+            wl_registry_bind(registry, id, &wl_data_device_manager_interface, 1);
+        TRACE("manager=%p\n", wayland->wl_data_device_manager);
+    }
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
@@ -646,6 +654,9 @@ BOOL wayland_init(struct wayland *wayland, const struct wayland *process_wayland
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
 
+    if (wayland->wl_data_device_manager && wayland->wl_seat)
+        wayland_data_device_init(wayland);
+
     InitializeCriticalSection(&wayland->crit);
     wayland->crit.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": wayland");
 
@@ -713,6 +724,12 @@ void wayland_deinit(struct wayland *wayland)
     {
         wl_keyboard_destroy(wayland->keyboard.wl_keyboard);
         wayland->keyboard.wl_keyboard = NULL;
+    }
+
+    if (wayland->wl_data_device)
+    {
+        wl_data_device_destroy(wayland->wl_data_device);
+        wayland->wl_data_device = NULL;
     }
 
     if (wayland->wl_seat)

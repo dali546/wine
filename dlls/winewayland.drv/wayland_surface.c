@@ -539,3 +539,29 @@ void wayland_surface_unmap(struct wayland_surface *surface)
     wl_surface_attach(surface->wl_surface, NULL, 0, 0);
     wl_surface_commit(surface->wl_surface);
 }
+
+/**********************************************************************
+ *          wayland_surface_coords_to_screen
+ *
+ * Converts the surface-local coordinates to Windows screen coordinates.
+ */
+POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, int y)
+{
+    POINT point;
+    RECT window_rect = {0};
+
+    GetWindowRect(surface->hwnd, &window_rect);
+
+    /* Some wayland surfaces are offset relative to their window rect,
+     * e.g., GL subsurfaces. */
+    OffsetRect(&window_rect, surface->offset_x, surface->offset_y);
+
+    point.x = x + window_rect.left;
+    point.y = y + window_rect.top;
+
+    TRACE("hwnd=%p x=%d y=%d rect %s => %d,%d\n",
+          surface->hwnd, x, y, wine_dbgstr_rect(&window_rect),
+          point.x, point.y);
+
+    return point;
+}

@@ -302,31 +302,18 @@ static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
     HWND focused_hwnd = wayland->pointer.focused_surface ?
                         wayland->pointer.focused_surface->hwnd : 0;
     INPUT input = {0};
-    RECT window_rect = {0};
-    int x, y;
+    POINT screen_pos;
 
     if (!focused_hwnd)
         return;
 
-    /* Wayland gives us surface local coordinates. */
-    x = wl_fixed_to_int(sx);
-    y = wl_fixed_to_int(sy);
-
-    GetWindowRect(focused_hwnd, &window_rect);
-
-    /* Some wayland surfaces are offset relative to their window rect,
-     * e.g., GL subsurfaces. */
-    OffsetRect(&window_rect,
-               wayland->pointer.focused_surface->offset_x,
-               wayland->pointer.focused_surface->offset_y);
-
-    TRACE("hwnd=%p x=%d y=%d rect %s => %d,%d\n",
-          focused_hwnd, x, y, wine_dbgstr_rect(&window_rect),
-          x + window_rect.left, y + window_rect.top);
+    screen_pos = wayland_surface_coords_to_screen(wayland->pointer.focused_surface,
+                                                  wl_fixed_to_int(sx),
+                                                  wl_fixed_to_int(sy));
 
     input.type           = INPUT_MOUSE;
-    input.mi.dx          = x + window_rect.left;
-    input.mi.dy          = y + window_rect.top;
+    input.mi.dx          = screen_pos.x;
+    input.mi.dy          = screen_pos.y;
     input.mi.dwFlags     = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
 
     wayland->last_dispatch_mask |= QS_MOUSEMOVE;

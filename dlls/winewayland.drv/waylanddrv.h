@@ -257,6 +257,7 @@ BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *c
                                              int width, int height,
                                              enum wayland_configure_flags flags);
 struct wayland_surface *wayland_surface_for_hwnd(HWND hwnd);
+POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, int y);
 
 /**********************************************************************
  *          Wayland SHM buffer

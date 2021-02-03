@@ -539,7 +539,8 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     else if (strcmp(interface, "wl_data_device_manager") == 0)
     {
         wayland->wl_data_device_manager =
-            wl_registry_bind(registry, id, &wl_data_device_manager_interface, 1);
+            wl_registry_bind(registry, id, &wl_data_device_manager_interface,
+                             version < 3 ? version : 3);
         TRACE("manager=%p\n", wayland->wl_data_device_manager);
     }
 }

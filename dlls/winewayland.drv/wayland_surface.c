@@ -148,6 +148,7 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
         goto err;
 
     wl_list_insert(&wayland->surface_list, &surface->link);
+    wl_surface_set_user_data(surface->wl_surface, surface);
 
     return surface;
 

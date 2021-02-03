@@ -21,15 +21,21 @@
 #include "config.h"
 #include "wine/port.h"
 
+#define NONAMELESSUNION
+
 #include "waylanddrv.h"
 
+#define COBJMACROS
 #include "shlobj.h"
+#include "oleidl.h"
+#include "objidl.h"
 #include "winuser.h"
 #include "winnls.h"
 #include "wine/debug.h"
 #include "wine/heap.h"
 #include "wine/unicode.h"
 
+#include <assert.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -39,10 +45,17 @@ WINE_DEFAULT_DEBUG_CHANNEL(clipboard);
 
 #define WINEWAYLAND_TAG_MIME_TYPE "application/x.winewayland.tag"
 
+static IDataObjectVtbl dataOfferDataObjectVtbl;
+
 struct data_device
 {
     struct wayland *wayland;
     struct wl_data_offer *clipboard_wl_data_offer;
+    struct wl_data_offer *dnd_wl_data_offer;
+    uint32_t dnd_enter_serial;
+    struct wayland_surface *dnd_surface;
+    int dnd_x;
+    int dnd_y;
 };
 
 struct data_offer
@@ -50,6 +63,10 @@ struct data_offer
     struct wayland *wayland;
     struct wl_data_offer *wl_data_offer;
     struct wl_array types;
+    uint32_t source_actions;
+    uint32_t action;
+    const char *accepted_mime_type;
+    IDataObject data_object;
 };
 
 struct format
@@ -433,6 +450,88 @@ static char *normalize_mime_type(const char *mime)
     return new_mime;
 }
 
+/* Based on functions in dlls/ole32/ole2.c */
+static HANDLE get_drop_target_local_handle(HWND hwnd)
+{
+    static const WCHAR prop_marshalleddrop_target[] =
+        {'W','i','n','e','M','a','r','s','h','a','l','l','e','d',
+         'D','r','o','p','T','a','r','g','e','t',0};
+    HANDLE handle;
+    HANDLE local_handle = 0;
+
+    handle = GetPropW(hwnd, prop_marshalleddrop_target);
+    if (handle)
+    {
+        DWORD pid;
+        HANDLE process;
+
+        GetWindowThreadProcessId(hwnd, &pid);
+        process = OpenProcess(PROCESS_DUP_HANDLE, FALSE, pid);
+        if (process)
+        {
+            DuplicateHandle(process, handle, GetCurrentProcess(), &local_handle,
+                            0, FALSE, DUPLICATE_SAME_ACCESS);
+            CloseHandle(process);
+        }
+    }
+    return local_handle;
+}
+
+static HRESULT create_stream_from_map(HANDLE map, IStream **stream)
+{
+    HRESULT hr = E_OUTOFMEMORY;
+    HGLOBAL hmem;
+    void *data;
+    MEMORY_BASIC_INFORMATION info;
+
+    data = MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
+    if(!data) return hr;
+
+    VirtualQuery(data, &info, sizeof(info));
+
+    hmem = GlobalAlloc(GMEM_MOVEABLE, info.RegionSize);
+    if(hmem)
+    {
+        memcpy(GlobalLock(hmem), data, info.RegionSize);
+        GlobalUnlock(hmem);
+        hr = CreateStreamOnHGlobal(hmem, TRUE, stream);
+    }
+    UnmapViewOfFile(data);
+    return hr;
+}
+
+static IDropTarget* get_drop_target_pointer(HWND hwnd)
+{
+    IDropTarget *drop_target = NULL;
+    HANDLE map;
+    IStream *stream;
+
+    map = get_drop_target_local_handle(hwnd);
+    if(!map) return NULL;
+
+    if(SUCCEEDED(create_stream_from_map(map, &stream)))
+    {
+        CoUnmarshalInterface(stream, &IID_IDropTarget, (void**)&drop_target);
+        IStream_Release(stream);
+    }
+    CloseHandle(map);
+    return drop_target;
+}
+
+static DWORD dnd_actions_to_drop_effect(uint32_t actions)
+{
+    DWORD drop_effect = 0;
+
+    if (actions & WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY)
+        drop_effect |= DROPEFFECT_COPY;
+    if (actions & WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE)
+        drop_effect |= DROPEFFECT_MOVE;
+    if (actions & WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK)
+        drop_effect |= DROPEFFECT_COPY | DROPEFFECT_MOVE;
+
+    return drop_effect;
+}
+
 static void data_offer_offer(void *data, struct wl_data_offer *wl_data_offer,
                              const char *type)
 {
@@ -447,11 +546,23 @@ static void data_offer_source_actions(void *data,
                                       struct wl_data_offer *wl_data_offer,
                                       uint32_t source_actions)
 {
+    struct data_offer *data_offer = data;
+
+    TRACE("wl_data_offer@%u actions=0x%x\n",
+          wl_proxy_get_id((struct wl_proxy*)wl_data_offer), source_actions);
+
+    data_offer->source_actions = source_actions;
 }
 
 static void data_offer_action(void *data, struct wl_data_offer *wl_data_offer,
                               uint32_t dnd_action)
 {
+    struct data_offer *data_offer = data;
+
+    TRACE("wl_data_offer@%u action=0x%x\n",
+          wl_proxy_get_id((struct wl_proxy*)wl_data_offer), dnd_action);
+
+    data_offer->action = dnd_action;
 }
 
 static const struct wl_data_offer_listener data_offer_listener = {
@@ -459,6 +570,11 @@ static const struct wl_data_offer_listener data_offer_listener = {
     data_offer_source_actions,
     data_offer_action
 };
+
+static struct data_offer *data_offer_from_data_object(struct IDataObject *data_object)
+{
+    return CONTAINING_RECORD(data_object, struct data_offer, data_object);
+}
 
 static void data_offer_create(struct wayland *wayland, struct wl_data_offer *wl_data_offer)
 {
@@ -469,6 +585,7 @@ static void data_offer_create(struct wayland *wayland, struct wl_data_offer *wl_
     data_offer->wayland = wayland;
     data_offer->wl_data_offer = wl_data_offer;
     wl_array_init(&data_offer->types);
+    data_offer->data_object.lpVtbl = &dataOfferDataObjectVtbl;
     wl_data_offer_add_listener(data_offer->wl_data_offer,
                                &data_offer_listener, data_offer);
 }
@@ -584,24 +701,206 @@ static void data_device_data_offer(void *data,
     data_offer_create(data_device->wayland, wl_data_offer);
 }
 
+static IDropTarget *drop_target_from_window_point(HWND hwnd, POINT point)
+{
+    HWND child;
+    IDropTarget *drop_target;
+    HWND orig_hwnd = hwnd;
+    POINT orig_point = point;
+
+    /* Find the deepest child window. */
+    ScreenToClient(hwnd, &point);
+    while ((child = ChildWindowFromPointEx(hwnd, point, CWP_SKIPDISABLED | CWP_SKIPINVISIBLE)) &&
+            child != hwnd)
+    {
+        MapWindowPoints(hwnd, child, &point, 1);
+        hwnd = child;
+    }
+
+    /* Ascend the children hierarchy until we find one that accepts drops. */
+    do
+    {
+        drop_target = get_drop_target_pointer(hwnd);
+    } while (drop_target == NULL && (hwnd = GetParent(hwnd)) != NULL);
+
+    TRACE("hwnd=%p point=(%d,%d) => dnd_hwnd=%p drop_target=%p\n",
+          orig_hwnd, orig_point.x, orig_point.y, hwnd, drop_target);
+    return drop_target;
+}
+
 static void data_device_enter(void *data, struct wl_data_device *wl_data_device,
                               uint32_t serial, struct wl_surface *wl_surface,
                               wl_fixed_t x_w, wl_fixed_t y_w,
                               struct wl_data_offer *wl_data_offer)
 {
+    struct data_device *data_device = data;
+    struct data_offer *data_offer;
+    struct wayland_surface *wayland_surface;
+    IDropTarget *drop_target;
+    POINT point;
+    DWORD drop_effect;
+    HRESULT hr;
+
+    /* Any previous dnd offer should have been freed by a drop or leave event. */
+    assert(data_device->dnd_wl_data_offer == NULL);
+
+    data_device->dnd_wl_data_offer = wl_data_offer;
+
+    if (!wl_data_offer)
+        return;
+
+    data_offer = wl_data_offer_get_user_data(wl_data_offer);
+
+    wayland_surface = wl_surface_get_user_data(wl_surface);
+
+    if (!wayland_surface || !wayland_surface->hwnd)
+        return;
+
+    data_device->dnd_enter_serial = serial;
+    data_device->dnd_surface = wayland_surface;
+    data_device->dnd_x = wl_fixed_to_int(x_w);
+    data_device->dnd_y = wl_fixed_to_int(y_w);
+
+    point = wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                             data_device->dnd_x,
+                                             data_device->dnd_y);
+
+    TRACE("surface=%p hwnd=%p source_actions=%x action=%x\n",
+          data_device->dnd_surface, data_device->dnd_surface->hwnd,
+          data_offer->source_actions, data_offer->action);
+
+    drop_target = drop_target_from_window_point(data_device->dnd_surface->hwnd,
+                                                point);
+    if (!drop_target)
+        return;
+
+    data_offer->accepted_mime_type = NULL;
+    drop_effect = dnd_actions_to_drop_effect(data_offer->source_actions);
+    hr = IDropTarget_DragEnter(drop_target, &data_offer->data_object, MK_LBUTTON,
+                               *(POINTL*)&point, &drop_effect);
+    IDropTarget_Release(drop_target);
+    if (FAILED(hr))
+        return;
+
+    wl_data_offer_set_actions(wl_data_offer, data_offer->source_actions,
+                              data_offer->action);
+    wl_data_offer_accept(wl_data_offer,
+                         data_device->dnd_enter_serial,
+                         data_offer->accepted_mime_type);
 }
 
 static void data_device_leave(void *data, struct wl_data_device *wl_data_device)
 {
+    struct data_device *data_device = data;
+    struct data_offer *data_offer;
+    IDropTarget *drop_target;
+    POINT point;
+
+    TRACE("surface=%p hwnd=%p\n",
+          data_device->dnd_surface,
+          data_device->dnd_surface->hwnd);
+
+    if (!data_device->dnd_wl_data_offer)
+        return;
+
+    point = wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                             data_device->dnd_x,
+                                             data_device->dnd_y);
+
+    drop_target = drop_target_from_window_point(data_device->dnd_surface->hwnd,
+                                                point);
+    if (drop_target)
+    {
+        IDropTarget_DragLeave(drop_target);
+        IDropTarget_Release(drop_target);
+    }
+
+    data_offer = wl_data_offer_get_user_data(data_device->dnd_wl_data_offer);
+    data_offer_destroy(data_offer);
+    data_device->dnd_wl_data_offer = NULL;
 }
 
 static void data_device_motion(void *data, struct wl_data_device *wl_data_device,
                                uint32_t time, wl_fixed_t x_w, wl_fixed_t y_w)
 {
+    struct data_device *data_device = data;
+    struct data_offer *data_offer;
+    IDropTarget *drop_target;
+    POINT point;
+    DWORD drop_effect;
+    HRESULT hr;
+
+    if (!data_device->dnd_wl_data_offer)
+        return;
+
+    data_offer = wl_data_offer_get_user_data(data_device->dnd_wl_data_offer);
+
+    data_device->dnd_x = wl_fixed_to_int(x_w);
+    data_device->dnd_y = wl_fixed_to_int(y_w);
+
+    point = wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                             data_device->dnd_x,
+                                             data_device->dnd_y);
+
+    TRACE("surface=%p hwnd=%p source_actions=%x action=%x\n",
+          data_device->dnd_surface, data_device->dnd_surface->hwnd,
+          data_offer->source_actions, data_offer->action);
+
+    drop_target = drop_target_from_window_point(data_device->dnd_surface->hwnd,
+                                                point);
+    if (!drop_target)
+        return;
+
+    drop_effect = dnd_actions_to_drop_effect(data_offer->source_actions);
+    hr = IDropTarget_DragOver(drop_target, MK_LBUTTON, *(POINTL*)&point, &drop_effect);
+    IDropTarget_Release(drop_target);
+    if (FAILED(hr))
+        return;
+
+    wl_data_offer_set_actions(data_device->dnd_wl_data_offer,
+                              data_offer->source_actions,
+                              data_offer->action);
+    wl_data_offer_accept(data_device->dnd_wl_data_offer,
+                         data_device->dnd_enter_serial,
+                         data_offer->accepted_mime_type);
 }
 
 static void data_device_drop(void *data, struct wl_data_device *wl_data_device)
 {
+    struct data_device *data_device = data;
+    struct data_offer *data_offer;
+    IDropTarget *drop_target;
+    POINT point;
+    DWORD drop_effect;
+    HRESULT hr;
+
+    if (!data_device->dnd_wl_data_offer)
+        return;
+
+    data_offer = wl_data_offer_get_user_data(data_device->dnd_wl_data_offer);
+
+    point = wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                             data_device->dnd_x,
+                                             data_device->dnd_y);
+
+    TRACE("surface=%p hwnd=%p source_actions=%x action=%x\n",
+          data_device->dnd_surface, data_device->dnd_surface->hwnd,
+          data_offer->source_actions, data_offer->action);
+
+    drop_target = drop_target_from_window_point(data_device->dnd_surface->hwnd,
+                                                point);
+    if (drop_target)
+    {
+        drop_effect = dnd_actions_to_drop_effect(data_offer->action);
+        hr = IDropTarget_Drop(drop_target, &data_offer->data_object, MK_LBUTTON,
+                              *(POINTL*)&point, &drop_effect);
+        IDropTarget_Release(drop_target);
+        if (SUCCEEDED(hr) && drop_effect != DROPEFFECT_NONE)
+            wl_data_offer_finish(data_device->dnd_wl_data_offer);
+    }
+
+    data_offer_destroy(data_offer);
+    data_device->dnd_wl_data_offer = NULL;
 }
 
 static void data_device_selection(void *data,
@@ -890,3 +1189,221 @@ HWND wayland_data_device_create_clipboard_window(void)
     TRACE("clipboard_hwnd=%p\n", clipboard_hwnd);
     return clipboard_hwnd;
 }
+
+/*********************************************************
+ * Implementation of IDataObject for wayland data offers *
+ *********************************************************/
+
+static HRESULT WINAPI dataOfferDataObject_QueryInterface(IDataObject *data_object,
+                                                         REFIID riid, void **object)
+{
+    TRACE("(%p, %s, %p)\n", data_object, debugstr_guid(riid), object);
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IDataObject))
+    {
+        *object = data_object;
+        IDataObject_AddRef(data_object);
+        return S_OK;
+    }
+    *object = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI dataOfferDataObject_AddRef(IDataObject *data_object)
+{
+    TRACE("(%p)\n", data_object);
+    /* Each data object is owned by the data_offer which contains it,
+     * and will be freed when, so we don't care about proper reference tracking. */
+    return 2;
+}
+
+static ULONG WINAPI dataOfferDataObject_Release(IDataObject *data_object)
+{
+    TRACE("(%p)\n", data_object);
+    /* Each data object is owned by the data_offer which contains it,
+     * and will be freed when, so we don't care about proper reference tracking. */
+    return 1;
+}
+
+static HRESULT WINAPI dataOfferDataObject_GetData(IDataObject *data_object,
+                                                  FORMATETC *format_etc,
+                                                  STGMEDIUM *medium)
+{
+    HRESULT hr;
+    struct data_offer *data_offer;
+    char **p;
+
+    TRACE("(%p, %p, %p)\n", data_object, format_etc, medium);
+
+    hr = IDataObject_QueryGetData(data_object, format_etc);
+    if (!SUCCEEDED(hr))
+        return hr;
+
+    data_offer = data_offer_from_data_object(data_object);
+
+    wl_array_for_each(p, &data_offer->types)
+    {
+        struct format *format = format_for_mime_type(*p);
+        if (format && format->clipboard_format == format_etc->cfFormat)
+        {
+            medium->tymed = TYMED_HGLOBAL;
+            medium->u.hGlobal = data_offer_import_format(data_offer, format);
+            if (medium->u.hGlobal == NULL)
+                return E_OUTOFMEMORY;
+            medium->pUnkForRelease = 0;
+            return S_OK;
+        }
+    }
+
+    return E_UNEXPECTED;
+}
+
+static HRESULT WINAPI dataOfferDataObject_GetDataHere(IDataObject *data_object,
+                                                      FORMATETC *format_etc,
+                                                      STGMEDIUM *medium)
+{
+    FIXME("(%p, %p, %p): stub\n", data_object, format_etc, medium);
+    return DATA_E_FORMATETC;
+}
+
+static HRESULT WINAPI dataOfferDataObject_QueryGetData(IDataObject *data_object,
+                                                       FORMATETC *format_etc)
+{
+    struct data_offer *data_offer;
+    char **p;
+
+    TRACE("(%p, %p={.tymed=0x%x, .dwAspect=%d, .cfFormat=%d}\n",
+          data_object, format_etc, format_etc->tymed, format_etc->dwAspect,
+          format_etc->cfFormat);
+
+    if (format_etc->tymed && !(format_etc->tymed & TYMED_HGLOBAL))
+    {
+        FIXME("only HGLOBAL medium types supported right now\n");
+        return DV_E_TYMED;
+    }
+    /* Windows Explorer ignores .dwAspect and .lindex for CF_HDROP,
+     * and we have no way to implement them on XDnD anyway, so ignore them too.
+     */
+
+    data_offer = data_offer_from_data_object(data_object);
+
+    wl_array_for_each(p, &data_offer->types)
+    {
+        struct format *format = format_for_mime_type(*p);
+        if (format && format->clipboard_format == format_etc->cfFormat)
+        {
+            TRACE("found offer %s for clipboard format %u\n", *p, format->clipboard_format);
+            data_offer->accepted_mime_type = format->mime_type;
+            return S_OK;
+        }
+    }
+
+    TRACE("didn't find offer for clipboard form %u\n", format_etc->cfFormat);
+    return DV_E_FORMATETC;
+}
+
+static HRESULT WINAPI dataOfferDataObject_GetCanonicalFormatEtc(IDataObject *data_object,
+                                                                FORMATETC *format_etc,
+                                                                FORMATETC *format_etc_out)
+{
+    FIXME("(%p, %p, %p): stub\n", data_object, format_etc, format_etc_out);
+    format_etc_out->ptd = NULL;
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI dataOfferDataObject_SetData(IDataObject *data_object,
+                                                  FORMATETC *format_etc,
+                                                  STGMEDIUM *medium, BOOL release)
+{
+    FIXME("(%p, %p, %p, %s): stub\n", data_object, format_etc,
+          medium, release ? "TRUE" : "FALSE");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI dataOfferDataObject_EnumFormatEtc(IDataObject *data_object,
+                                                        DWORD direction,
+                                                        IEnumFORMATETC **enum_format_etc)
+{
+    HRESULT hr;
+    FORMATETC *formats_etc;
+    size_t formats_etc_count = 0;
+    struct data_offer *data_offer;
+    char **p;
+    UINT last_clipboard_format = 0;
+
+    TRACE("(%p, %u, %p)\n", data_object, direction, enum_format_etc);
+
+    if (direction != DATADIR_GET)
+    {
+        FIXME("only the get direction is implemented\n");
+        return E_NOTIMPL;
+    }
+
+    data_offer = data_offer_from_data_object(data_object);
+
+    /* Allocate space for all offered mime types, although we may not use them all */
+    formats_etc = heap_alloc((data_offer->types.size / sizeof(char *)) * sizeof(FORMATETC));
+    if (!formats_etc)
+        return E_OUTOFMEMORY;
+
+    wl_array_for_each(p, &data_offer->types)
+    {
+        struct format *format = format_for_mime_type(*p);
+        if (format && format->clipboard_format != last_clipboard_format)
+        {
+            FORMATETC *current;
+            formats_etc_count += 1;
+            current = &formats_etc[formats_etc_count - 1];
+
+            last_clipboard_format = format->clipboard_format;
+            current->cfFormat = format->clipboard_format;
+            current->ptd = NULL;
+            current->dwAspect = DVASPECT_CONTENT;
+            current->lindex = -1;
+            current->tymed = TYMED_HGLOBAL;
+        }
+    }
+
+    hr = SHCreateStdEnumFmtEtc(formats_etc_count, formats_etc, enum_format_etc);
+    heap_free(formats_etc);
+
+    return hr;
+}
+
+static HRESULT WINAPI dataOfferDataObject_DAdvise(IDataObject *data_object,
+                                                  FORMATETC *format_etc, DWORD advf,
+                                                  IAdviseSink *advise_sink,
+                                                  DWORD *connection)
+{
+    FIXME("(%p, %p, %u, %p, %p): stub\n", data_object, format_etc, advf,
+          advise_sink, connection);
+    return OLE_E_ADVISENOTSUPPORTED;
+}
+
+static HRESULT WINAPI dataOfferDataObject_DUnadvise(IDataObject *data_object,
+                                                    DWORD connection)
+{
+    FIXME("(%p, %u): stub\n", data_object, connection);
+    return OLE_E_ADVISENOTSUPPORTED;
+}
+
+static HRESULT WINAPI dataOfferDataObject_EnumDAdvise(IDataObject *data_object,
+                                                      IEnumSTATDATA **enum_advise)
+{
+    FIXME("(%p, %p): stub\n", data_object, enum_advise);
+    return OLE_E_ADVISENOTSUPPORTED;
+}
+
+static IDataObjectVtbl dataOfferDataObjectVtbl = {
+    dataOfferDataObject_QueryInterface,
+    dataOfferDataObject_AddRef,
+    dataOfferDataObject_Release,
+    dataOfferDataObject_GetData,
+    dataOfferDataObject_GetDataHere,
+    dataOfferDataObject_QueryGetData,
+    dataOfferDataObject_GetCanonicalFormatEtc,
+    dataOfferDataObject_SetData,
+    dataOfferDataObject_EnumFormatEtc,
+    dataOfferDataObject_DAdvise,
+    dataOfferDataObject_DUnadvise,
+    dataOfferDataObject_EnumDAdvise
+};

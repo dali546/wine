@@ -36,6 +36,8 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
+struct wl_display *process_wl_display = NULL;
+
 static CRITICAL_SECTION thread_wayland_section;
 static CRITICAL_SECTION_DEBUG critsect_debug =
 {
@@ -94,13 +96,16 @@ static void wayland_add_output(struct wayland *wayland, uint32_t id, uint32_t ve
 {
     struct wayland_output *output = heap_alloc_zero (sizeof(*output));
     static const WCHAR name_fmtW[] = { '\\','\\','.','\\','D','I','S','P','L','A','Y','%','d',0 };
-    static int output_id = 0;
 
     output->wl_output = wl_registry_bind(wayland->wl_registry, id,
                                          &wl_output_interface, 1);
     wl_output_add_listener(output->wl_output, &output_listener, output);
     wl_list_init(&output->mode_list);
-    sprintfW(output->name, name_fmtW, ++output_id);
+    /* TODO: We assume that the compositor sends the outputs in the same order
+     * to all thread wl_registry instances, and thus the same output id will
+     * refer to the same output in all threads. That's not guaranteed. Use
+     * xdg_output to check names instead. */
+    sprintfW(output->name, name_fmtW, wayland->next_output_id++);
 
     wl_list_insert(&wayland->output_list, &output->link);
 }
@@ -543,6 +548,10 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
                              version < 3 ? version : 3);
         TRACE("manager=%p\n", wayland->wl_data_device_manager);
     }
+    else if (strcmp(interface, "wl_output") == 0)
+    {
+        wayland_add_output(wayland, id, version);
+    }
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
@@ -551,27 +560,8 @@ static void registry_handle_global_remove(void *data, struct wl_registry *regist
     /* TODO */
 }
 
-static void process_registry_handle_global(void *data, struct wl_registry *registry,
-                                           uint32_t id, const char *interface,
-                                           uint32_t version)
-{
-    struct wayland *wayland = data;
-
-    TRACE("interface=%s version=%d\n", interface, version);
-
-    /* For the process wayland instance, we only care about output events
-     * and configuration. */
-    if (strcmp(interface, "wl_output") == 0)
-        wayland_add_output(wayland, id, version);
-}
-
 static const struct wl_registry_listener registry_listener = {
     registry_handle_global,
-    registry_handle_global_remove
-};
-
-static const struct wl_registry_listener process_registry_listener = {
-    process_registry_handle_global,
     registry_handle_global_remove
 };
 
@@ -579,29 +569,19 @@ static const struct wl_registry_listener process_registry_listener = {
  *          wayland_init
  *
  *  Initialise a wayland instance.
- *
- *  If process_wayland is not NULL, then this initialises a wayland
- *  instance for a thread, using any needed information from process_wayland.
- *  If process_wayland is NULL then this function initialises a wayland
- *  instance for a process.
- *
- *  Each process has a single, limited wayland instance, which creates the
- *  connection to the wayland compositor and gets some basic info (outputs etc).
- *  Each thread then gets its own full instance, using the same connection as
- *  the process wayland instance.
  */
-BOOL wayland_init(struct wayland *wayland, const struct wayland *process_wayland)
+BOOL wayland_init(struct wayland *wayland)
 {
     struct wayland_output *output;
+    int flags;
 
-    TRACE("wayland=%p process_wayland=%p\n", wayland, process_wayland);
+    TRACE("wayland=%p wl_display=%p\n", wayland, process_wl_display);
 
     wl_list_init(&wayland->thread_link);
     wayland->event_notification_pipe[0] = -1;
     wayland->event_notification_pipe[1] = -1;
 
-    wayland->wl_display =
-        process_wayland ? process_wayland->wl_display : wl_display_connect(NULL);
+    wayland->wl_display = process_wl_display;
 
     if (!wayland->wl_display)
     {
@@ -628,14 +608,12 @@ BOOL wayland_init(struct wayland *wayland, const struct wayland *process_wayland
     }
     wl_proxy_set_queue((struct wl_proxy *) wayland->wl_registry, wayland->wl_event_queue);
 
+    wayland->next_output_id = 1;
     wl_list_init(&wayland->output_list);
     wl_list_init(&wayland->surface_list);
 
     /* Populate registry */
-    if (process_wayland)
-        wl_registry_add_listener(wayland->wl_registry, &registry_listener, wayland);
-    else
-        wl_registry_add_listener(wayland->wl_registry, &process_registry_listener, wayland);
+    wl_registry_add_listener(wayland->wl_registry, &registry_listener, wayland);
 
     /* We need two roundtrips. One to get and bind globals, and one to handle all
      * initial events produced from registering the globals. */
@@ -648,24 +626,20 @@ BOOL wayland_init(struct wayland *wayland, const struct wayland *process_wayland
     InitializeCriticalSection(&wayland->crit);
     wayland->crit.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": wayland");
 
-    if (process_wayland)
-    {
-        int flags;
-        /* Thread wayland instance have notification pipes to inform them when
-         * there might be new events in their queues. The read part of the pipe
-         * is also used as the wine server queue fd. */
-        if (pipe2(wayland->event_notification_pipe, O_CLOEXEC) == -1)
-            return FALSE;
-        /* Make just the read end non-blocking */
-        if ((flags = fcntl(wayland->event_notification_pipe[0], F_GETFL)) == -1)
-            return FALSE;
-        if (fcntl(wayland->event_notification_pipe[0], F_SETFL, flags | O_NONBLOCK) == -1)
-            return FALSE;
-        /* Keep a list of all thread wayland instances, so we can notify them. */
-        EnterCriticalSection(&thread_wayland_section);
-        wl_list_insert(&thread_wayland_list, &wayland->thread_link);
-        LeaveCriticalSection(&thread_wayland_section);
-    }
+    /* Thread wayland instances have notification pipes to inform them when
+     * there might be new events in their queues. The read part of the pipe
+     * is also used as the wine server queue fd. */
+    if (pipe2(wayland->event_notification_pipe, O_CLOEXEC) == -1)
+        return FALSE;
+    /* Make just the read end non-blocking */
+    if ((flags = fcntl(wayland->event_notification_pipe[0], F_GETFL)) == -1)
+        return FALSE;
+    if (fcntl(wayland->event_notification_pipe[0], F_SETFL, flags | O_NONBLOCK) == -1)
+        return FALSE;
+    /* Keep a list of all thread wayland instances, so we can notify them. */
+    EnterCriticalSection(&thread_wayland_section);
+    wl_list_insert(&thread_wayland_list, &wayland->thread_link);
+    LeaveCriticalSection(&thread_wayland_section);
 
     wl_list_for_each(output, &wayland->output_list, link)
     {
@@ -684,6 +658,18 @@ BOOL wayland_init(struct wayland *wayland, const struct wayland *process_wayland
 }
 
 /**********************************************************************
+ *          wayland_process_init
+ *
+ *  Initialise the per process wayland objects.
+ *
+ */
+BOOL wayland_process_init(void)
+{
+    process_wl_display = wl_display_connect(NULL);
+    return process_wl_display != NULL;
+}
+
+/**********************************************************************
  *          wayland_deinit
  *
  *  Deinitialise a wayland instance, releasing all associated resources.
@@ -692,9 +678,6 @@ void wayland_deinit(struct wayland *wayland)
 {
     struct wayland_output *output, *output_tmp;
     struct wayland_surface *surface, *surface_tmp;
-    BOOL owns_wl_display =
-        wl_proxy_get_listener((struct wl_proxy *)wayland->wl_registry) ==
-            &process_registry_listener;
 
     TRACE("%p\n", wayland);
 
@@ -783,9 +766,6 @@ void wayland_deinit(struct wayland *wayland)
         wayland_surface_destroy(surface);
 
     wl_display_flush(wayland->wl_display);
-
-    if (owns_wl_display)
-        wl_display_disconnect(wayland->wl_display);
 
     wayland->wl_display = NULL;
 }
@@ -877,10 +857,9 @@ static void wayland_notify_threads(void)
  */
 BOOL wayland_read_events(void)
 {
-    struct wayland *wayland = &process_wayland;
     struct pollfd pfd = {0};
 
-    pfd.fd = wl_display_get_fd(wayland->wl_display);
+    pfd.fd = wl_display_get_fd(process_wl_display);
     pfd.events = POLLIN;
 
     TRACE("waiting for events...\n");
@@ -889,20 +868,20 @@ BOOL wayland_read_events(void)
      * queue. We can safely use the default queue, since it's
      * otherwise unused (all struct wayland instances dispatch to
      * their own queues). */
-    while (wl_display_prepare_read(wayland->wl_display) != 0)
-        wl_display_dispatch_pending(wayland->wl_display);
+    while (wl_display_prepare_read(process_wl_display) != 0)
+        wl_display_dispatch_pending(process_wl_display);
 
-    wl_display_flush(wayland->wl_display);
+    wl_display_flush(process_wl_display);
 
     if (poll(&pfd, 1, -1) > 0)
     {
-        wl_display_read_events(wayland->wl_display);
-        wl_display_dispatch_pending(wayland->wl_display);
+        wl_display_read_events(process_wl_display);
+        wl_display_dispatch_pending(process_wl_display);
         wayland_notify_threads();
         TRACE("waiting for events... done\n");
         return TRUE;
     }
 
-    wl_display_cancel_read(wayland->wl_display);
+    wl_display_cancel_read(process_wl_display);
     return FALSE;
 }

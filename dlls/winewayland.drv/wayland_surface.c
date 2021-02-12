@@ -147,6 +147,13 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
     if (!surface->wl_surface)
         goto err;
 
+    if (surface->wayland->wp_viewporter)
+    {
+        surface->wp_viewport =
+            wp_viewporter_get_viewport(surface->wayland->wp_viewporter,
+                                       surface->wl_surface);
+    }
+
     wl_list_insert(&wayland->surface_list, &surface->link);
     wl_surface_set_user_data(surface->wl_surface, surface);
 
@@ -244,19 +251,39 @@ err:
  * Configures the position and size of a wayland surface. Depending on the
  * surface type, either repositioning or resizing may have no effect.
  *
+ * The coordinates and sizes should be given in wine's coordinate space.
+ *
  * Note that this doesn't configure any associated GL subsurface,
  * wayland_surface_reconfigure_gl() needs to be called separately.
  */
 void wayland_surface_reconfigure(struct wayland_surface *surface,
-                                 int x, int y,
-                                 int width, int height)
+                                 int wine_x, int wine_y,
+                                 int wine_width, int wine_height)
 {
-    TRACE("surface=%p hwnd=%p %d,%d+%dx%d\n", surface, surface->hwnd, x, y, width, height);
+    int x, y, width, height;
+
+    wayland_surface_coords_from_wine(surface, wine_x, wine_y, &x, &y);
+    wayland_surface_coords_from_wine(surface, wine_width, wine_height,
+                                     &width, &height);
+
+    TRACE("surface=%p hwnd=%p %d,%d+%dx%d %d,%d+%dx%d\n",
+          surface, surface->hwnd,
+          wine_x, wine_y, wine_width, wine_height,
+          x, y, width, height);
 
     if (surface->wl_subsurface)
     {
         wl_subsurface_set_position(surface->wl_subsurface, x, y);
         wl_surface_commit(surface->wl_surface);
+    }
+
+    /* Use a viewport, if supported, to handle display mode changes. */
+    if (surface->wp_viewport)
+    {
+        if (width != 0 && height != 0)
+            wp_viewport_set_destination(surface->wp_viewport, width, height);
+        else
+            wp_viewport_set_destination(surface->wp_viewport, -1, -1);
     }
 
     if (surface->xdg_surface)
@@ -498,34 +525,45 @@ void wayland_surface_destroy_gl(struct wayland_surface *surface)
  *
  * Configures the position and size of the GL subsurface associated with
  * a wayland surface.
+ *
+ * The coordinates and sizes should be given in wine's coordinate space.
  */
 void wayland_surface_reconfigure_gl(struct wayland_surface *surface,
-                                    int x, int y,
-                                    int width, int height)
+                                    int wine_x, int wine_y,
+                                    int wine_width, int wine_height)
 {
+    int x, y, width, height;
+
     if (!surface->gl)
         return;
 
-    TRACE("surface=%p hwnd=%p %d,%d+%dx%d\n",
-          surface, surface->hwnd, x, y, width, height);
+    wayland_surface_coords_from_wine(surface, wine_x, wine_y, &x, &y);
+    wayland_surface_coords_from_wine(surface, wine_width, wine_height,
+                                     &width, &height);
 
-    surface->gl->offset_x = x;
-    surface->gl->offset_y = y;
+    TRACE("surface=%p hwnd=%p %d,%d+%dx%d %d,%d+%dx%d\n",
+          surface, surface->hwnd,
+          wine_x, wine_y, wine_width, wine_height,
+          x, y, width, height);
+
+    surface->gl->offset_x = wine_x;
+    surface->gl->offset_y = wine_y;
 
     wl_subsurface_set_position(surface->gl->wl_subsurface, x, y);
-    wl_egl_window_resize(surface->gl->wl_egl_window, width, height, 0, 0);
+    /* The EGL window size needs to be in wine coords since this affects
+     * the effective EGL buffer size. */
+    wl_egl_window_resize(surface->gl->wl_egl_window, wine_width, wine_height, 0, 0);
 
     /* Use a viewport, if supported, to ensure GL surfaces remain inside
-     * their parent's boundaries when resizing. */
-    if (!surface->gl->wp_viewport && surface->wayland->wp_viewporter)
-    {
-        surface->gl->wp_viewport =
-            wp_viewporter_get_viewport(surface->wayland->wp_viewporter,
-                                       surface->gl->wl_surface);
-    }
-
+     * their parent's boundaries when resizing and also to handle display mode
+     * changes. */
     if (surface->gl->wp_viewport)
-        wp_viewport_set_destination(surface->gl->wp_viewport, width, height);
+    {
+        if (width != 0 && height != 0)
+            wp_viewport_set_destination(surface->gl->wp_viewport, width, height);
+        else
+            wp_viewport_set_destination(surface->gl->wp_viewport, -1, -1);
+    }
 
     wl_surface_commit(surface->gl->wl_surface);
 }
@@ -550,6 +588,9 @@ POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, i
 {
     POINT point;
     RECT window_rect = {0};
+    int wine_x, wine_y;
+
+    wayland_surface_coords_to_wine(surface, x, y, &wine_x, &wine_y);
 
     GetWindowRect(surface->hwnd, &window_rect);
 
@@ -557,12 +598,123 @@ POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, i
      * e.g., GL subsurfaces. */
     OffsetRect(&window_rect, surface->offset_x, surface->offset_y);
 
-    point.x = x + window_rect.left;
-    point.y = y + window_rect.top;
+    point.x = wine_x + window_rect.left;
+    point.y = wine_y + window_rect.top;
 
     TRACE("hwnd=%p x=%d y=%d rect %s => %d,%d\n",
           surface->hwnd, x, y, wine_dbgstr_rect(&window_rect),
           point.x, point.y);
 
     return point;
+}
+
+static struct wayland_output *wayland_first_output(struct wayland *wayland)
+{
+    struct wayland_output *output = NULL;
+
+    wl_list_for_each(output, &wayland->output_list, link)
+        break;
+
+    return output;
+}
+
+/**********************************************************************
+ *          wayland_surface_coords_from_wine
+ *
+ * Converts the window-local wine coordinates to wayland surface-local coordinates.
+ */
+void wayland_surface_coords_from_wine(struct wayland_surface *surface,
+                                      int wine_x, int wine_y,
+                                      int *wayland_x, int *wayland_y)
+{
+    struct wayland_output *output = wayland_first_output(surface->wayland);
+
+    TRACE("hwnd=%p scale=%f wine_x=%d wine_y=%d\n",
+          surface->hwnd, output ? output->wine_scale : -1.0, wine_x, wine_y);
+
+    if (output)
+    {
+        *wayland_x = round(wine_x * output->wine_scale);
+        *wayland_y = round(wine_y * output->wine_scale);
+    }
+    else
+    {
+        *wayland_x = wine_x;
+        *wayland_y = wine_y;
+    }
+}
+
+/**********************************************************************
+ *          wayland_surface_coords_to_wine
+ *
+ * Converts the surface-local coordinates to wine windows-local coordinates.
+ */
+void wayland_surface_coords_to_wine(struct wayland_surface *surface,
+                                    int wayland_x, int wayland_y,
+                                    int *wine_x, int *wine_y)
+{
+    struct wayland_output *output = wayland_first_output(surface->wayland);
+
+    TRACE("hwnd=%p scale=%f wayland_x=%d wayland_y=%d\n",
+          surface->hwnd, output ? output->wine_scale : -1.0,
+          wayland_x, wayland_y);
+
+    if (output)
+    {
+        *wine_x = round(wayland_x / output->wine_scale);
+        *wine_y = round(wayland_y / output->wine_scale);
+    }
+    else
+    {
+        *wine_x = wayland_x;
+        *wine_y = wayland_y;
+    }
+}
+
+/**********************************************************************
+ *          wayland_surface_find_wine_fullscreen_fit
+ *
+ * Finds the size of a fullscreen Wine window that when scaled best fits into a
+ * wayland surface with the provided size, while maintaining the aspect
+ * ratio of the current Wine display mode.
+ */
+void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
+                                              int wayland_width, int wayland_height,
+                                              int *wine_width, int *wine_height)
+{
+    struct wayland_output *output = wayland_first_output(surface->wayland);
+    int subarea_width, subarea_height;
+
+    TRACE("hwnd=%p wayland_width=%d wayland_height=%d\n",
+          surface->hwnd, wayland_width, wayland_height);
+
+    /* If the wine mode doesn't match the wayland mode, Find the largest subarea
+     * within wayland_width x wayland_height that has an aspect ratio equal to
+     * the wine display mode aspect ratio. */
+    if (output)
+    {
+        double aspect = ((double)wayland_width) / wayland_height;
+        double wine_aspect = ((double)output->current_wine_mode->width) / 
+                             output->current_wine_mode->height;
+        if (aspect > wine_aspect)
+        {
+            subarea_width = round(wayland_height * wine_aspect);
+            subarea_height = wayland_height;
+        }
+        else
+        {
+            subarea_width = wayland_width;
+            subarea_height = round(wayland_width / wine_aspect);
+        }
+    }
+    else
+    {
+        subarea_width = wayland_width;
+        subarea_height = wayland_height;
+    }
+
+    /* Transform the calculated subarea to wine coordinates. */
+    wayland_surface_coords_to_wine(surface,
+                                   subarea_width, subarea_height,
+                                   wine_width, wine_height);
 }

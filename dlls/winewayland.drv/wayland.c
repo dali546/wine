@@ -49,9 +49,97 @@ static CRITICAL_SECTION thread_wayland_section = { &critsect_debug, -1, 0, 0, 0,
 
 static struct wl_list thread_wayland_list = {&thread_wayland_list, &thread_wayland_list};
 
+struct default_mode { int32_t width; int32_t height; };
+struct default_mode default_modes[] = {
+    /* 4:3 */
+    { 320,  240},
+    { 400,  300},
+    { 512,  384},
+    { 640,  480},
+    { 768,  576},
+    { 800,  600},
+    {1024,  768},
+    {1152,  864},
+    {1280,  960},
+    {1400, 1050},
+    {1600, 1200},
+    {2048, 1536},
+    /* 5:4 */
+    {1280, 1024},
+    {2560, 2048},
+    /* 16:9 */
+    {1280,  720},
+    {1366,  768},
+    {1600,  900},
+    {1920, 1080},
+    {2560, 1440},
+    {3200, 1800},
+    {3840, 2160},
+    /* 16:10 */
+    { 320,  200},
+    { 640,  400},
+    {1280,  800},
+    {1440,  900},
+    {1680, 1050},
+    {1920, 1200},
+    {2560, 1600},
+    {3840, 2400}
+};
+
 /**********************************************************************
  *          Output handling
  */
+
+static void wayland_output_add_mode(struct wayland_output *output,
+                                    int32_t width, int32_t height,
+                                    int32_t refresh, BOOL current,
+                                    BOOL native)
+{
+    struct wayland_output_mode *mode;
+    int32_t max_width = 0;
+    int32_t max_height = 0;
+
+    /* Update mode if already in list */
+    wl_list_for_each(mode, &output->mode_list, link)
+    {
+        if (mode->width == width && mode->height == height && mode->refresh == refresh)
+        {
+            if (current)
+            {
+                output->current_mode = mode;
+                output->current_wine_mode = mode;
+            }
+            return;
+        }
+
+        max_width = mode->width > max_width ? mode->width : max_width;
+        max_height = mode->height > max_height ? mode->height : max_height;
+    }
+
+    /* Skip if this is a simulated mode larger than the largest native mode */
+    if (!native && (width > max_width || height > max_height))
+    {
+        TRACE("Skipping mode %dx%d (max: %dx%d)\n",
+                width, height, max_width, max_height);
+
+        return;
+    }
+
+    mode = heap_alloc_zero(sizeof(*mode));
+
+    mode->width = width;
+    mode->height = height;
+    mode->refresh = refresh;
+
+    if (current)
+    {
+        output->current_mode = mode;
+        output->current_wine_mode = mode;
+    }
+
+    wl_list_insert(&output->mode_list, &mode->link);
+}
+
 static void output_handle_geometry(void *data, struct wl_output *wl_output,
                                    int32_t x, int32_t y,
                                    int32_t physical_width, int32_t physical_height,
@@ -66,15 +154,10 @@ static void output_handle_mode(void *data, struct wl_output *wl_output,
                                int32_t refresh)
 {
     struct wayland_output *output = data;
-    struct wayland_output_mode *mode = heap_alloc_zero(sizeof(*mode));
 
-    mode->width = width;
-    mode->height = height;
-    mode->refresh = refresh;
-    if (flags & WL_OUTPUT_MODE_CURRENT)
-        output->current_mode = mode;
-
-    wl_list_insert(&output->mode_list, &mode->link);
+    wayland_output_add_mode(output, width, height, refresh,
+                            (flags & WL_OUTPUT_MODE_CURRENT),
+                            TRUE);
 }
 
 static void output_handle_done(void *data, struct wl_output *wl_output)
@@ -102,11 +185,13 @@ static void wayland_add_output(struct wayland *wayland, uint32_t id, uint32_t ve
                                          &wl_output_interface, 1);
     wl_output_add_listener(output->wl_output, &output_listener, output);
     wl_list_init(&output->mode_list);
+    output->id = wayland->next_output_id++;
     /* TODO: We assume that the compositor sends the outputs in the same order
      * to all thread wl_registry instances, and thus the same output id will
      * refer to the same output in all threads. That's not guaranteed. Use
      * xdg_output to check names instead. */
-    sprintfW(output->name, name_fmtW, wayland->next_output_id++);
+    sprintfW(output->name, name_fmtW, output->id);
+    output->wine_scale = 1.0;
 
     wl_list_insert(&wayland->output_list, &output->link);
 }
@@ -121,6 +206,7 @@ static void wayland_output_destroy(struct wayland_output *output)
         heap_free(mode);
     }
 
+    wl_list_remove(&output->link);
     wl_output_destroy(output->wl_output);
 
     heap_free(output);
@@ -582,6 +668,7 @@ BOOL wayland_init(struct wayland *wayland)
     wayland->event_notification_pipe[0] = -1;
     wayland->event_notification_pipe[1] = -1;
 
+    wayland->thread_id = GetCurrentThreadId();
     wayland->wl_display = process_wl_display;
 
     if (!wayland->wl_display)
@@ -645,6 +732,16 @@ BOOL wayland_init(struct wayland *wayland)
     wl_list_for_each(output, &wayland->output_list, link)
     {
         struct wayland_output_mode *mode;
+        int i;
+
+        /* Add default modes */
+        for (i = 0; i < sizeof(default_modes) / sizeof(*default_modes); i++)
+        {
+            wayland_output_add_mode(output,
+                                    default_modes[i].width,
+                                    default_modes[i].height,
+                                    60000, FALSE, FALSE);
+        }
 
         TRACE("Output with modes:\n");
 
@@ -886,4 +983,84 @@ BOOL wayland_read_events(void)
 
     wl_display_cancel_read(process_wl_display);
     return FALSE;
+}
+
+/**********************************************************************
+ *          wayland_change_wine_mode
+ *
+ * Change the current wine mode for the specified output on a particular
+ * wayland instance.
+ */
+void wayland_change_wine_mode(struct wayland *wayland, int output_id, int width, int height)
+{
+    struct wayland_output *output;
+    struct wayland_output_mode *output_mode;
+
+    TRACE("wayland=%p output_id=%d width=%d height=%d\n",
+          wayland, output_id, width, height);
+
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        if (output->id == output_id)
+            break;
+    }
+
+    if (output->id != output_id)
+        return;
+
+    wl_list_for_each(output_mode, &output->mode_list, link)
+    {
+        if (output_mode->width == width && output_mode->height == height)
+        {
+            output->current_wine_mode = output_mode;
+            break;
+        }
+    }
+
+    if (!output->current_wine_mode || !output->current_mode)
+    {
+        output->wine_scale = 1.0;
+    }
+    else
+    {
+        double scale_x = ((double)output->current_mode->width) /
+                         output->current_wine_mode->width;
+        double scale_y = ((double)output->current_mode->height) /
+                         output->current_wine_mode->height;
+        /* We want to keep the aspect ratio of the target mode. */
+        output->wine_scale = fmin(scale_x, scale_y);
+    }
+}
+
+struct mode_change_info { int output_id; int width; int height; };
+
+static BOOL CALLBACK send_wm_wayland_mode_change(HWND hwnd, LPARAM lp)
+{
+    struct mode_change_info *m = (struct mode_change_info *) lp;
+    SendMessageW(hwnd, WM_WAYLAND_MODE_CHANGE,
+                 m->output_id, MAKELPARAM(m->width, m->height));
+    return FALSE;
+}
+
+/**********************************************************************
+ *          wayland_notify_wine_mode_change
+ *
+ * Notify all wayland instances about a change in the current wine mode.
+ * The notification is synchronous, this function returns after all
+ * wayland instances have handled the event.
+ */
+void wayland_notify_wine_mode_change(int output_id, int width, int height)
+{
+    struct wayland *w;
+    struct mode_change_info m = { output_id, width, height };
+
+    EnterCriticalSection(&thread_wayland_section);
+
+    /* For each thread, find a window in that thread and send the message to
+     * it. We do this instead of using, e.g., PostThreadMessage, so that we
+     * get synchronous handling of the message. */
+    wl_list_for_each(w, &thread_wayland_list, thread_link)
+        EnumThreadWindows(w->thread_id, send_wm_wayland_mode_change, (LPARAM)&m);
+
+    LeaveCriticalSection(&thread_wayland_section);
 }

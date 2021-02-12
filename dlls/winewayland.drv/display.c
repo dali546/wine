@@ -633,7 +633,7 @@ static void populate_devmode(struct wayland_output_mode *output_mode, DEVMODEW *
     mode->dmBitsPerPel = 32;
     mode->dmPelsWidth = output_mode->width;
     mode->dmPelsHeight = output_mode->height;
-    mode->dmDisplayFrequency = output_mode->refresh / 100;
+    mode->dmDisplayFrequency = output_mode->refresh / 1000;
 }
 
 static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, DEVMODEW *mode)

@@ -33,8 +33,6 @@ WINE_DECLARE_DEBUG_CHANNEL(winediag);
 HMODULE wayland_module = 0;
 DWORD thread_data_tls_index = TLS_OUT_OF_INDEXES;
 
-struct wayland process_wayland = { 0 };
-
 static DWORD WINAPI wayland_read_thread(void *arg)
 {
     while (wayland_read_events()) continue;
@@ -50,16 +48,13 @@ static BOOL process_attach(void)
 
     if ((thread_data_tls_index = TlsAlloc()) == TLS_OUT_OF_INDEXES) return FALSE;
 
-    if (!wayland_init(&process_wayland, NULL)) return FALSE;
-
-    wayland_init_display_devices(&process_wayland);
+    if (!wayland_process_init()) return FALSE;
 
     /* All reads of wayland events happen from a dedicated thread. */
     CreateThread(NULL, 0, wayland_read_thread, NULL, 0, &id);
 
     return TRUE;
 }
-
 
 /***********************************************************************
  *           ThreadDetach (WAYLAND.@)
@@ -125,7 +120,7 @@ struct wayland_thread_data *wayland_init_thread_data(void)
         ExitProcess(1);
     }
 
-    if (!wayland_init(&data->wayland, &process_wayland))
+    if (!wayland_init(&data->wayland))
     {
         ERR_(winediag)("waylanddrv: Can't open wayland display. Please ensure "
                        "that your wayland server is running and that "
@@ -135,6 +130,8 @@ struct wayland_thread_data *wayland_init_thread_data(void)
 
     set_queue_fd(&data->wayland);
     TlsSetValue(thread_data_tls_index, data);
+
+    wayland_init_display_devices(&data->wayland);
 
     /* Create the clipboard window after setting the thread tls, to avoid infinite
      * recursion. */

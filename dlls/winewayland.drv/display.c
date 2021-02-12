@@ -609,11 +609,11 @@ done:
     return ret;
 }
 
-static struct wayland_output *get_output(LPCWSTR name)
+static struct wayland_output *wayland_get_output(struct wayland *wayland, LPCWSTR name)
 {
     struct wayland_output *output;
 
-    wl_list_for_each(output, &process_wayland.output_list, link)
+    wl_list_for_each(output, &wayland->output_list, link)
     {
         if (!lstrcmpiW(name, output->name))
             return output;
@@ -622,7 +622,7 @@ static struct wayland_output *get_output(LPCWSTR name)
     return NULL;
 }
 
-static void populate_mode(struct wayland_output_mode *output_mode, DEVMODEW *mode)
+static void populate_devmode(struct wayland_output_mode *output_mode, DEVMODEW *mode)
 {
     mode->dmFields = DM_DISPLAYORIENTATION | DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT |
                      DM_DISPLAYFLAGS | DM_DISPLAYFREQUENCY | DM_POSITION;
@@ -636,12 +636,12 @@ static void populate_mode(struct wayland_output_mode *output_mode, DEVMODEW *mod
     mode->dmDisplayFrequency = output_mode->refresh / 100;
 }
 
-static BOOL get_current_mode(LPCWSTR name, DEVMODEW *mode)
+static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, DEVMODEW *mode)
 {
     struct wayland_output *output;
     struct wayland_output_mode *output_mode;
 
-    output = get_output(name);
+    output = wayland_get_output(wayland, name);
     if (!output)
         return FALSE;
 
@@ -654,18 +654,18 @@ static BOOL get_current_mode(LPCWSTR name, DEVMODEW *mode)
     if (!output_mode)
         return FALSE;
 
-    populate_mode(output_mode, mode);
+    populate_devmode(output_mode, mode);
 
     return TRUE;
 }
 
-static BOOL get_mode(LPCWSTR name, DWORD n, DEVMODEW *mode)
+static BOOL wayland_get_devmode(struct wayland *wayland, LPCWSTR name, DWORD n, DEVMODEW *mode)
 {
     struct wayland_output *output;
     struct wayland_output_mode *output_mode;
     DWORD i = 0;
 
-    output = get_output(name);
+    output = wayland_get_output(wayland, name);
     if (!output)
         return FALSE;
 
@@ -673,7 +673,7 @@ static BOOL get_mode(LPCWSTR name, DWORD n, DEVMODEW *mode)
     {
         if (i == n)
         {
-            populate_mode(output_mode, mode);
+            populate_devmode(output_mode, mode);
             return TRUE;
         }
         i++;
@@ -691,6 +691,7 @@ BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmo
 {
     static const WCHAR dev_name[CCHDEVICENAME] =
         {'W','i','n','e',' ','W','a','y','l','a','n','d',' ','d','r','i','v','e','r',0};
+    struct wayland *wayland = thread_init_wayland();
 
     if (n == ENUM_REGISTRY_SETTINGS)
     {
@@ -704,7 +705,7 @@ BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmo
 
     if (n == ENUM_CURRENT_SETTINGS)
     {
-        if (!get_current_mode(name, devmode))
+        if (!wayland_get_current_devmode(wayland, name, devmode))
         {
             ERR("Failed to get %s current display settings.\n", wine_dbgstr_w(name));
             return FALSE;
@@ -712,7 +713,7 @@ BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmo
         goto done;
     }
 
-    if (!get_mode(name, n, devmode))
+    if (!wayland_get_devmode(wayland, name, n, devmode))
     {
         ERR("Modes index out of range\n");
         SetLastError(ERROR_NO_MORE_FILES);

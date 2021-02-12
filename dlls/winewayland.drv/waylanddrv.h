@@ -90,6 +90,7 @@ struct wayland
     struct wp_viewporter *wp_viewporter;
     struct wl_data_device_manager *wl_data_device_manager;
     struct wl_data_device *wl_data_device;
+    int next_output_id;
     struct wl_list output_list;
     struct wl_list surface_list;
     struct wayland_keyboard keyboard;
@@ -171,7 +172,7 @@ struct wayland_shm_buffer
     RGNDATA *damage_region_data;
 };
 
-extern struct wayland process_wayland;
+extern struct wl_display *process_wl_display;
 
 /**********************************************************************
  *          Wayland thread data
@@ -209,7 +210,8 @@ static inline struct wayland *thread_wayland(void)
  *          Wayland initialisation
  */
 
-BOOL wayland_init(struct wayland *wayland, const struct wayland *process_wayland);
+BOOL wayland_process_init(void);
+BOOL wayland_init(struct wayland *wayland);
 void wayland_deinit(struct wayland *wayland);
 void wayland_init_display_devices(struct wayland *wayland);
 

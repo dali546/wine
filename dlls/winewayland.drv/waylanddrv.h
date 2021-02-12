@@ -33,6 +33,7 @@
 enum wayland_window_message
 {
     WM_WAYLAND_CONFIGURE = 0x80001000,
+    WM_WAYLAND_MODE_CHANGE = 0x80001001,
 };
 
 enum wayland_configure_flags
@@ -78,6 +79,7 @@ struct wayland_pointer
 
 struct wayland
 {
+    DWORD thread_id;
     struct wl_display *wl_display;
     struct wl_event_queue *wl_event_queue;
     struct wl_event_queue *buffer_wl_event_queue;
@@ -118,7 +120,13 @@ struct wayland_output
     struct wl_output *wl_output;
     struct wl_list mode_list;
     struct wayland_output_mode *current_mode;
+    struct wayland_output_mode *current_wine_mode;
+    /* Scale factor by which we need to multiply values in the wine coordinate
+     * space to get values in the wayland coordinate space for this output. Used
+     * when emulating a display mode change. */
+    double wine_scale;
     WCHAR name[128];
+    int id;
 };
 
 struct wayland_buffer_queue
@@ -213,7 +221,7 @@ static inline struct wayland *thread_wayland(void)
 BOOL wayland_process_init(void);
 BOOL wayland_init(struct wayland *wayland);
 void wayland_deinit(struct wayland *wayland);
-void wayland_init_display_devices(struct wayland *wayland);
+void wayland_init_display_devices(struct wayland *wayland, BOOL force);
 
 /**********************************************************************
  *          Wayland event dispatch
@@ -222,6 +230,12 @@ void wayland_init_display_devices(struct wayland *wayland);
 int wayland_dispatch_non_buffer(struct wayland *wayland);
 int wayland_dispatch_buffer(struct wayland *wayland);
 BOOL wayland_read_events(void);
+
+/**********************************************************************
+ *          Wayland mode change
+ */
+void wayland_change_wine_mode(struct wayland *wayland, int output_id, int width, int height);
+void wayland_notify_wine_mode_change(int output_id, int width, int height);
 
 /**********************************************************************
  *          Wayland buffer queue
@@ -260,6 +274,15 @@ BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *c
                                              enum wayland_configure_flags flags);
 struct wayland_surface *wayland_surface_for_hwnd(HWND hwnd);
 POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, int y);
+void wayland_surface_coords_from_wine(struct wayland_surface *surface,
+                                      int wine_x, int wine_y,
+                                      int *wayland_x, int *wayland_y);
+void wayland_surface_coords_to_wine(struct wayland_surface *surface,
+                                    int wayland_x, int wayland_y,
+                                    int *wine_x, int *wine_y);
+void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
+                                              int wayland_width, int wayland_height,
+                                              int *wine_width, int *wine_height);
 
 /**********************************************************************
  *          Wayland SHM buffer

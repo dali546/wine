@@ -329,9 +329,9 @@ static BOOL wayland_init_monitor(HDEVINFO devinfo, const struct wayland_output *
     RECT rc_mode;
 
     /* Get the wayland output width and height */
-    if (!output->current_mode)
+    if (!output->current_wine_mode)
         goto done;
-    SetRect(&rc_mode, 0, 0, output->current_mode->width, output->current_mode->height);
+    SetRect(&rc_mode, 0, 0, output->current_wine_mode->width, output->current_wine_mode->height);
 
     /* Create GUID_DEVCLASS_MONITOR instance */
     sprintfW(bufferW, monitor_instance_fmtW, video_index, monitor_index);
@@ -441,7 +441,7 @@ static void cleanup_devices(void)
     SetupDiDestroyDeviceInfoList(devinfo);
 }
 
-void wayland_init_display_devices(struct wayland *wayland)
+void wayland_init_display_devices(struct wayland *wayland, BOOL force)
 {
     HANDLE mutex;
     HDEVINFO gpu_devinfo = NULL, monitor_devinfo = NULL;
@@ -469,7 +469,7 @@ void wayland_init_display_devices(struct wayland *wayland)
     }
 
     /* Avoid unnecessary reinit */
-    if (disposition != REG_CREATED_NEW_KEY)
+    if (!force && disposition != REG_CREATED_NEW_KEY)
         goto done;
 
     prepare_devices(video_hkey);
@@ -594,6 +594,51 @@ done:
     return ret;
 }
 
+static BOOL write_registry_settings(const WCHAR *device_name, const DEVMODEW *dm)
+{
+    WCHAR display_device_reg_key[MAX_PATH];
+    HANDLE mutex;
+    HKEY hkey;
+    BOOL ret = TRUE;
+
+    mutex = acquire_display_devices_init_mutex();
+    if (!get_display_device_reg_key(device_name, display_device_reg_key,
+                                    ARRAY_SIZE(display_device_reg_key)))
+    {
+        ret = FALSE;
+        goto done;
+    }
+
+    if (RegCreateKeyExW(HKEY_CURRENT_CONFIG, display_device_reg_key, 0, NULL,
+                        REG_OPTION_VOLATILE, KEY_WRITE, NULL, &hkey, NULL))
+    {
+        ret = FALSE;
+        goto done;
+    }
+
+#define set_value(name, data) \
+    if (RegSetValueExA(hkey, name, 0, REG_DWORD, (const BYTE*)(data), sizeof(DWORD))) \
+        ret = FALSE
+
+    set_value("DefaultSettings.BitsPerPel", &dm->dmBitsPerPel);
+    set_value("DefaultSettings.XResolution", &dm->dmPelsWidth);
+    set_value("DefaultSettings.YResolution", &dm->dmPelsHeight);
+    set_value("DefaultSettings.VRefresh", &dm->dmDisplayFrequency);
+    set_value("DefaultSettings.Flags", &dm->u2.dmDisplayFlags);
+    set_value("DefaultSettings.XPanning", &dm->u1.s2.dmPosition.x);
+    set_value("DefaultSettings.YPanning", &dm->u1.s2.dmPosition.y);
+    set_value("DefaultSettings.Orientation", &dm->u1.s2.dmDisplayOrientation);
+    set_value("DefaultSettings.FixedOutput", &dm->u1.s2.dmDisplayFixedOutput);
+
+#undef set_value
+
+    RegCloseKey(hkey);
+
+done:
+    release_display_devices_init_mutex(mutex);
+    return ret;
+}
+
 static struct wayland_output *wayland_get_output(struct wayland *wayland, LPCWSTR name)
 {
     struct wayland_output *output;
@@ -629,10 +674,10 @@ static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, D
     if (!output)
         return FALSE;
 
-    if (!output->current_mode)
+    if (!output->current_wine_mode)
         return FALSE;
 
-    populate_devmode(output->current_mode, mode);
+    populate_devmode(output->current_wine_mode, mode);
 
     return TRUE;
 }
@@ -671,6 +716,8 @@ BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmo
         {'W','i','n','e',' ','W','a','y','l','a','n','d',' ','d','r','i','v','e','r',0};
     struct wayland *wayland = thread_init_wayland();
 
+    TRACE("(%s,%d,%p,0x%08x) wayland=%p\n", debugstr_w(name), n, devmode, flags, wayland);
+
     if (n == ENUM_REGISTRY_SETTINGS)
     {
         if (!read_registry_settings(name, devmode))
@@ -699,6 +746,7 @@ BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmo
     }
 
 done:
+    TRACE("=> %dx%d\n", devmode->dmPelsWidth, devmode->dmPelsHeight);
     /* Set generic fields */
     devmode->dmSize = FIELD_OFFSET(DEVMODEW, dmICMMethod);
     devmode->dmDriverExtra = 0;
@@ -708,6 +756,21 @@ done:
     return TRUE;
 }
 
+static struct wayland_output_mode *get_matching_output_mode(struct wayland_output *output,
+                                                            LPDEVMODEW devmode)
+{
+    struct wayland_output_mode *output_mode;
+
+    wl_list_for_each(output_mode, &output->mode_list, link)
+    {
+        if (devmode->dmPelsWidth == output_mode->width &&
+            devmode->dmPelsHeight == output_mode->height)
+            return output_mode;
+    }
+
+    return NULL;
+}
+
 /***********************************************************************
  *		ChangeDisplaySettingsEx  (WAYLAND.@)
  *
@@ -715,6 +778,47 @@ done:
 LONG CDECL WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
                                            HWND hwnd, DWORD flags, LPVOID lpvoid)
 {
-    FIXME("(%s,%p,%p,0x%08x,%p)\n", debugstr_w(devname), devmode, hwnd, flags, lpvoid);
+    struct wayland *wayland = thread_wayland();
+    struct wayland_output *output;
+    struct wayland_output_mode *output_mode;
+
+    TRACE("(%s,%p,%p,0x%08x,%p) %dx%d@%d wayland=%p\n",
+          debugstr_w(devname), devmode, hwnd, flags, lpvoid,
+          devmode->dmPelsWidth, devmode->dmPelsHeight,
+          devmode->dmDisplayFrequency, wayland);
+
+    output = wayland_get_output(wayland, devname);
+    if (!output)
+        return DISP_CHANGE_BADPARAM;
+
+    output_mode = get_matching_output_mode(output, devmode);
+    if (!output_mode)
+        return DISP_CHANGE_BADMODE;
+
+    if (flags & CDS_UPDATEREGISTRY)
+    {
+        if (!write_registry_settings(devname, devmode))
+        {
+            ERR("Failed to write %s display settings to registry.\n", wine_dbgstr_w(devname));
+            return DISP_CHANGE_NOTUPDATED;
+        }
+    }
+
+    if (flags & (CDS_TEST | CDS_NORESET))
+        return DISP_CHANGE_SUCCESSFUL;
+
+    /* The notification needs to happen before we reinit the display devices,
+     * in order for the reinit to read the new current mode. */
+    wayland_notify_wine_mode_change(output->id, output_mode->width, output_mode->height);
+
+    wayland_init_display_devices(wayland, TRUE);
+
+    TRACE("set current wine mode %dx%d wine_scale %f\n",
+          output_mode->width, output_mode->height, output->wine_scale);
+
+    SendMessageTimeoutW(HWND_BROADCAST, WM_DISPLAYCHANGE, 32,
+                        MAKELPARAM(output_mode->width, output_mode->height),
+                        SMTO_ABORTIFHUNG, 2000, NULL);
+
     return DISP_CHANGE_SUCCESSFUL;
 }

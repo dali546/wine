@@ -1365,7 +1365,7 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     struct wayland_win_data *data;
     struct wayland_surface *wsurface;
     DWORD flags;
-    int width, height;
+    int width, height, wine_width, wine_height;
     BOOL needs_move_to_zero;
 
     if (!(data = get_win_data(hwnd))) return 0;
@@ -1407,7 +1407,15 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
         wsurface->pending.height = height;
     }
 
-    TRACE("hwnd=%p effective_size=%dx%d\n", data->hwnd, width, height);
+    if (flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN)
+        wayland_surface_find_wine_fullscreen_fit(wsurface, width, height,
+                                                 &wine_width, &wine_height);
+    else
+        wayland_surface_coords_to_wine(wsurface, width, height,
+                                       &wine_width, &wine_height);
+
+    TRACE("hwnd=%p effective_size=%dx%d wine_size=%dx%d\n",
+          data->hwnd, width, height, wine_width, wine_height);
 
     if ((flags & WAYLAND_CONFIGURE_FLAG_RESIZING) && !data->resizing)
     {
@@ -1435,7 +1443,7 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     else
         SetWindowLongW(hwnd, GWL_STYLE, GetWindowLongW(hwnd, GWL_STYLE) & ~WS_MAXIMIZE);
 
-    if (width > 0 && height > 0)
+    if (wine_width > 0 && wine_height > 0)
     {
         UINT swp_flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER |
                          SWP_FRAMECHANGED | SWP_NOMOVE;
@@ -1444,7 +1452,7 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
          * surface size it accepts, so don't allow the app to change it. */
         if (flags & (WAYLAND_CONFIGURE_FLAG_MAXIMIZED|WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
             swp_flags |= SWP_NOSENDCHANGING;
-        SetWindowPos(hwnd, 0, 0, 0, width, height, swp_flags);
+        SetWindowPos(hwnd, 0, 0, 0, wine_width, wine_height, swp_flags);
     }
     else
     {
@@ -1504,6 +1512,9 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SetTimer(hwnd, (UINT_PTR)data->wayland_surface->wl_surface, 10, post_configure);
             release_win_data(data);
         }
+        break;
+    case WM_WAYLAND_MODE_CHANGE:
+        wayland_change_wine_mode(thread_wayland(), wp, LOWORD(lp), HIWORD(lp));
         break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);

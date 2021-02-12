@@ -131,7 +131,7 @@ struct wayland_thread_data *wayland_init_thread_data(void)
     set_queue_fd(&data->wayland);
     TlsSetValue(thread_data_tls_index, data);
 
-    wayland_init_display_devices(&data->wayland);
+    wayland_init_display_devices(&data->wayland, FALSE);
 
     /* Create the clipboard window after setting the thread tls, to avoid infinite
      * recursion. */

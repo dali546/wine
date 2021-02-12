@@ -1136,7 +1136,7 @@ static BOOL egl_init(void)
     LOAD_FUNCPTR(eglSwapInterval);
 #undef LOAD_FUNCPTR
 
-    display = p_eglGetDisplay((EGLNativeDisplayType) process_wayland.wl_display);
+    display = p_eglGetDisplay((EGLNativeDisplayType) process_wl_display);
     if (!p_eglInitialize(display, &major, &minor)) return 0;
     TRACE("display %p version %u.%u\n", display, major, minor);
 

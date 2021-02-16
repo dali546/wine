@@ -317,19 +317,6 @@ done:
     return ret;
 }
 
-static struct wayland_output_mode *wayland_output_get_current_mode(const struct wayland_output *output)
-{
-    struct wayland_output_mode *output_mode;
-
-    wl_list_for_each(output_mode, &output->mode_list, link)
-    {
-        if (output_mode->current)
-            return output_mode;
-    }
-
-    return NULL;
-}
-
 static BOOL wayland_init_monitor(HDEVINFO devinfo, const struct wayland_output *output,
                                  int monitor_index, int video_index, const LUID *gpu_luid,
                                  UINT output_id)
@@ -339,14 +326,12 @@ static BOOL wayland_init_monitor(HDEVINFO devinfo, const struct wayland_output *
     HKEY hkey;
     BOOL ret = FALSE;
     DWORD state_flags = DISPLAY_DEVICE_ATTACHED | DISPLAY_DEVICE_ACTIVE;
-    struct wayland_output_mode *output_mode;
     RECT rc_mode;
 
     /* Get the wayland output width and height */
-    output_mode = wayland_output_get_current_mode(output);
-    if (!output_mode)
+    if (!output->current_mode)
         goto done;
-    SetRect(&rc_mode, 0, 0, output_mode->width, output_mode->height);
+    SetRect(&rc_mode, 0, 0, output->current_mode->width, output->current_mode->height);
 
     /* Create GUID_DEVCLASS_MONITOR instance */
     sprintfW(bufferW, monitor_instance_fmtW, video_index, monitor_index);
@@ -639,22 +624,15 @@ static void populate_devmode(struct wayland_output_mode *output_mode, DEVMODEW *
 static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, DEVMODEW *mode)
 {
     struct wayland_output *output;
-    struct wayland_output_mode *output_mode;
 
     output = wayland_get_output(wayland, name);
     if (!output)
         return FALSE;
 
-    wl_list_for_each(output_mode, &output->mode_list, link)
-    {
-        if (output_mode->current)
-            break;
-    }
-
-    if (!output_mode)
+    if (!output->current_mode)
         return FALSE;
 
-    populate_devmode(output_mode, mode);
+    populate_devmode(output->current_mode, mode);
 
     return TRUE;
 }

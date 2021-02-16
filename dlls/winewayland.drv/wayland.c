@@ -71,7 +71,8 @@ static void output_handle_mode(void *data, struct wl_output *wl_output,
     mode->width = width;
     mode->height = height;
     mode->refresh = refresh;
-    mode->current = (flags & WL_OUTPUT_MODE_CURRENT);
+    if (flags & WL_OUTPUT_MODE_CURRENT)
+        output->current_mode = mode;
 
     wl_list_insert(&output->mode_list, &mode->link);
 }
@@ -650,7 +651,8 @@ BOOL wayland_init(struct wayland *wayland)
         wl_list_for_each(mode, &output->mode_list, link)
         {
             TRACE("  mode %dx%d @ %d %s\n",
-                  mode->width, mode->height, mode->refresh, mode->current ? "*" : "");
+                  mode->width, mode->height, mode->refresh,
+                  output->current_mode == mode ? "*" : "");
         }
     }
 

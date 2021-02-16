@@ -110,7 +110,6 @@ struct wayland_output_mode
     int32_t width;
     int32_t height;
     int32_t refresh;
-    BOOL current;
 };
 
 struct wayland_output
@@ -118,6 +117,7 @@ struct wayland_output
     struct wl_list link;
     struct wl_output *wl_output;
     struct wl_list mode_list;
+    struct wayland_output_mode *current_mode;
     WCHAR name[128];
 };
 

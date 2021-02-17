@@ -64,8 +64,9 @@ struct wayland_win_data
     HWND           parent;
     /* owner hwnd for owned windows */
     HWND           owner;
-    /* whether the owner is an internal guess */
-    BOOL           owner_is_guess;
+    /* effective owner hwnd for owned windows (what the driver considers to
+     * be the effective owner for relative positioning, see alloc_win_data) */
+    HWND           effective_owner;
     /* USER window rectangle relative to parent */
     RECT           window_rect;
     /* client area relative to parent */
@@ -140,6 +141,8 @@ static HWND guess_popup_owner(struct wayland *wayland)
     cursor_hwnd = GetAncestor(cursor_hwnd, GA_ROOT);
     keyboard_hwnd = GetFocus();
 
+    TRACE("cursor_hwnd=%p keyboard_hwnd=%p\n", cursor_hwnd, keyboard_hwnd);
+
     /* If we have a recent mouse event, the popup owner is likely the window
      * under the cursor, so prefer it. Otherwise prefer the window with
      * the keyboard focus. */
@@ -168,24 +171,31 @@ static struct wayland_win_data *alloc_win_data(HWND hwnd)
     {
         struct wayland *wayland = thread_init_wayland();
         HWND owner_hwnd = GetWindow(hwnd, GW_OWNER);
+        HWND effective_owner_hwnd;
         struct wayland_surface *owner_surface = NULL;
 
-        /* Many applications use top level, unowned popup windows for menus and
-         * tooltips and depend on screen coordinates for correct positioning. Since
-         * wayland can't deal with screen coordinates, try to guess the owner
-         * window of such popups and manage them as wayland subsurfaces. */
-        if (!owner_hwnd && (style & WS_POPUP) && !(style & WS_CAPTION))
+        /* Many applications use top level, unowned (or owned by the desktop)
+         * popup windows for menus and tooltips and depend on screen
+         * coordinates for correct positioning. Since wayland can't deal with
+         * screen coordinates, try to guess the effective owner window of such
+         * popups and manage them as wayland subsurfaces. */
+        if ((!owner_hwnd || owner_hwnd == GetDesktopWindow()) &&
+            (style & WS_POPUP) && !(style & WS_CAPTION))
         {
-            owner_hwnd = guess_popup_owner(wayland);
-            data->owner_is_guess = TRUE;
+            effective_owner_hwnd = guess_popup_owner(wayland);
+        }
+        else
+        {
+            effective_owner_hwnd = owner_hwnd;
         }
 
-        TRACE("owner=%p\n", owner_hwnd);
+        TRACE("owner=%p effective_owner=%p\n", owner_hwnd, effective_owner_hwnd);
 
-        if (owner_hwnd && owner_hwnd != GetDesktopWindow())
-            owner_surface = wayland_surface_for_hwnd(owner_hwnd);
+        if (effective_owner_hwnd && effective_owner_hwnd != GetDesktopWindow())
+            owner_surface = wayland_surface_for_hwnd(effective_owner_hwnd);
 
         data->owner = owner_hwnd;
+        data->effective_owner = effective_owner_hwnd;
 
         /* Use wayland subsurfaces for owned win32 windows that are transient (i.e., don't have
          * a titlebar). Otherwise make them wayland toplevels. */
@@ -787,9 +797,8 @@ void CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     if (!data && !(data = create_win_data(hwnd, window_rect, client_rect))) return;
 
     /* Change of ownership requires recreating the whole win_data to ensure
-     * we have a properly owned wayland surface. If we get a null owner we
-     * only apply it if the current owner is not an internal guess. */
-    if ((owner || !data->owner_is_guess) && data->owner != owner)
+     * we have a properly owned wayland surface. */
+    if (data->owner != owner)
     {
         EnterCriticalSection(&win_data_section);
         free_win_data(data);
@@ -957,10 +966,10 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
     parent_data = get_win_data((HWND)GetWindowLongPtrW(data->hwnd, GWLP_HWNDPARENT));
     /* We manage some top level, popup window with subsurfaces (see alloc_win_data),
      * which use coordinates relative to their parent surface. In order to properly
-     * handle the positioning of such windows, we treat the owner window as the
-     * "parent" below. */
+     * handle the positioning of such windows, we treat the effective owner window
+     * as the "parent" below. */
     if (!parent_data)
-        parent_data = get_win_data(data->owner);
+        parent_data = get_win_data(data->effective_owner);
 
     if (parent_data)
     {

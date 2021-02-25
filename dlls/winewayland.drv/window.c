@@ -100,6 +100,9 @@ static CRITICAL_SECTION win_data_section = {&critsect_debug, -1, 0, 0, 0, 0};
 
 static struct wayland_win_data *win_data_context[32768];
 
+static HCURSOR last_cursor;
+static HCURSOR invalid_cursor;
+
 static inline int context_idx(HWND hwnd)
 {
     return LOWORD(hwnd) >> 1;
@@ -1113,26 +1116,59 @@ void CDECL WAYLAND_SetCapture(HWND hwnd, UINT flags)
     /* TODO: wayland */
 }
 
+
+/***********************************************************************
+ *           wayland_init_set_cursor
+ *
+ *  Initalize internal information, so that we can track the last set
+ *  cursor properly.
+ */
+BOOL wayland_init_set_cursor(void)
+{
+    /* Allocate a handle that we are going to treat as invalid. */
+    SERVER_START_REQ(alloc_user_handle)
+    {
+        if (!wine_server_call_err(req))
+            invalid_cursor = wine_server_ptr_handle(reply->handle);
+    }
+    SERVER_END_REQ;
+
+    TRACE("invalid_cursor=%p\n", invalid_cursor);
+
+    last_cursor = invalid_cursor;
+
+    return invalid_cursor != NULL;
+}
+
+/***********************************************************************
+ *           wayland_invalidate_set_cursor
+ *
+ *  Invalidate the cursor we consider to be set, effectively forcing
+ *  the application of next SetCursor call.
+ */
+void wayland_invalidate_set_cursor(void)
+{
+    InterlockedExchangePointer((void **)&last_cursor, invalid_cursor);
+}
+
 /***********************************************************************
  *           WAYLAND_SetCursor
  */
 void CDECL WAYLAND_SetCursor(HCURSOR handle)
 {
-    static HCURSOR last_cursor;
-    static DWORD last_cursor_change;
-    struct wayland *wayland;
+    TRACE("hcursor=%p last_cursor=%p\n", handle, last_cursor);
 
-    if (InterlockedExchangePointer((void **)&last_cursor, handle) == handle ||
-        GetTickCount() - last_cursor_change < 100)
+    if (InterlockedExchangePointer((void **)&last_cursor, handle) != handle)
     {
-        return;
+        struct wayland *wayland = thread_wayland();
+        /* If a non GUI thread calls SetCursor, just ignore it, since it doesn't
+         * have any wayland surfaces and thus changing the cursor will not have
+         * any effect. */
+        if (wayland)
+            wayland_pointer_update_cursor_from_win32(&wayland->pointer, handle);
+        else
+            wayland_invalidate_set_cursor();
     }
-
-    wayland = thread_wayland();
-
-    TRACE("hcursor=%p\n", handle);
-
-    wayland_pointer_update_cursor_from_win32(&wayland->pointer, handle);
 }
 
 /***********************************************************************

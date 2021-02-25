@@ -75,6 +75,7 @@ struct wayland_pointer
     struct wl_surface *cursor_wl_surface;
     uint32_t enter_serial;
     struct wayland_cursor *cursor;
+    HCURSOR hcursor;
 };
 
 struct wayland
@@ -314,6 +315,8 @@ void wayland_keyboard_emit(uint32_t key, uint32_t state, HWND hwnd);
  *          Cursor helpers
  */
 
+BOOL wayland_init_set_cursor(void);
+void wayland_invalidate_set_cursor(void);
 void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer, HCURSOR handle);
 void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor);
 

@@ -357,36 +357,6 @@ static const struct wl_keyboard_listener keyboard_listener = {
  *          Pointer handling
  */
 
-static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
-                                 uint32_t serial, struct wl_surface *surface,
-                                 wl_fixed_t sx, wl_fixed_t sy)
-{
-    struct wayland *wayland = data;
-    struct wayland_surface *wayland_surface = get_wayland_surface(wayland, surface);
-
-    if (wayland_surface && wayland_surface->hwnd) {
-        TRACE("surface=%p hwnd=%p\n", wayland_surface, wayland_surface->hwnd);
-        wayland->pointer.focused_surface = wayland_surface;
-        wayland->pointer.enter_serial = serial;
-    }
-}
-
-static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
-                                 uint32_t serial, struct wl_surface *surface)
-{
-    struct wayland *wayland = data;
-
-    if (wayland->pointer.focused_surface &&
-        wayland->pointer.focused_surface->wl_surface == surface)
-    {
-        TRACE("surface=%p hwnd=%p\n",
-              wayland->pointer.focused_surface,
-              wayland->pointer.focused_surface->hwnd);
-        wayland->pointer.focused_surface = NULL;
-        wayland->pointer.enter_serial = 0;
-    }
-}
-
 static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
                                   uint32_t time, wl_fixed_t sx, wl_fixed_t sy)
 {
@@ -412,6 +382,43 @@ static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
     wayland->last_event_type = INPUT_MOUSE;
 
     __wine_send_input(focused_hwnd, &input, NULL);
+}
+
+static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
+                                 uint32_t serial, struct wl_surface *surface,
+                                 wl_fixed_t sx, wl_fixed_t sy)
+{
+    struct wayland *wayland = data;
+    struct wayland_surface *wayland_surface = get_wayland_surface(wayland, surface);
+
+    if (wayland_surface && wayland_surface->hwnd) {
+        TRACE("surface=%p hwnd=%p\n", wayland_surface, wayland_surface->hwnd);
+        wayland->pointer.focused_surface = wayland_surface;
+        wayland->pointer.enter_serial = serial;
+        /* Invalidate the set cursor cache, so that next update is
+         * unconditionally applied. */
+        wayland_invalidate_set_cursor();
+        /* Handle the enter as a motion, to account for cases where the
+         * window first appears beneath the pointer and won't get a separate
+         * motion event. */
+        pointer_handle_motion(data, pointer, 0, sx, sy);
+    }
+}
+
+static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
+                                 uint32_t serial, struct wl_surface *surface)
+{
+    struct wayland *wayland = data;
+
+    if (wayland->pointer.focused_surface &&
+        wayland->pointer.focused_surface->wl_surface == surface)
+    {
+        TRACE("surface=%p hwnd=%p\n",
+              wayland->pointer.focused_surface,
+              wayland->pointer.focused_surface->hwnd);
+        wayland->pointer.focused_surface = NULL;
+        wayland->pointer.enter_serial = 0;
+    }
 }
 
 static void pointer_handle_button(void *data, struct wl_pointer *wl_pointer,

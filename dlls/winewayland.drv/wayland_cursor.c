@@ -211,21 +211,30 @@ void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor)
 void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
                                               HCURSOR handle)
 {
-    struct wayland_cursor *wayland_cursor;
+    struct wayland_cursor *wayland_cursor = pointer->cursor;
 
-    wayland_cursor = wayland_cursor_from_win32(pointer->wayland, handle);
-    if (!wayland_cursor)
+    if (pointer->hcursor != handle)
     {
-        wl_pointer_set_cursor(pointer->wl_pointer,
-                              pointer->enter_serial,
-                              NULL, 0, 0);
-        return;
+        wayland_cursor = wayland_cursor_from_win32(pointer->wayland, handle);
+        /* If we can't create a cursor from a valid handle, better to keep the
+         * previous cursor than make it disappear completely. */
+        if (!wayland_cursor && handle)
+            return;
+
+        if (pointer->cursor)
+            wayland_cursor_destroy(pointer->cursor);
     }
 
-    if (pointer->cursor)
-        wayland_cursor_destroy(pointer->cursor);
-
     pointer->cursor = wayland_cursor;
+    pointer->hcursor = handle;
+
+    if (!pointer->cursor)
+    {
+            wl_pointer_set_cursor(pointer->wl_pointer,
+                                  pointer->enter_serial,
+                                  NULL, 0, 0);
+            return;
+    }
 
     wl_surface_attach(pointer->cursor_wl_surface,
                       pointer->cursor->shm_buffer->wl_buffer,
@@ -241,5 +250,4 @@ void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
                           pointer->cursor_wl_surface,
                           pointer->cursor->hotspot_x,
                           pointer->cursor->hotspot_y);
-
 }

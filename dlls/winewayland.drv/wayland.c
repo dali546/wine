@@ -287,11 +287,14 @@ static void CALLBACK repeat_key(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD el
 {
     struct wayland *wayland = thread_wayland();
 
-    wayland_keyboard_emit(wayland->keyboard.pressed_key,
-                          WL_KEYBOARD_KEY_STATE_PRESSED, hwnd);
+    if (wayland->keyboard.repeat_interval_ms > 0)
+    {
+        wayland_keyboard_emit(wayland->keyboard.pressed_key,
+                              WL_KEYBOARD_KEY_STATE_PRESSED, hwnd);
 
-    SetTimer(hwnd, timer_id, wayland->keyboard.repeat_interval_ms,
-             repeat_key);
+        SetTimer(hwnd, timer_id, wayland->keyboard.repeat_interval_ms,
+                 repeat_key);
+    }
 }
 
 static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
@@ -316,8 +319,11 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED)
     {
         wayland->keyboard.pressed_key = key;
-        SetTimer(focused_hwnd, repeat_key_timer_id, wayland->keyboard.repeat_delay_ms,
-                 repeat_key);
+        if (wayland->keyboard.repeat_interval_ms > 0)
+        {
+            SetTimer(focused_hwnd, repeat_key_timer_id, wayland->keyboard.repeat_delay_ms,
+                     repeat_key);
+        }
     }
     else
     {
@@ -340,7 +346,18 @@ static void keyboard_handle_repeat_info(void *data, struct wl_keyboard *keyboard
 
     TRACE("rate=%d delay=%d\n", rate, delay);
 
-    wayland->keyboard.repeat_interval_ms = 1000 / rate;
+    /* Handle non-negative rate values, ignore invalid (negative) values.  A
+     * rate of 0 disables repeat. Note that a requested rate value larger than
+     * 100 may not actually lead to the desired repeat rate, since we are
+     * constrained by the USER_TIMER_MINIMUM (=10ms) resolution of win32
+     * timers. */
+    if (rate > 1000)
+        wayland->keyboard.repeat_interval_ms = 1;
+    else if (rate > 0)
+        wayland->keyboard.repeat_interval_ms = 1000 / rate;
+    else if (rate == 0)
+        wayland->keyboard.repeat_interval_ms = 0;
+
     wayland->keyboard.repeat_delay_ms = delay;
 }
 

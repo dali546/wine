@@ -71,8 +71,11 @@ static int shm_fd_create(off_t size)
         fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_SEAL);
     }
 
-    if (fd_resize(fd, size) < 0)
+    while (TRUE)
     {
+        int ret = fd_resize(fd, size);
+        if (ret == 0) break;
+        if (ret < 0 && errno == EINTR) continue;
         close(fd);
         return -1;
     }

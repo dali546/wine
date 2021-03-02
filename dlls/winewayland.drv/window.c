@@ -791,6 +791,7 @@ void CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     BYTE alpha;
     BOOL layered = GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED;
     HWND owner = GetWindow(hwnd, GW_OWNER);
+    HWND parent = GetAncestor(hwnd, GA_PARENT);
 
     TRACE("win %p window %s client %s visible %s style %08x flags %08x layered %d after %p\n",
            hwnd, wine_dbgstr_rect(window_rect), wine_dbgstr_rect(client_rect),
@@ -799,9 +800,11 @@ void CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
 
     if (!data && !(data = create_win_data(hwnd, window_rect, client_rect))) return;
 
-    /* Change of ownership requires recreating the whole win_data to ensure
-     * we have a properly owned wayland surface. */
-    if (data->owner != owner)
+    if (parent == GetDesktopWindow()) parent = 0;
+
+    /* Change of ownership or parentage requires recreating the whole win_data
+     * to ensure we have a properly owned wayland surface. */
+    if (data->owner != owner || data->parent != parent)
     {
         EnterCriticalSection(&win_data_section);
         free_win_data(data);
@@ -1092,18 +1095,8 @@ UINT CDECL WAYLAND_ShowWindow(HWND hwnd, INT cmd, RECT *rect, UINT swp)
  */
 void CDECL WAYLAND_SetParent(HWND hwnd, HWND parent, HWND old_parent)
 {
-    struct wayland_win_data *data;
-
     TRACE("hwnd=%p old=%p new=%p\n", hwnd, old_parent, parent);
-
-    if (parent == old_parent) return;
-    if (!(data = get_win_data(hwnd))) return;
-
-    data->parent = (parent == GetDesktopWindow()) ? 0 : parent;
-
-    /* TODO: handle reparenting */
-
-    release_win_data(data);
+    /* We handle reparenting in the next WAYLAND_WindowPosChanging call */
 }
 
 /***********************************************************************

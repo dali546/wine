@@ -183,7 +183,7 @@ static struct wayland_win_data *alloc_win_data(HWND hwnd)
          * screen coordinates, try to guess the effective owner window of such
          * popups and manage them as wayland subsurfaces. */
         if ((!owner_hwnd || owner_hwnd == GetDesktopWindow()) &&
-            (style & WS_POPUP) && !(style & WS_CAPTION))
+            (style & WS_POPUP) && (style & WS_CAPTION) != WS_CAPTION)
         {
             effective_owner_hwnd = guess_popup_owner(wayland);
         }
@@ -202,7 +202,7 @@ static struct wayland_win_data *alloc_win_data(HWND hwnd)
 
         /* Use wayland subsurfaces for owned win32 windows that are transient (i.e., don't have
          * a titlebar). Otherwise make them wayland toplevels. */
-        if (!(style & WS_CAPTION) && owner_surface)
+        if ((style & WS_CAPTION) != WS_CAPTION && owner_surface)
             data->wayland_surface = wayland_surface_create_subsurface(wayland, owner_surface);
         else
             data->wayland_surface = wayland_surface_create_toplevel(wayland, owner_surface);

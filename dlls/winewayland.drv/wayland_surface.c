@@ -286,7 +286,7 @@ void wayland_surface_reconfigure(struct wayland_surface *surface,
             wp_viewport_set_destination(surface->wp_viewport, -1, -1);
     }
 
-    if (surface->xdg_surface)
+    if (surface->xdg_surface && width != 0 && height != 0)
         xdg_surface_set_window_geometry(surface->xdg_surface, 0, 0, width, height);
 }
 

@@ -546,11 +546,12 @@ static BOOL is_wayland_window_surface(struct window_surface *surface)
     return surface && surface->funcs == &wayland_window_surface_funcs;
 }
 
-static BOOL is_wayland_rgba_window_surface(struct window_surface *surface)
+static BOOL is_wayland_layered_window_surface(struct window_surface *surface)
 {
     return surface && surface->funcs == &wayland_window_surface_funcs &&
         get_wayland_window_surface(surface)->wayland_buffer_queue->format ==
-            WL_SHM_FORMAT_ARGB8888;
+            WL_SHM_FORMAT_ARGB8888 &&
+        get_wayland_window_surface(surface)->src_alpha;
 }
 
 /***********************************************************************
@@ -1208,7 +1209,7 @@ void CDECL WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style)
     if (offset == GWL_EXSTYLE && (changed & WS_EX_LAYERED))
     {
         TRACE("hwnd=%p changed layered\n", hwnd);
-        if (is_wayland_window_surface(data->surface))
+        if (is_wayland_layered_window_surface(data->surface))
         {
             if (data->surface) window_surface_release(data->surface);
             data->surface = NULL;
@@ -1359,7 +1360,7 @@ BOOL CDECL WAYLAND_UpdateLayeredWindow(HWND hwnd, const UPDATELAYEREDWINDOWINFO 
     OffsetRect(&rect, -window_rect->left, -window_rect->top);
 
     surface = data->surface;
-    if (!is_wayland_rgba_window_surface(surface))
+    if (!is_wayland_layered_window_surface(surface))
     {
         if (surface) window_surface_release(surface);
         surface = NULL;

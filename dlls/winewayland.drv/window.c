@@ -572,6 +572,39 @@ static void set_color_key(struct wayland_window_surface *surface, COLORREF key)
 }
 
 /***********************************************************************
+ *           update_wayland_buffer_queue
+ */
+static void update_wayland_buffer_queue(struct wayland_window_surface *surface)
+{
+    int width;
+    int height;
+    int format;
+    HRGN window_region;
+
+    if (!surface->wayland_buffer_queue) return;
+    if (!(window_region = CreateRectRgn(0, 0, 0, 0))) return;
+
+    width = surface->wayland_buffer_queue->width;
+    height = surface->wayland_buffer_queue->height;
+
+    wayland_buffer_queue_destroy(surface->wayland_buffer_queue);
+
+    /* If the surface has whole or src alpha use ARGB buffers. Also use ARGB to
+     * implement window regions (areas out of the region are transparent). */
+    if (GetWindowRgn(surface->hwnd, window_region) != ERROR ||
+        surface->src_alpha || surface->alpha != 255)
+        format = WL_SHM_FORMAT_ARGB8888;
+    else
+        format = WL_SHM_FORMAT_XRGB8888;
+
+    surface->wayland_buffer_queue =
+        wayland_buffer_queue_create(surface->wayland_surface->wayland,
+                                    width, height, format);
+
+    DeleteObject(window_region);
+}
+
+/***********************************************************************
  *           set_surface_region
  */
 static void set_surface_region(struct window_surface *window_surface, HRGN win_region)
@@ -618,6 +651,10 @@ static void set_surface_region(struct window_surface *window_surface, HRGN win_r
     if (surface->total_region) DeleteObject(surface->total_region);
     surface->total_region = region;
     *window_surface->funcs->get_bounds(window_surface) = surface->header.rect;
+    /* Unconditionally update the buffer queue to ensure we have clean buffers, so
+     * that areas outside the region are transparent. */
+    update_wayland_buffer_queue(surface);
+
     TRACE("hwnd %p bounds %s rect %s\n", surface->hwnd,
           wine_dbgstr_rect(window_surface->funcs->get_bounds(window_surface)),
           wine_dbgstr_rect(&surface->header.rect));
@@ -701,6 +738,13 @@ static void set_surface_layered(struct window_surface *window_surface, BYTE alph
     set_color_key(surface, color_key);
     if (alpha != prev_alpha || surface->color_key != prev_key)  /* refresh */
         *window_surface->funcs->get_bounds(window_surface) = surface->header.rect;
+
+    if (surface->wayland_buffer_queue &&
+        surface->wayland_buffer_queue->format != WL_SHM_FORMAT_ARGB8888)
+    {
+        update_wayland_buffer_queue(surface);
+    }
+
     window_surface->funcs->unlock(window_surface);
 }
 

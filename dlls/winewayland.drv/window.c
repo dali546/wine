@@ -1085,12 +1085,9 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
     data->window_rect = *window_rect;
     data->client_rect = *client_rect;
 
-    if (!is_wayland_rgba_window_surface(data->surface))
-    {
-        if (surface) window_surface_add_ref(surface);
-        if (data->surface) window_surface_release(data->surface);
-        data->surface = surface;
-    }
+    if (surface) window_surface_add_ref(surface);
+    if (data->surface) window_surface_release(data->surface);
+    data->surface = surface;
 
     /* TODO: Try to handle z-order */
 

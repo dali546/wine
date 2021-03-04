@@ -179,8 +179,6 @@ void wayland_shm_buffer_destroy(struct wayland_shm_buffer *shm_buffer)
         wl_buffer_destroy(shm_buffer->wl_buffer);
     if (shm_buffer->map_data)
         munmap(shm_buffer->map_data, shm_buffer->map_size);
-    if (shm_buffer->damage_region_data)
-        heap_free(shm_buffer->damage_region_data);
     if (shm_buffer->damage_region)
         DeleteObject(shm_buffer->damage_region);
 
@@ -195,11 +193,6 @@ void wayland_shm_buffer_destroy(struct wayland_shm_buffer *shm_buffer)
 void wayland_shm_buffer_clear_damage(struct wayland_shm_buffer *shm_buffer)
 {
     SetRectRgn(shm_buffer->damage_region, 0, 0, 0, 0);
-    if (shm_buffer->damage_region_data)
-    {
-        heap_free(shm_buffer->damage_region_data);
-        shm_buffer->damage_region_data = NULL;
-    }
 }
 
 /**********************************************************************
@@ -210,40 +203,46 @@ void wayland_shm_buffer_clear_damage(struct wayland_shm_buffer *shm_buffer)
 void wayland_shm_buffer_add_damage(struct wayland_shm_buffer *shm_buffer, HRGN damage)
 {
     CombineRgn(shm_buffer->damage_region, shm_buffer->damage_region, damage, RGN_OR);
-
-    if (shm_buffer->damage_region_data)
-    {
-        heap_free(shm_buffer->damage_region_data);
-        shm_buffer->damage_region_data = NULL;
-    }
 }
 
 /**********************************************************************
- *          wayland_shm_buffer_get_damage
+ *          wayland_shm_buffer_get_damage_clipped
  *
- * Returns the damage region for this buffer.
+ * Returns the damage region data for this buffer clipped within the
+ * provided clip region (if any).
  *
- * The returned RGNDATA* is owned by the wayland_shm_buffer and should not be
- * freed.
+ * The returned RGNDATA* should be freed by the caller.
  */
-RGNDATA *wayland_shm_buffer_get_damage(struct wayland_shm_buffer *shm_buffer)
+RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_buffer,
+                                               HRGN clip)
 {
     RGNDATA *data = NULL;
     DWORD size;
+    HRGN damage_region;
 
-    if (shm_buffer->damage_region_data)
-        return shm_buffer->damage_region_data;
+    if (clip)
+    {
+        damage_region = CreateRectRgn(0, 0, 0, 0);
+        if (!damage_region) goto err;
+        CombineRgn(damage_region, shm_buffer->damage_region, clip, RGN_AND);
+    }
+    else
+    {
+        damage_region = shm_buffer->damage_region;
+    }
 
-    if (!(size = GetRegionData( shm_buffer->damage_region, 0, NULL ))) goto err;
+    if (!(size = GetRegionData( damage_region, 0, NULL ))) goto err;
     if (!(data = heap_alloc_zero( size ))) goto err;
+    if (!GetRegionData( damage_region, size, data )) goto err;
 
-    if (!GetRegionData( shm_buffer->damage_region, size, data )) goto err;
-
-    shm_buffer->damage_region_data = data;
+    if (damage_region != shm_buffer->damage_region)
+        DeleteObject(damage_region);
 
     return data;
 
 err:
+    if (damage_region && damage_region != shm_buffer->damage_region)
+        DeleteObject(damage_region);
     if (data)
         heap_free(data);
     return NULL;

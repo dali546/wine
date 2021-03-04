@@ -562,8 +562,7 @@ static void set_color_key(struct wayland_window_surface *surface, COLORREF key)
 static void set_surface_region(struct window_surface *window_surface, HRGN win_region)
 {
     struct wayland_window_surface *surface;
-    struct wayland_win_data *win_data;
-    HRGN region = win_region;
+    HRGN region = 0;
 
     if (!is_wayland_window_surface(window_surface)) return;
 
@@ -573,29 +572,41 @@ static void set_surface_region(struct window_surface *window_surface, HRGN win_r
 
     if (win_region == (HRGN)1)  /* hack: win_region == 1 means retrieve region from server */
     {
-        if (!(win_data = get_win_data(surface->hwnd))) return;
-        region = CreateRectRgn(0, 0, win_data->window_rect.right - win_data->window_rect.left,
-                               win_data->window_rect.bottom - win_data->window_rect.top);
-        release_win_data(win_data);
-        if (GetWindowRgn(surface->hwnd, region) == ERROR && !surface->region)
+        region = CreateRectRgn(0, 0, 0, 0);
+        if (region && GetWindowRgn(surface->hwnd, region) == ERROR)
         {
             DeleteObject(region);
             region = 0;
-            goto done;
+        }
+    }
+    else if (win_region)
+    {
+        region = CreateRectRgn(0, 0, 0, 0);
+        if (region) CombineRgn(region, win_region, 0, RGN_COPY);
+    }
+
+    if (surface->region)
+    {
+        if (region)
+        {
+            CombineRgn(region, region, surface->region, RGN_AND);
+        }
+        else
+        {
+            region = CreateRectRgn(0, 0, 0, 0);
+            if (region) CombineRgn(region, surface->region, 0, RGN_COPY);
         }
     }
 
-    /* If we have a region set through the window_surface funcs, take it into account */
-    if (surface->region) CombineRgn(region, region, surface->region, RGN_AND);
-
-done:
     window_surface->funcs->lock(window_surface);
+
     if (surface->total_region) DeleteObject(surface->total_region);
     surface->total_region = region;
     *window_surface->funcs->get_bounds(window_surface) = surface->header.rect;
     TRACE("hwnd %p bounds %s rect %s\n", surface->hwnd,
           wine_dbgstr_rect(window_surface->funcs->get_bounds(window_surface)),
           wine_dbgstr_rect(&surface->header.rect));
+
     window_surface->funcs->unlock(window_surface);
 }
 

@@ -430,7 +430,7 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
 
     wayland_buffer_queue_add_damage(surface->wayland_buffer_queue, surface_damage_region);
     buffer = wayland_buffer_queue_acquire_buffer(surface->wayland_buffer_queue);
-    buffer_damage = wayland_shm_buffer_get_damage(buffer);
+    buffer_damage = wayland_shm_buffer_get_damage_clipped(buffer, surface->total_region);
 
     rgn_rect = (RECT *)buffer_damage->Buffer;
     rgn_rect_end = rgn_rect + buffer_damage->rdh.nCount;
@@ -491,6 +491,7 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
     wayland_surface_commit_buffer(surface->wayland_surface, buffer, surface_damage_region);
     wayland_shm_buffer_clear_damage(buffer);
 
+    heap_free(buffer_damage);
     DeleteObject(surface_damage_region);
 
 done:

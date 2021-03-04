@@ -178,7 +178,6 @@ struct wayland_shm_buffer
     size_t map_size;
     BOOL busy;
     HRGN damage_region;
-    RGNDATA *damage_region_data;
 };
 
 extern struct wl_display *process_wl_display;
@@ -296,7 +295,8 @@ void wayland_shm_buffer_resize(struct wayland_shm_buffer *shm_buffer, int width,
 void wayland_shm_buffer_destroy(struct wayland_shm_buffer *shm_buffer);
 void wayland_shm_buffer_clear_damage(struct wayland_shm_buffer *shm_buffer);
 void wayland_shm_buffer_add_damage(struct wayland_shm_buffer *shm_buffer, HRGN damage);
-RGNDATA *wayland_shm_buffer_get_damage(struct wayland_shm_buffer *shm_buffer);
+RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_buffer,
+                                               HRGN clip);
 
 /**********************************************************************
  *          Wayland data device

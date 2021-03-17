@@ -702,6 +702,8 @@ XSLT_CFLAGS
 XML2_LIBS
 XML2_CFLAGS
 PCAP_LIBS
+XKBCOMMON_LIBS
+XKBCOMMON_CFLAGS
 WAYLAND_EGL_LIBS
 WAYLAND_EGL_CFLAGS
 WAYLAND_CLIENT_LIBS
@@ -1926,6 +1928,8 @@ WAYLAND_CLIENT_CFLAGS
 WAYLAND_CLIENT_LIBS
 WAYLAND_EGL_CFLAGS
 WAYLAND_EGL_LIBS
+XKBCOMMON_CFLAGS
+XKBCOMMON_LIBS
 XML2_CFLAGS
 XML2_LIBS
 XSLT_CFLAGS
@@ -2719,6 +2723,10 @@ Some influential environment variables:
               C compiler flags for wayland-egl, overriding pkg-config
   WAYLAND_EGL_LIBS
               Linker flags for wayland-egl, overriding pkg-config
+  XKBCOMMON_CFLAGS
+              C compiler flags for xkbcommon, overriding pkg-config
+  XKBCOMMON_LIBS
+              Linker flags for xkbcommon, overriding pkg-config
   XML2_CFLAGS C compiler flags for libxml-2.0, overriding pkg-config
   XML2_LIBS   Linker flags for libxml-2.0, overriding pkg-config
   XSLT_CFLAGS C compiler flags for libxslt, overriding pkg-config
@@ -12867,6 +12875,26 @@ CPPFLAGS="$CPPFLAGS $WAYLAND_EGL_CFLAGS"
 
 CPPFLAGS=$ac_save_CPPFLAGS
 
+    if ${XKBCOMMON_CFLAGS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  XKBCOMMON_CFLAGS=`$PKG_CONFIG --cflags xkbcommon 2>/dev/null`
+fi
+fi
+
+if ${XKBCOMMON_LIBS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  XKBCOMMON_LIBS=`$PKG_CONFIG --libs xkbcommon 2>/dev/null`
+fi
+fi
+
+
+$as_echo "$as_me:${as_lineno-$LINENO}: xkbcommon cflags: $XKBCOMMON_CFLAGS" >&5
+$as_echo "$as_me:${as_lineno-$LINENO}: xkbcommon libs: $XKBCOMMON_LIBS" >&5
+ac_save_CPPFLAGS=$CPPFLAGS
+CPPFLAGS="$CPPFLAGS $XKBCOMMON_CFLAGS"
+
+CPPFLAGS=$ac_save_CPPFLAGS
+
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for -lEGL" >&5
 $as_echo_n "checking for -lEGL... " >&6; }
 if ${ac_cv_lib_soname_EGL+:} false; then :
@@ -20218,6 +20246,8 @@ WAYLAND_CLIENT_CFLAGS = $WAYLAND_CLIENT_CFLAGS
 WAYLAND_CLIENT_LIBS = $WAYLAND_CLIENT_LIBS
 WAYLAND_EGL_CFLAGS = $WAYLAND_EGL_CFLAGS
 WAYLAND_EGL_LIBS = $WAYLAND_EGL_LIBS
+XKBCOMMON_CFLAGS = $XKBCOMMON_CFLAGS
+XKBCOMMON_LIBS = $XKBCOMMON_LIBS
 PCAP_LIBS = $PCAP_LIBS
 XML2_CFLAGS = $XML2_CFLAGS
 XML2_LIBS = $XML2_LIBS

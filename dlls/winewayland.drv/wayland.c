@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <time.h>
 #include <poll.h>
+#include <sys/mman.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
@@ -246,7 +247,42 @@ static struct wayland_surface *get_wayland_surface(struct wayland *wayland,
 static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
                                    uint32_t format, int fd, uint32_t size)
 {
-    /* TODO: Handle keymaps */
+    struct wayland *wayland = data;
+    struct xkb_keymap *xkb_keymap = NULL;
+    struct xkb_state *xkb_state = NULL;
+    char *keymap_str;
+
+    TRACE("format=%d fd=%d size=%d\n", format, fd, size);
+
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 ||
+        !wayland->keyboard.xkb_context)
+        goto out;
+
+    keymap_str = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (!keymap_str)
+        goto out;
+
+    xkb_keymap = xkb_keymap_new_from_string(wayland->keyboard.xkb_context,
+                                            keymap_str,
+                                            XKB_KEYMAP_FORMAT_TEXT_V1,
+                                            0);
+    munmap(keymap_str, size);
+    if (!xkb_keymap)
+        goto out;
+
+    xkb_state = xkb_state_new(xkb_keymap);
+    xkb_keymap_unref(xkb_keymap);
+    if (!xkb_state)
+        goto out;
+
+    xkb_state_unref(wayland->keyboard.xkb_state);
+    wayland->keyboard.xkb_state = xkb_state;
+    if (wayland->keyboard.xkb_compose_state)
+        xkb_compose_state_reset(wayland->keyboard.xkb_compose_state);
+
+    wayland_keyboard_update_layout(&wayland->keyboard);
+
+out:
     close(fd);
 }
 
@@ -289,7 +325,7 @@ static void CALLBACK repeat_key(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD el
 
     if (wayland->keyboard.repeat_interval_ms > 0)
     {
-        wayland_keyboard_emit(wayland->keyboard.pressed_key,
+        wayland_keyboard_emit(&wayland->keyboard, wayland->keyboard.pressed_key,
                               WL_KEYBOARD_KEY_STATE_PRESSED, hwnd);
 
         SetTimer(hwnd, timer_id, wayland->keyboard.repeat_interval_ms,
@@ -314,7 +350,7 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
     wayland->last_dispatch_mask |= QS_KEY | QS_HOTKEY;
     wayland->last_event_type = INPUT_KEYBOARD;
 
-    wayland_keyboard_emit(key, state, focused_hwnd);
+    wayland_keyboard_emit(&wayland->keyboard, key, state, focused_hwnd);
 
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED)
     {
@@ -337,6 +373,22 @@ static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
                                       uint32_t mods_latched, uint32_t mods_locked,
                                       uint32_t group)
 {
+    struct wayland *wayland = data;
+    uint32_t last_group;
+
+    TRACE("depressed=0x%x latched=0x%x locked=0x%x group=%d\n",
+          mods_depressed, mods_latched, mods_locked, group);
+
+    if (!wayland->keyboard.xkb_state) return;
+
+    last_group = _xkb_state_get_active_layout(wayland->keyboard.xkb_state);
+
+    xkb_state_update_mask(wayland->keyboard.xkb_state,
+                          mods_depressed, mods_latched, mods_locked, 0, 0, group);
+
+    if (group != last_group)
+        wayland_keyboard_update_layout(&wayland->keyboard);
+
 }
 
 static void keyboard_handle_repeat_info(void *data, struct wl_keyboard *keyboard,
@@ -369,6 +421,58 @@ static const struct wl_keyboard_listener keyboard_listener = {
     keyboard_handle_modifiers,
     keyboard_handle_repeat_info,
 };
+
+static void wayland_keyboard_deinit(struct wayland_keyboard *keyboard)
+{
+    if (keyboard->wl_keyboard)
+        wl_keyboard_destroy(keyboard->wl_keyboard);
+
+    xkb_compose_state_unref(keyboard->xkb_compose_state);
+    xkb_state_unref(keyboard->xkb_state);
+    xkb_context_unref(keyboard->xkb_context);
+
+    memset(keyboard, 0, sizeof(*keyboard));
+}
+
+static void wayland_keyboard_init(struct wayland_keyboard *keyboard,
+                                  struct wl_seat *seat)
+{
+    struct xkb_compose_table *compose_table;
+    const char *locale;
+
+    locale = getenv("LC_ALL");
+    if (!locale || !*locale)
+        locale = getenv("LC_CTYPE");
+    if (!locale || !*locale)
+        locale = getenv("LANG");
+    if (!locale || !*locale)
+        locale = "C";
+
+    keyboard->wl_keyboard = wl_seat_get_keyboard(seat);
+    /* Some sensible default values for the repeat rate and delay. */
+    keyboard->repeat_interval_ms = 40;
+    keyboard->repeat_delay_ms = 400;
+    keyboard->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (!keyboard->xkb_context)
+    {
+        ERR("Failed to create XKB context\n");
+        return;
+    }
+    compose_table =
+        xkb_compose_table_new_from_locale(keyboard->xkb_context, locale,
+                                          XKB_COMPOSE_COMPILE_NO_FLAGS);
+    if (!compose_table)
+    {
+        ERR("Failed to create XKB compose table\n");
+        return;
+    }
+
+    keyboard->xkb_compose_state =
+        xkb_compose_state_new(compose_table, XKB_COMPOSE_STATE_NO_FLAGS);
+    xkb_compose_table_unref(compose_table);
+    if (!keyboard->xkb_compose_state)
+        ERR("Failed to create XKB compose table\n");
+}
 
 /**********************************************************************
  *          Pointer handling
@@ -588,16 +692,12 @@ static void seat_handle_capabilities(void *data, struct wl_seat *seat,
 
     if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !wayland->keyboard.wl_keyboard)
     {
-        wayland->keyboard.wl_keyboard = wl_seat_get_keyboard(seat);
-        /* Some sensible default values for the repeat rate and delay. */
-        wayland->keyboard.repeat_interval_ms = 40;
-        wayland->keyboard.repeat_delay_ms = 400;
+        wayland_keyboard_init(&wayland->keyboard, seat);
         wl_keyboard_add_listener(wayland->keyboard.wl_keyboard, &keyboard_listener, wayland);
     }
     else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD) && wayland->keyboard.wl_keyboard)
     {
-        wl_keyboard_destroy(wayland->keyboard.wl_keyboard);
-        wayland->keyboard.wl_keyboard = NULL;
+        wayland_keyboard_deinit(&wayland->keyboard);
     }
 }
 
@@ -818,10 +918,7 @@ void wayland_deinit(struct wayland *wayland)
         wayland_pointer_deinit(&wayland->pointer);
 
     if (wayland->keyboard.wl_keyboard)
-    {
-        wl_keyboard_destroy(wayland->keyboard.wl_keyboard);
-        wayland->keyboard.wl_keyboard = NULL;
-    }
+        wayland_keyboard_deinit(&wayland->keyboard);
 
     if (wayland->wl_data_device)
     {

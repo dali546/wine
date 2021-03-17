@@ -1327,6 +1327,7 @@ if test "x$with_wayland" = "xyes"
 then
     WINE_PACKAGE_FLAGS(WAYLAND_CLIENT,[wayland-client])
     WINE_PACKAGE_FLAGS(WAYLAND_EGL,[wayland-egl])
+    WINE_PACKAGE_FLAGS(XKBCOMMON,[xkbcommon])
     WINE_CHECK_SONAME(EGL,eglGetProcAddress)
     WINE_CHECK_SONAME(GL,glFlush)
     WINE_CHECK_SONAME(GLESv2,glFlush)

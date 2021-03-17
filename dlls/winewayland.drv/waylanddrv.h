@@ -27,6 +27,8 @@
 
 #include <wayland-client.h>
 #include <wayland-egl.h>
+#include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
 #include "xdg-shell-client-protocol.h"
 #include "viewporter-client-protocol.h"
 
@@ -65,6 +67,11 @@ struct wayland_keyboard
     int repeat_delay_ms;
     uint32_t pressed_key;
     uint32_t enter_serial;
+    struct xkb_context *xkb_context;
+    struct xkb_state *xkb_state;
+    struct xkb_compose_state *xkb_compose_state;
+    UINT xkb_keycode_to_vkey[256];
+    WORD xkb_keycode_to_scancode[256];
 };
 
 struct wayland_cursor
@@ -316,7 +323,9 @@ HWND wayland_data_device_create_clipboard_window(void);
  *          Keyboard helpers
  */
 
-void wayland_keyboard_emit(uint32_t key, uint32_t state, HWND hwnd);
+void wayland_keyboard_emit(struct wayland_keyboard *keyboard, uint32_t key,
+                           uint32_t state, HWND hwnd);
+void wayland_keyboard_update_layout(struct wayland_keyboard *keyboard);
 
 /**********************************************************************
  *          Cursor helpers
@@ -340,5 +349,11 @@ void wayland_destroy_gl_drawable(HWND hwnd);
 
 void dump_pixels(const char *fpattern, int dbgid, unsigned int *pixels, int width, int height,
                  BOOL alpha, HRGN damage, HRGN win_region);
+
+/**********************************************************************
+ *          XKB helpers
+ */
+xkb_layout_index_t _xkb_state_get_active_layout(struct xkb_state *xkb_state);
+int _xkb_keysyms_to_utf8(const xkb_keysym_t *syms, int nsyms, char *utf8, int utf8_size);
 
 #endif /* __WINE_WAYLANDDRV_H */

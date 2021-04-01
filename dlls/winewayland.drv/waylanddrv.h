@@ -18,6 +18,13 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#ifndef __WINE_WAYLANDDRV_H
+#define __WINE_WAYLANDDRV_H
+
+#ifndef __WINE_CONFIG_H
+# error You must include config.h to use this header
+#endif
+
 #include <wayland-client.h>
 #include <wayland-egl.h>
 #include "xdg-shell-client-protocol.h"
@@ -333,3 +340,5 @@ void wayland_destroy_gl_drawable(HWND hwnd);
 
 void dump_pixels(const char *fpattern, int dbgid, unsigned int *pixels, int width, int height,
                  BOOL alpha, HRGN damage, HRGN win_region);
+
+#endif /* __WINE_WAYLANDDRV_H */

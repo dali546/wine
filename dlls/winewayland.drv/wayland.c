@@ -727,8 +727,11 @@ BOOL wayland_init(struct wayland *wayland)
     /* Populate registry */
     wl_registry_add_listener(wayland->wl_registry, &registry_listener, wayland);
 
-    /* We need two roundtrips. One to get and bind globals, and one to handle all
-     * initial events produced from registering the globals. */
+    /* We need three roundtrips. One to get and bind globals, one to handle all
+     * initial events produced from registering the globals and one more to
+     * handle third-order registrations (e.g., initial wl_keyboard
+     * keymap/repeat_info events). */
+    wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
 

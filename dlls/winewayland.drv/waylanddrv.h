@@ -179,6 +179,7 @@ struct wayland_surface
     CRITICAL_SECTION crit;
     struct wayland_surface_configure pending;
     struct wayland_surface_configure current;
+    BOOL mapped;
 };
 
 struct wayland_shm_buffer
@@ -297,6 +298,7 @@ void wayland_surface_coords_to_wine(struct wayland_surface *surface,
 void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
                                               int wayland_width, int wayland_height,
                                               int *wine_width, int *wine_height);
+void wayland_surface_ensure_mapped(struct wayland_surface *surface);
 
 /**********************************************************************
  *          Wayland SHM buffer

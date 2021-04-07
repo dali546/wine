@@ -406,6 +406,7 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
     }
 
     wl_surface_commit(surface->wl_surface);
+    surface->mapped = TRUE;
 
     LeaveCriticalSection(&surface->crit);
 
@@ -575,8 +576,13 @@ void wayland_surface_reconfigure_gl(struct wayland_surface *surface,
  */
 void wayland_surface_unmap(struct wayland_surface *surface)
 {
+    EnterCriticalSection(&surface->crit);
+
     wl_surface_attach(surface->wl_surface, NULL, 0, 0);
     wl_surface_commit(surface->wl_surface);
+    surface->mapped = FALSE;
+
+    LeaveCriticalSection(&surface->crit);
 }
 
 /**********************************************************************
@@ -717,4 +723,61 @@ void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
     wayland_surface_coords_to_wine(surface,
                                    subarea_width, subarea_height,
                                    wine_width, wine_height);
+}
+
+static void dummy_buffer_release(void *data, struct wl_buffer *buffer)
+{
+    struct wayland_shm_buffer *shm_buffer = data;
+
+    TRACE("shm_buffer=%p\n", shm_buffer);
+
+    wayland_shm_buffer_destroy(shm_buffer);
+}
+
+static const struct wl_buffer_listener dummy_buffer_listener = {
+    dummy_buffer_release
+};
+
+/**********************************************************************
+ *          wayland_surface_ensure_mapped
+ *
+ * Ensure that the wayland surface is mapped, by committing a dummy
+ * buffer if necessary.
+ *
+ * The contents of GL or Vulkan windows are rendered on subsurfaces
+ * with the parent surface used for the decorations. Such GL/VK
+ * subsurfaces may want to commit their contents before the parent
+ * surface has had a chance to commit. In such cases the GL/VK commit
+ * will not be displayed, but, more importantly, will not get a frame
+ * callback until the parent surface is also committed. Depending on
+ * the presentation mode, a second GL/VK buffer swap may indefinitely
+ * block waiting on the frame callback. By calling this function before a
+ * GL/VK buffer swap we can avoid this situation.
+ */
+void wayland_surface_ensure_mapped(struct wayland_surface *surface)
+{
+    EnterCriticalSection(&surface->crit);
+
+    TRACE("surface=%p hwnd=%p mapped=%d\n",
+          surface, surface->hwnd, surface->mapped);
+
+    if (!surface->mapped)
+    {
+        int width = surface->current.width;
+        int height = surface->current.height;
+        struct wayland_shm_buffer *dummy_shm_buffer;
+
+        if (width == 0) width = 1;
+        if (height == 0) height = 1;
+
+        dummy_shm_buffer = wayland_shm_buffer_create(surface->wayland,
+                                                     width, height,
+                                                     WL_SHM_FORMAT_ARGB8888);
+        wl_buffer_add_listener(dummy_shm_buffer->wl_buffer,
+                               &dummy_buffer_listener, dummy_shm_buffer);
+
+        wayland_surface_commit_buffer(surface, dummy_shm_buffer, NULL);
+    }
+
+    LeaveCriticalSection(&surface->crit);
 }

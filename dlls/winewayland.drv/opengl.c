@@ -740,7 +740,20 @@ static BOOL WINAPI wayland_wglSwapBuffers(HDC hdc)
     TRACE("%p hwnd %p context %p surface %p\n", hdc, ctx->hwnd, ctx->context, ctx->surface);
 
     if (refresh_context(ctx)) return TRUE;
-    if (ctx->surface) p_eglSwapBuffers(display, ctx->surface);
+
+    if (ctx->surface)
+    {
+        HWND hwnd = WindowFromDC(hdc);
+        struct gl_drawable *gl_drawable = get_gl_drawable(hwnd, hdc);
+        if (gl_drawable)
+        {
+            if (gl_drawable->wayland_surface)
+                wayland_surface_ensure_mapped(gl_drawable->wayland_surface);
+            release_gl_drawable(gl_drawable);
+        }
+        p_eglSwapBuffers(display, ctx->surface);
+    }
+
     return TRUE;
 }
 

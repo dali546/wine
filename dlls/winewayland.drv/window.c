@@ -227,7 +227,7 @@ static void free_win_data(struct wayland_win_data *data)
     win_data_context[context_idx(data->hwnd)] = NULL;
     LeaveCriticalSection(&win_data_section);
     if (data->wayland_surface)
-        wayland_surface_destroy(data->wayland_surface);
+        wayland_surface_unref(data->wayland_surface);
     heap_free(data);
 }
 

@@ -136,7 +136,7 @@ static struct gl_drawable *create_gl_drawable(HWND hwnd, HDC hdc, int format)
 
     TRACE("hwnd=%p wayland_surface=%p\n", hwnd, wayland_surface);
 
-    if (wayland_surface && !wayland_surface_create_gl(wayland_surface))
+    if (wayland_surface && !wayland_surface_create_or_ref_gl(wayland_surface))
         return NULL;
 
     gl->hwnd   = hwnd;
@@ -183,7 +183,7 @@ void wayland_destroy_gl_drawable(HWND hwnd)
         if (gl->surface) p_eglDestroySurface(display, gl->surface);
         if (gl->pbuffer) p_eglDestroySurface(display, gl->pbuffer);
         if (gl->wayland_surface)
-            wayland_surface_destroy_gl(gl->wayland_surface);
+            wayland_surface_unref_gl(gl->wayland_surface);
         heap_free(gl);
         break;
     }

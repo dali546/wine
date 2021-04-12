@@ -801,11 +801,11 @@ BOOL CDECL WAYLAND_CreateWindow(HWND hwnd)
 
     if (hwnd == GetDesktopWindow())
     {
-        struct wayland_win_data *data;
-
-        if (!(data = alloc_win_data(hwnd))) return FALSE;
-        release_win_data(data);
+        /* Initialize wayland so that the desktop process has access
+         * to all the wayland related information (e.g., displays). */
+        thread_init_wayland();
     }
+
     return TRUE;
 }
 

@@ -171,38 +171,6 @@ static void release_gl_drawable(struct gl_drawable *gl)
     if (gl) LeaveCriticalSection(&drawable_section);
 }
 
-void wayland_destroy_gl_drawable(HWND hwnd)
-{
-    struct gl_drawable *gl;
-
-    EnterCriticalSection(&drawable_section);
-    LIST_FOR_EACH_ENTRY(gl, &gl_drawables, struct gl_drawable, entry)
-    {
-        if (gl->hwnd != hwnd) continue;
-        list_remove(&gl->entry);
-        if (gl->surface) p_eglDestroySurface(display, gl->surface);
-        if (gl->pbuffer) p_eglDestroySurface(display, gl->pbuffer);
-        if (gl->wayland_surface)
-            wayland_surface_unref_gl(gl->wayland_surface);
-        heap_free(gl);
-        break;
-    }
-    LeaveCriticalSection(&drawable_section);
-}
-
-static BOOL refresh_context(struct wgl_context *ctx)
-{
-    BOOL ret = InterlockedExchange(&ctx->refresh, FALSE);
-
-    if (ret)
-    {
-        TRACE("refreshing hwnd %p context %p surface %p\n", ctx->hwnd, ctx->context, ctx->surface);
-        p_eglMakeCurrent(display, ctx->surface, ctx->surface, ctx->context);
-        RedrawWindow(ctx->hwnd, NULL, 0, RDW_INVALIDATE | RDW_ERASE);
-    }
-    return ret;
-}
-
 static void update_gl_drawable(HWND hwnd)
 {
     struct gl_drawable *gl;
@@ -232,6 +200,62 @@ static void update_gl_drawable(HWND hwnd)
     }
 }
 
+void wayland_destroy_gl_drawable(HWND hwnd)
+{
+    struct gl_drawable *gl;
+
+    EnterCriticalSection(&drawable_section);
+    LIST_FOR_EACH_ENTRY(gl, &gl_drawables, struct gl_drawable, entry)
+    {
+        if (gl->hwnd != hwnd) continue;
+        list_remove(&gl->entry);
+        if (gl->surface) p_eglDestroySurface(display, gl->surface);
+        if (gl->pbuffer) p_eglDestroySurface(display, gl->pbuffer);
+        if (gl->wayland_surface)
+            wayland_surface_unref_gl(gl->wayland_surface);
+        heap_free(gl);
+        break;
+    }
+    LeaveCriticalSection(&drawable_section);
+}
+
+void wayland_update_gl_drawable(HWND hwnd, struct wayland_surface *wayland_surface)
+{
+    struct gl_drawable *gl;
+
+    if ((gl = get_gl_drawable(hwnd, 0)))
+    {
+        if (gl->surface)
+        {
+            p_eglDestroySurface(display, gl->surface);
+            gl->surface = EGL_NO_SURFACE;
+        }
+
+        if (gl->wayland_surface)
+            wayland_surface_unref_gl(gl->wayland_surface);
+
+        gl->wayland_surface = wayland_surface;
+        if (gl->wayland_surface)
+            wayland_surface_create_or_ref_gl(gl->wayland_surface);
+
+        release_gl_drawable(gl);
+    }
+
+    update_gl_drawable(hwnd);
+}
+
+static BOOL refresh_context(struct wgl_context *ctx)
+{
+    BOOL ret = InterlockedExchange(&ctx->refresh, FALSE);
+
+    if (ret)
+    {
+        TRACE("refreshing hwnd %p context %p surface %p\n", ctx->hwnd, ctx->context, ctx->surface);
+        p_eglMakeCurrent(display, ctx->surface, ctx->surface, ctx->context);
+        RedrawWindow(ctx->hwnd, NULL, 0, RDW_INVALIDATE | RDW_ERASE);
+    }
+    return ret;
+}
 static BOOL set_pixel_format(HDC hdc, int format, BOOL allow_change)
 {
     struct gl_drawable *gl;

@@ -225,10 +225,12 @@ static void free_win_data(struct wayland_win_data *data)
 {
     TRACE("hwnd=%p\n", data->hwnd);
     win_data_context[context_idx(data->hwnd)] = NULL;
-    LeaveCriticalSection(&win_data_section);
-    if (data->wayland_surface)
-        wayland_surface_unref(data->wayland_surface);
+
+    if (data->surface) window_surface_release(data->surface);
+    if (data->wayland_surface) wayland_surface_unref(data->wayland_surface);
     heap_free(data);
+
+    LeaveCriticalSection(&win_data_section);
 }
 
 /***********************************************************************
@@ -819,10 +821,7 @@ void CDECL WAYLAND_DestroyWindow(HWND hwnd)
     TRACE("%p\n", hwnd);
 
     if (!(data = get_win_data(hwnd))) return;
-
     wayland_destroy_gl_drawable(hwnd);
-    if (data->surface) window_surface_release(data->surface);
-    data->surface = NULL;
     free_win_data(data);
 }
 
@@ -846,6 +845,22 @@ static struct wayland_win_data *create_win_data(HWND hwnd, const RECT *window_re
     data->parent = (parent == GetDesktopWindow()) ? 0 : parent;
     data->window_rect = *window_rect;
     data->client_rect = *client_rect;
+    return data;
+}
+
+/***********************************************************************
+ *           recreate_win_data
+ *
+ * Rereate a data window structure for an existing window, maintaining
+ * any related GL state.
+ */
+static struct wayland_win_data *recreate_win_data(struct wayland_win_data *data,
+                                                  HWND hwnd, const RECT *window_rect,
+                                                  const RECT *client_rect)
+{
+    free_win_data(data);
+    data = create_win_data(hwnd, window_rect, client_rect);
+    wayland_update_gl_drawable(hwnd, data->wayland_surface);
     return data;
 }
 
@@ -879,8 +894,7 @@ void CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     if (data->owner != owner || data->parent != parent)
     {
         EnterCriticalSection(&win_data_section);
-        free_win_data(data);
-        data = create_win_data(hwnd, window_rect, client_rect);
+        recreate_win_data(data, hwnd, window_rect, client_rect);
         LeaveCriticalSection(&win_data_section);
     }
 

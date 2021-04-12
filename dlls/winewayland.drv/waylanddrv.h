@@ -180,6 +180,7 @@ struct wayland_surface
     struct wayland_surface_configure pending;
     struct wayland_surface_configure current;
     BOOL mapped;
+    LONG ref;
 };
 
 struct wayland_shm_buffer
@@ -278,8 +279,8 @@ void wayland_surface_reconfigure(struct wayland_surface *surface, int x, int y,
 void wayland_surface_commit_buffer(struct wayland_surface *surface,
                                    struct wayland_shm_buffer *shm_buffer,
                                    HRGN surface_damage_region);
-BOOL wayland_surface_create_gl(struct wayland_surface *surface);
-void wayland_surface_destroy_gl(struct wayland_surface *surface);
+BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface);
+void wayland_surface_unref_gl(struct wayland_surface *surface);
 void wayland_surface_reconfigure_gl(struct wayland_surface *surface, int x, int y,
                                     int width, int height);
 void wayland_surface_ack_configure(struct wayland_surface *surface);
@@ -299,6 +300,8 @@ void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
                                               int wayland_width, int wayland_height,
                                               int *wine_width, int *wine_height);
 void wayland_surface_ensure_mapped(struct wayland_surface *surface);
+struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
+void wayland_surface_unref(struct wayland_surface *surface);
 
 /**********************************************************************
  *          Wayland SHM buffer

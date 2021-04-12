@@ -157,6 +157,8 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
     wl_list_insert(&wayland->surface_list, &surface->link);
     wl_surface_set_user_data(surface->wl_surface, surface);
 
+    surface->ref = 1;
+
     return surface;
 
 err:
@@ -426,7 +428,8 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     surface->crit.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection(&surface->crit);
 
-    wayland_surface_destroy_gl(surface);
+    if (surface->gl)
+        wayland_surface_destroy(surface->gl);
 
     if (surface->wl_egl_window) {
         wl_egl_window_destroy(surface->wl_egl_window);
@@ -468,11 +471,17 @@ void wayland_surface_destroy(struct wayland_surface *surface)
  *
  * Creates a GL subsurface for this wayland surface.
  */
-BOOL wayland_surface_create_gl(struct wayland_surface *surface)
+BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
 {
     struct wayland_surface *surface_gl;
 
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+
+    if (surface->gl)
+    {
+        wayland_surface_ref(surface->gl);
+        return TRUE;
+    }
 
     surface_gl = wayland_surface_create_common(surface->wayland);
     if (!surface_gl)
@@ -491,6 +500,7 @@ BOOL wayland_surface_create_gl(struct wayland_surface *surface)
         goto err;
 
     surface->gl = surface_gl;
+    wayland_surface_ref(surface);
 
     wl_surface_commit(surface_gl->wl_surface);
 
@@ -506,19 +516,24 @@ err:
 }
 
 /**********************************************************************
- *          wayland_surface_destroy_gl
+ *          wayland_surface_unref_gl
  *
- * Destroys the associated GL subsurface for this wayland surface.
+ * Unreferences the associated GL subsurface for this wayland surface.
  */
-void wayland_surface_destroy_gl(struct wayland_surface *surface)
+void wayland_surface_unref_gl(struct wayland_surface *surface)
 {
     if (!surface->gl)
         return;
 
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
+    if (InterlockedDecrement(&surface->gl->ref))
+        return;
+
     wayland_surface_destroy(surface->gl);
     surface->gl = NULL;
+
+    wayland_surface_unref(surface);
 }
 
 /**********************************************************************
@@ -780,4 +795,29 @@ void wayland_surface_ensure_mapped(struct wayland_surface *surface)
     }
 
     LeaveCriticalSection(&surface->crit);
+}
+
+
+/**********************************************************************
+ *          wayland_surface_ref
+ *
+ * Add a reference to a wayland_surface.
+ */
+struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface)
+{
+    InterlockedIncrement(&surface->ref);
+    return surface;
+}
+
+/**********************************************************************
+ *          wayland_surface_unref
+ *
+ * Remove a reference to wayland_surface, potentially destroying it.
+ */
+void wayland_surface_unref(struct wayland_surface *surface)
+{
+    if (InterlockedDecrement(&surface->ref))
+        return;
+
+    wayland_surface_destroy(surface);
 }

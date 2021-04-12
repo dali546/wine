@@ -346,6 +346,7 @@ void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor);
  */
 
 struct opengl_funcs *wayland_get_wgl_driver(UINT version);
+void wayland_update_gl_drawable(HWND hwnd, struct wayland_surface *wayland_surface);
 void wayland_destroy_gl_drawable(HWND hwnd);
 
 /**********************************************************************

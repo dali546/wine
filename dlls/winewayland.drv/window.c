@@ -1136,7 +1136,35 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
     /* TODO: Try to handle z-order */
 
     if (data->wayland_surface)
+    {
+        BOOL was_fullscreen;
+        BOOL is_fullscreen;
+
+        was_fullscreen = data->wayland_surface->current.configure_flags &
+                         WAYLAND_CONFIGURE_FLAG_FULLSCREEN;
+
         update_wayland_state(data, new_style, &old_window_rect);
+
+        is_fullscreen = data->wayland_surface->current.configure_flags &
+                        WAYLAND_CONFIGURE_FLAG_FULLSCREEN;
+
+        /* If the wayland surface state changed to fullscreen, or the size
+         * changed while being fullscreen, we need to commit a valid buffer for
+         * the change to take effect, even if the contents didn't change.  This
+         * typically happens when the surface is redrawn due to the state or
+         * size change, but there are some scenarios when this invalidation
+         * doesn't take place (e.g. with Vulkan windows). Manually invalidate
+         * the whole surface to ensure we will commit a new buffer eventually. */
+        if (surface && is_fullscreen &&
+            (!was_fullscreen || !EqualRect(&old_window_rect, window_rect)))
+        {
+            struct wayland_window_surface *wws = get_wayland_window_surface(surface);
+            TRACE("hwnd=%p wayland fullscreen state change, invalidating surface\n", hwnd);
+            surface->funcs->lock(surface);
+            *surface->funcs->get_bounds(surface) = wws->header.rect;
+            surface->funcs->unlock(surface);
+        }
+    }
 
     release_win_data(data);
 }

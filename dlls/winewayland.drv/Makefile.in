@@ -18,6 +18,7 @@ C_SRCS = \
 	keyboard_layout.c \
 	opengl.c \
 	viewporter-protocol.c \
+	vulkan.c \
 	wayland.c \
 	wayland_cursor.c \
 	wayland_shm.c \

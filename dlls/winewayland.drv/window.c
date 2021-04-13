@@ -822,6 +822,7 @@ void CDECL WAYLAND_DestroyWindow(HWND hwnd)
 
     if (!(data = get_win_data(hwnd))) return;
     wayland_destroy_gl_drawable(hwnd);
+    wayland_invalidate_vulkan_objects(hwnd);
     free_win_data(data);
 }
 
@@ -858,6 +859,7 @@ static struct wayland_win_data *recreate_win_data(struct wayland_win_data *data,
                                                   HWND hwnd, const RECT *window_rect,
                                                   const RECT *client_rect)
 {
+    wayland_invalidate_vulkan_objects(hwnd);
     free_win_data(data);
     data = create_win_data(hwnd, window_rect, client_rect);
     wayland_update_gl_drawable(hwnd, data->wayland_surface);
@@ -1094,13 +1096,14 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
                                 offset_rect.left + data->window_rect.left,
                                 offset_rect.top + data->window_rect.top,
                                 width, height);
-    /* The GL subsurface (if any), is positioned over the client area of the window.
-     * The position of the GL subsurface is relative to the window top-left. */
-    wayland_surface_reconfigure_gl(data->wayland_surface,
-                                   data->client_rect.left - data->window_rect.left,
-                                   data->client_rect.top - data->window_rect.top,
-                                   data->client_rect.right - data->client_rect.left,
-                                   data->client_rect.bottom - data->client_rect.top);
+    /* The GL/VK subsurface (if any), is positioned over the client area of the
+     * window. The position of the GL/VK subsurface is relative to the window
+     * top-left. */
+    wayland_surface_reconfigure_glvk(data->wayland_surface,
+                                     data->client_rect.left - data->window_rect.left,
+                                     data->client_rect.top - data->window_rect.top,
+                                     data->client_rect.right - data->client_rect.left,
+                                     data->client_rect.bottom - data->client_rect.top);
 
     TRACE("conf->serial=%d conf->size=%dx%d conf->flags=%#x\n",
           data->wayland_surface->pending.serial,

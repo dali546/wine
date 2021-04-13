@@ -182,7 +182,7 @@ static void update_gl_drawable(HWND hwnd)
     {
         if (!gl->surface &&
             gl->wayland_surface &&
-            (gl->surface = p_eglCreateWindowSurface(display, pixel_formats[gl->format - 1].config, gl->wayland_surface->gl->wl_egl_window, NULL)))
+            (gl->surface = p_eglCreateWindowSurface(display, pixel_formats[gl->format - 1].config, gl->wayland_surface->glvk->wl_egl_window, NULL)))
         {
             LIST_FOR_EACH_ENTRY(ctx, &gl_contexts, struct wgl_context, entry)
             {
@@ -212,7 +212,7 @@ void wayland_destroy_gl_drawable(HWND hwnd)
         if (gl->surface) p_eglDestroySurface(display, gl->surface);
         if (gl->pbuffer) p_eglDestroySurface(display, gl->pbuffer);
         if (gl->wayland_surface)
-            wayland_surface_unref_gl(gl->wayland_surface);
+            wayland_surface_unref_glvk(gl->wayland_surface);
         heap_free(gl);
         break;
     }
@@ -232,7 +232,7 @@ void wayland_update_gl_drawable(HWND hwnd, struct wayland_surface *wayland_surfa
         }
 
         if (gl->wayland_surface)
-            wayland_surface_unref_gl(gl->wayland_surface);
+            wayland_surface_unref_glvk(gl->wayland_surface);
 
         gl->wayland_surface = wayland_surface;
         if (gl->wayland_surface)

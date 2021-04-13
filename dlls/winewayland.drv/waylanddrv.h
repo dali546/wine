@@ -172,7 +172,7 @@ struct wayland_surface
     struct xdg_toplevel *xdg_toplevel;
     struct wp_viewport *wp_viewport;
     struct wl_egl_window *wl_egl_window;
-    struct wayland_surface *gl;
+    struct wayland_surface *glvk;
     /* The offset of this surface relative to its owning win32 window */
     int offset_x, offset_y;
     HWND hwnd;
@@ -280,9 +280,10 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
                                    struct wayland_shm_buffer *shm_buffer,
                                    HRGN surface_damage_region);
 BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface);
-void wayland_surface_unref_gl(struct wayland_surface *surface);
-void wayland_surface_reconfigure_gl(struct wayland_surface *surface, int x, int y,
-                                    int width, int height);
+BOOL wayland_surface_create_or_ref_vk(struct wayland_surface *surface);
+void wayland_surface_unref_glvk(struct wayland_surface *surface);
+void wayland_surface_reconfigure_glvk(struct wayland_surface *surface, int x, int y,
+                                      int width, int height);
 void wayland_surface_ack_configure(struct wayland_surface *surface);
 void wayland_surface_unmap(struct wayland_surface *surface);
 BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *conf,
@@ -348,6 +349,13 @@ void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor);
 struct opengl_funcs *wayland_get_wgl_driver(UINT version);
 void wayland_update_gl_drawable(HWND hwnd, struct wayland_surface *wayland_surface);
 void wayland_destroy_gl_drawable(HWND hwnd);
+
+/**********************************************************************
+ *          Vulkan support
+ */
+
+const struct vulkan_funcs *wayland_get_vulkan_driver(UINT version);
+void wayland_invalidate_vulkan_objects(HWND hwnd);
 
 /**********************************************************************
  *          Debugging helpers

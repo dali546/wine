@@ -118,6 +118,22 @@ static struct opengl_funcs * CDECL WAYLAND_wine_get_wgl_driver(PHYSDEV dev, UINT
     return ret;
 }
 
+/**********************************************************************
+ *           WAYLAND_wine_get_vulkan_driver
+ */
+static const struct vulkan_funcs * CDECL WAYLAND_wine_get_vulkan_driver(PHYSDEV dev, UINT version)
+{
+    const struct vulkan_funcs *ret;
+
+    if (!(ret = wayland_get_vulkan_driver(version)))
+    {
+        dev = GET_NEXT_PHYSDEV(dev, wine_get_wgl_driver);
+        ret = dev->funcs->wine_get_vulkan_driver(dev, version);
+    }
+
+    return ret;
+}
+
 static const struct gdi_dc_funcs wayland_gdi_dc_funcs =
 {
     NULL,                               /* pAbortDoc */
@@ -220,7 +236,7 @@ static const struct gdi_dc_funcs wayland_gdi_dc_funcs =
     NULL,                               /* pD3DKMTCheckVidPnExclusiveOwnership */
     NULL,                               /* pD3DKMTSetVidPnSourceOwner */
     WAYLAND_wine_get_wgl_driver,        /* wine_get_wgl_driver */
-    NULL,                               /* wine_get_vulkan_driver */
+    WAYLAND_wine_get_vulkan_driver,     /* wine_get_vulkan_driver */
     GDI_PRIORITY_GRAPHICS_DRV           /* priority */
 };
 

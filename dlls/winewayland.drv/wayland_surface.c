@@ -255,8 +255,8 @@ err:
  *
  * The coordinates and sizes should be given in wine's coordinate space.
  *
- * Note that this doesn't configure any associated GL subsurface,
- * wayland_surface_reconfigure_gl() needs to be called separately.
+ * Note that this doesn't configure any associated GL/VK subsurface,
+ * wayland_surface_reconfigure_glvk() needs to be called separately.
  */
 void wayland_surface_reconfigure(struct wayland_surface *surface,
                                  int wine_x, int wine_y,
@@ -428,8 +428,8 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     surface->crit.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection(&surface->crit);
 
-    if (surface->gl)
-        wayland_surface_destroy(surface->gl);
+    if (surface->glvk)
+        wayland_surface_destroy(surface->glvk);
 
     if (surface->wl_egl_window) {
         wl_egl_window_destroy(surface->wl_egl_window);
@@ -466,6 +466,36 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
 }
 
+static struct wayland_surface *wayland_surface_create_glvk_common(struct wayland_surface *surface)
+{
+    struct wayland_surface *glvk;
+
+    TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+
+    glvk = wayland_surface_create_common(surface->wayland);
+    if (!glvk)
+        goto err;
+
+    glvk->wl_subsurface =
+        wl_subcompositor_get_subsurface(glvk->wayland->wl_subcompositor,
+                                        glvk->wl_surface,
+                                        surface->wl_surface);
+    if (!glvk->wl_subsurface)
+        goto err;
+    wl_subsurface_set_desync(glvk->wl_subsurface);
+
+    glvk->hwnd = surface->hwnd;
+
+    return glvk;
+
+err:
+    if (glvk)
+        wayland_surface_destroy(glvk);
+
+    return NULL;
+
+}
+
 /**********************************************************************
  *          wayland_surface_create_gl
  *
@@ -473,84 +503,110 @@ void wayland_surface_destroy(struct wayland_surface *surface)
  */
 BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
 {
-    struct wayland_surface *surface_gl;
+    struct wayland_surface *glvk;
 
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
-    if (surface->gl)
+    if (surface->glvk)
     {
-        wayland_surface_ref(surface->gl);
+        wayland_surface_ref(surface->glvk);
         return TRUE;
     }
 
-    surface_gl = wayland_surface_create_common(surface->wayland);
-    if (!surface_gl)
+    glvk = wayland_surface_create_glvk_common(surface);
+    if (!glvk)
         goto err;
 
-    surface_gl->wl_subsurface =
-        wl_subcompositor_get_subsurface(surface_gl->wayland->wl_subcompositor,
-                                        surface_gl->wl_surface,
-                                        surface->wl_surface);
-    if (!surface_gl->wl_subsurface)
-        goto err;
-    wl_subsurface_set_desync(surface_gl->wl_subsurface);
-
-    surface_gl->wl_egl_window = wl_egl_window_create(surface_gl->wl_surface, 1, 1);
-    if (!surface_gl->wl_egl_window)
+    glvk->wl_egl_window = wl_egl_window_create(glvk->wl_surface, 1, 1);
+    if (!glvk->wl_egl_window)
         goto err;
 
-    surface->gl = surface_gl;
+    surface->glvk = glvk;
     wayland_surface_ref(surface);
 
-    wl_surface_commit(surface_gl->wl_surface);
-
-    surface_gl->hwnd = surface->hwnd;
+    wl_surface_commit(glvk->wl_surface);
 
     return TRUE;
 
 err:
-    if (surface_gl)
-        wayland_surface_destroy(surface_gl);
+    if (glvk)
+        wayland_surface_destroy(glvk);
 
     return FALSE;
 }
 
 /**********************************************************************
- *          wayland_surface_unref_gl
+ *          wayland_surface_create_vk
  *
- * Unreferences the associated GL subsurface for this wayland surface.
+ * Creates a VK subsurface for this wayland surface.
  */
-void wayland_surface_unref_gl(struct wayland_surface *surface)
+BOOL wayland_surface_create_or_ref_vk(struct wayland_surface *surface)
 {
-    if (!surface->gl)
+    struct wayland_surface *glvk;
+
+    TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+
+    if (surface->glvk)
+    {
+        wayland_surface_ref(surface->glvk);
+        return TRUE;
+    }
+
+    glvk = wayland_surface_create_glvk_common(surface);
+    if (!glvk)
+        goto err;
+
+    surface->glvk = glvk;
+    wayland_surface_ref(surface);
+
+    wl_surface_commit(glvk->wl_surface);
+
+    return TRUE;
+
+err:
+    if (glvk)
+        wayland_surface_destroy(glvk);
+
+    return FALSE;
+}
+
+/**********************************************************************
+ *          wayland_surface_unref_glvk
+ *
+ * Unreferences the associated GL/VK subsurface for this wayland surface.
+ */
+void wayland_surface_unref_glvk(struct wayland_surface *surface)
+{
+    if (!surface->glvk)
         return;
 
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
-    if (InterlockedDecrement(&surface->gl->ref))
+    if (InterlockedDecrement(&surface->glvk->ref))
         return;
 
-    wayland_surface_destroy(surface->gl);
-    surface->gl = NULL;
+    wayland_surface_destroy(surface->glvk);
+    surface->glvk = NULL;
 
     wayland_surface_unref(surface);
 }
 
 /**********************************************************************
- *          wayland_surface_reconfigure_gl
+ *          wayland_surface_reconfigure_glvk
  *
- * Configures the position and size of the GL subsurface associated with
+ * Configures the position and size of the GL/VK subsurface associated with
  * a wayland surface.
  *
  * The coordinates and sizes should be given in wine's coordinate space.
  */
-void wayland_surface_reconfigure_gl(struct wayland_surface *surface,
-                                    int wine_x, int wine_y,
-                                    int wine_width, int wine_height)
+void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
+                                      int wine_x, int wine_y,
+                                      int wine_width, int wine_height)
 {
     int x, y, width, height;
+    struct wayland_surface *glvk = surface->glvk;
 
-    if (!surface->gl)
+    if (!glvk)
         return;
 
     wayland_surface_coords_from_wine(surface, wine_x, wine_y, &x, &y);
@@ -562,26 +618,27 @@ void wayland_surface_reconfigure_gl(struct wayland_surface *surface,
           wine_x, wine_y, wine_width, wine_height,
           x, y, width, height);
 
-    surface->gl->offset_x = wine_x;
-    surface->gl->offset_y = wine_y;
+    glvk->offset_x = wine_x;
+    glvk->offset_y = wine_y;
 
-    wl_subsurface_set_position(surface->gl->wl_subsurface, x, y);
+    wl_subsurface_set_position(glvk->wl_subsurface, x, y);
     /* The EGL window size needs to be in wine coords since this affects
      * the effective EGL buffer size. */
-    wl_egl_window_resize(surface->gl->wl_egl_window, wine_width, wine_height, 0, 0);
+    if (glvk->wl_egl_window)
+        wl_egl_window_resize(glvk->wl_egl_window, wine_width, wine_height, 0, 0);
 
     /* Use a viewport, if supported, to ensure GL surfaces remain inside
      * their parent's boundaries when resizing and also to handle display mode
      * changes. */
-    if (surface->gl->wp_viewport)
+    if (glvk->wp_viewport)
     {
         if (width != 0 && height != 0)
-            wp_viewport_set_destination(surface->gl->wp_viewport, width, height);
+            wp_viewport_set_destination(glvk->wp_viewport, width, height);
         else
-            wp_viewport_set_destination(surface->gl->wp_viewport, -1, -1);
+            wp_viewport_set_destination(glvk->wp_viewport, -1, -1);
     }
 
-    wl_surface_commit(surface->gl->wl_surface);
+    wl_surface_commit(glvk->wl_surface);
 }
 
 /**********************************************************************

@@ -31,6 +31,8 @@
 #include <xkbcommon/xkbcommon-compose.h>
 #include "xdg-shell-client-protocol.h"
 #include "viewporter-client-protocol.h"
+#include "pointer-constraints-unstable-v1-client-protocol.h"
+#include "relative-pointer-unstable-v1-client-protocol.h"
 
 #include "windef.h"
 #include "winbase.h"
@@ -43,6 +45,7 @@ enum wayland_window_message
 {
     WM_WAYLAND_CONFIGURE = 0x80001000,
     WM_WAYLAND_MODE_CHANGE = 0x80001001,
+    WM_WAYLAND_POINTER_CONFINEMENT_UPDATE = 0x80001002,
 };
 
 enum wayland_configure_flags
@@ -51,6 +54,13 @@ enum wayland_configure_flags
     WAYLAND_CONFIGURE_FLAG_ACTIVATED  = (1 << 1),
     WAYLAND_CONFIGURE_FLAG_MAXIMIZED  = (1 << 2),
     WAYLAND_CONFIGURE_FLAG_FULLSCREEN = (1 << 3),
+};
+
+enum wayland_pointer_confinement
+{
+    WAYLAND_POINTER_CONFINEMENT_RETAIN_CLIP,
+    WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP,
+    WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP,
 };
 
 /**********************************************************************
@@ -90,6 +100,7 @@ struct wayland_pointer
     uint32_t enter_serial;
     struct wayland_cursor *cursor;
     HCURSOR hcursor;
+    struct zwp_relative_pointer_v1 *zwp_relative_pointer_v1;
 };
 
 struct wayland
@@ -107,6 +118,8 @@ struct wayland
     struct wp_viewporter *wp_viewporter;
     struct wl_data_device_manager *wl_data_device_manager;
     struct wl_data_device *wl_data_device;
+    struct zwp_pointer_constraints_v1 *zwp_pointer_constraints_v1;
+    struct zwp_relative_pointer_manager_v1 *zwp_relative_pointer_manager_v1;
     int next_output_id;
     struct wl_list output_list;
     struct wl_list surface_list;
@@ -118,6 +131,7 @@ struct wayland
     int event_notification_pipe[2];
     struct wl_list thread_link;
     HWND clipboard_hwnd;
+    RECT cursor_clip;
     CRITICAL_SECTION crit;
 };
 
@@ -173,6 +187,8 @@ struct wayland_surface
     struct wp_viewport *wp_viewport;
     struct wl_egl_window *wl_egl_window;
     struct wayland_surface *glvk;
+    struct zwp_confined_pointer_v1 *zwp_confined_pointer_v1;
+    struct zwp_locked_pointer_v1 *zwp_locked_pointer_v1;
     /* The offset of this surface relative to its owning win32 window */
     int offset_x, offset_y;
     HWND hwnd;
@@ -291,6 +307,8 @@ BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *c
                                              enum wayland_configure_flags flags);
 struct wayland_surface *wayland_surface_for_hwnd(HWND hwnd);
 POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, int y);
+POINT wayland_surface_coords_from_screen(struct wayland_surface *surface,
+                                         int screen_x, int screen_y);
 void wayland_surface_coords_from_wine(struct wayland_surface *surface,
                                       int wine_x, int wine_y,
                                       int *wayland_x, int *wayland_y);
@@ -303,6 +321,7 @@ void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
 void wayland_surface_ensure_mapped(struct wayland_surface *surface);
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
+void wayland_surface_update_pointer_confinement(struct wayland_surface *surface);
 
 /**********************************************************************
  *          Wayland SHM buffer
@@ -334,13 +353,14 @@ void wayland_keyboard_emit(struct wayland_keyboard *keyboard, uint32_t key,
 void wayland_keyboard_update_layout(struct wayland_keyboard *keyboard);
 
 /**********************************************************************
- *          Cursor helpers
+ *          Pointer/Cursor helpers
  */
 
 BOOL wayland_init_set_cursor(void);
 void wayland_invalidate_set_cursor(void);
 void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer, HCURSOR handle);
 void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor);
+void wayland_pointer_set_relative(struct wayland_pointer *pointer, BOOL relative);
 
 /**********************************************************************
  *          OpenGL support

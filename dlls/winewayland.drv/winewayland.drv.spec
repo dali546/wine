@@ -10,6 +10,7 @@
 @ cdecl ToUnicodeEx(long long ptr ptr long long long) WAYLAND_ToUnicodeEx
 @ cdecl VkKeyScanEx(long long) WAYLAND_VkKeyScanEx
 @ cdecl SetCursor(long) WAYLAND_SetCursor
+@ cdecl ClipCursor(ptr) WAYLAND_ClipCursor
 @ cdecl ChangeDisplaySettingsEx(ptr ptr long long long) WAYLAND_ChangeDisplaySettingsEx
 @ cdecl EnumDisplaySettingsEx(ptr long ptr long) WAYLAND_EnumDisplaySettingsEx
 @ cdecl CreateWindow(long) WAYLAND_CreateWindow

@@ -1120,6 +1120,8 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
         wayland_surface_ack_configure(data->wayland_surface);
     }
 
+    wayland_surface_update_pointer_confinement(data->wayland_surface);
+
     release_win_data(parent_data);
 }
 
@@ -1268,7 +1270,9 @@ void CDECL WAYLAND_SetCursor(HCURSOR handle)
 
     if (InterlockedExchangePointer((void **)&last_cursor, handle) != handle)
     {
+        HWND foreground = GetForegroundWindow();
         struct wayland *wayland = thread_wayland();
+
         /* If a non GUI thread calls SetCursor, just ignore it, since it doesn't
          * have any wayland surfaces and thus changing the cursor will not have
          * any effect. */
@@ -1276,7 +1280,23 @@ void CDECL WAYLAND_SetCursor(HCURSOR handle)
             wayland_pointer_update_cursor_from_win32(&wayland->pointer, handle);
         else
             wayland_invalidate_set_cursor();
+
+        /* Cursor visibility affects pointer confinement mode. */
+        SendMessageW(foreground, WM_WAYLAND_POINTER_CONFINEMENT_UPDATE,
+                     WAYLAND_POINTER_CONFINEMENT_RETAIN_CLIP, 0);
     }
+}
+
+/***********************************************************************
+ *           WAYLAND_ClipCursor
+ */
+void CDECL WAYLAND_ClipCursor(const RECT *clip)
+{
+    HWND foreground = GetForegroundWindow();
+    WPARAM confine = clip ? WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP :
+                            WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP;
+
+    SendMessageW(foreground, WM_WAYLAND_POINTER_CONFINEMENT_UPDATE, confine, 0);
 }
 
 /***********************************************************************
@@ -1668,6 +1688,24 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_WAYLAND_MODE_CHANGE:
         wayland_change_wine_mode(thread_wayland(), wp, LOWORD(lp), HIWORD(lp));
+        break;
+    case WM_WAYLAND_POINTER_CONFINEMENT_UPDATE:
+        {
+            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd(hwnd);
+            if (wayland_surface)
+            {
+                if (wp == WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP)
+                {
+                    GetClipCursor(&wayland_surface->wayland->cursor_clip);
+                }
+                else if (wp == WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP)
+                {
+                    SetRect(&wayland_surface->wayland->cursor_clip,
+                            INT_MIN, INT_MIN, INT_MAX, INT_MAX);
+                }
+                wayland_surface_update_pointer_confinement(wayland_surface);
+            }
+        }
         break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);

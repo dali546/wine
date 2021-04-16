@@ -34,6 +34,7 @@
 #include <time.h>
 #include <poll.h>
 #include <sys/mman.h>
+#include <limits.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
@@ -478,8 +479,8 @@ static void wayland_keyboard_init(struct wayland_keyboard *keyboard,
  *          Pointer handling
  */
 
-static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
-                                  uint32_t time, wl_fixed_t sx, wl_fixed_t sy)
+static void pointer_handle_motion_internal(void *data, struct wl_pointer *pointer,
+                                           uint32_t time, wl_fixed_t sx, wl_fixed_t sy)
 {
     struct wayland *wayland = data;
     HWND focused_hwnd = wayland->pointer.focused_surface ?
@@ -494,6 +495,11 @@ static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
                                                   wl_fixed_to_int(sx),
                                                   wl_fixed_to_int(sy));
 
+    TRACE("surface=%p hwnd=%p wayland_xy=%d,%d screen_xy=%d,%d\n",
+          wayland->pointer.focused_surface, focused_hwnd,
+          wl_fixed_to_int(sx), wl_fixed_to_int(sy),
+          screen_pos.x, screen_pos.y);
+
     input.type           = INPUT_MOUSE;
     input.mi.dx          = screen_pos.x;
     input.mi.dy          = screen_pos.y;
@@ -503,6 +509,18 @@ static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
     wayland->last_event_type = INPUT_MOUSE;
 
     __wine_send_input(focused_hwnd, &input, NULL);
+}
+
+static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
+                                  uint32_t time, wl_fixed_t sx, wl_fixed_t sy)
+{
+    struct wayland *wayland = data;
+
+    /* Don't handle absolute motion events if we are in relative mode. */
+    if (wayland->pointer.zwp_relative_pointer_v1)
+        return;
+
+    pointer_handle_motion_internal(data, pointer, time, sx, sy);
 }
 
 static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
@@ -522,7 +540,7 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
         /* Handle the enter as a motion, to account for cases where the
          * window first appears beneath the pointer and won't get a separate
          * motion event. */
-        pointer_handle_motion(data, pointer, 0, sx, sy);
+        pointer_handle_motion_internal(data, pointer, 0, sx, sy);
     }
 }
 
@@ -645,8 +663,83 @@ static const struct wl_pointer_listener pointer_listener = {
     pointer_handle_axis_discrete,
 };
 
+static void relative_pointer_handle_motion(void *data,
+                                           struct zwp_relative_pointer_v1 *rpointer,
+                                           uint32_t utime_hi,
+                                           uint32_t utime_lo,
+                                           wl_fixed_t dx,
+                                           wl_fixed_t dy,
+                                           wl_fixed_t dx_unaccel,
+                                           wl_fixed_t dy_unaccel)
+{
+    struct wayland *wayland = data;
+    HWND focused_hwnd = wayland->pointer.focused_surface ?
+                        wayland->pointer.focused_surface->hwnd : 0;
+    int wine_dx, wine_dy;
+    INPUT input = {0};
+
+    if (!focused_hwnd)
+        return;
+
+    wayland_surface_coords_to_wine(wayland->pointer.focused_surface,
+                                   wl_fixed_to_int(dx), wl_fixed_to_int(dy),
+                                   &wine_dx, &wine_dy);
+
+    TRACE("surface=%p hwnd=%p wayland_dxdy=%d,%d wine_dxdy=%d,%d\n",
+          wayland->pointer.focused_surface, focused_hwnd,
+          wl_fixed_to_int(dx), wl_fixed_to_int(dy), wine_dx, wine_dy);
+
+    input.type           = INPUT_MOUSE;
+    input.mi.dx          = wine_dx;
+    input.mi.dy          = wine_dy;
+    input.mi.dwFlags     = MOUSEEVENTF_MOVE;
+
+    wayland->last_dispatch_mask |= QS_MOUSEMOVE;
+    wayland->last_event_type = INPUT_MOUSE;
+
+    __wine_send_input(focused_hwnd, &input, NULL);
+}
+
+static const struct zwp_relative_pointer_v1_listener zwp_relative_pointer_v1_listener = {
+    relative_pointer_handle_motion,
+};
+
+/**********************************************************************
+ *          wayland_pointer_set_relative
+ *
+ * Set whether the pointer emits relative (if able) or absolute motion events.
+ * The default is to emit absolute motion events.
+ */
+void wayland_pointer_set_relative(struct wayland_pointer *pointer, BOOL relative)
+{
+    if (!pointer->wayland->zwp_relative_pointer_manager_v1)
+        return;
+
+    if (!pointer->zwp_relative_pointer_v1 && relative)
+    {
+        pointer->zwp_relative_pointer_v1 =
+            zwp_relative_pointer_manager_v1_get_relative_pointer(
+                pointer->wayland->zwp_relative_pointer_manager_v1,
+                pointer->wl_pointer);
+
+        zwp_relative_pointer_v1_add_listener(pointer->zwp_relative_pointer_v1,
+                                             &zwp_relative_pointer_v1_listener,
+                                             pointer->wayland);
+    }
+    else if (pointer->zwp_relative_pointer_v1 && !relative)
+    {
+        zwp_relative_pointer_v1_destroy(pointer->zwp_relative_pointer_v1);
+        pointer->zwp_relative_pointer_v1 = NULL;
+    }
+}
+
 static void wayland_pointer_deinit(struct wayland_pointer *pointer)
 {
+    if (pointer->zwp_relative_pointer_v1)
+    {
+        zwp_relative_pointer_v1_destroy(pointer->zwp_relative_pointer_v1);
+        pointer->zwp_relative_pointer_v1 = NULL;
+    }
     if (pointer->wl_pointer)
     {
         wl_pointer_destroy(pointer->wl_pointer);
@@ -762,6 +855,16 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     else if (strcmp(interface, "wl_output") == 0)
     {
         wayland_add_output(wayland, id, version);
+    }
+    else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0)
+    {
+        wayland->zwp_pointer_constraints_v1 =
+            wl_registry_bind(registry, id, &zwp_pointer_constraints_v1_interface, 1);
+    }
+    else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0)
+    {
+        wayland->zwp_relative_pointer_manager_v1 =
+            wl_registry_bind(registry, id, &zwp_relative_pointer_manager_v1_interface, 1);
     }
 }
 
@@ -879,6 +982,8 @@ BOOL wayland_init(struct wayland *wayland)
                   output->current_mode == mode ? "*" : "");
         }
     }
+
+    SetRect(&wayland->cursor_clip, INT_MIN, INT_MIN, INT_MAX, INT_MAX);
 
     return TRUE;
 }

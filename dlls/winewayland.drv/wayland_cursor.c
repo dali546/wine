@@ -213,6 +213,9 @@ void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
 {
     struct wayland_cursor *wayland_cursor = pointer->cursor;
 
+    if (!pointer->wl_pointer)
+        return;
+
     if (pointer->hcursor != handle)
     {
         wayland_cursor = wayland_cursor_from_win32(pointer->wayland, handle);

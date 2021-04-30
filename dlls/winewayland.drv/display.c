@@ -317,12 +317,13 @@ done:
     return ret;
 }
 
-static BOOL wayland_init_monitor(HDEVINFO devinfo, const struct wayland_output *output,
+static BOOL wayland_init_monitor(HDEVINFO devinfo, struct wayland_output *output,
                                  int monitor_index, int video_index, const LUID *gpu_luid,
                                  UINT output_id)
 {
     SP_DEVINFO_DATA device_data = {sizeof(SP_DEVINFO_DATA)};
     WCHAR bufferW[MAX_PATH];
+    WCHAR output_name[128];
     HKEY hkey;
     BOOL ret = FALSE;
     DWORD state_flags = DISPLAY_DEVICE_ATTACHED | DISPLAY_DEVICE_ACTIVE;
@@ -333,9 +334,12 @@ static BOOL wayland_init_monitor(HDEVINFO devinfo, const struct wayland_output *
         goto done;
     SetRect(&rc_mode, 0, 0, output->current_wine_mode->width, output->current_wine_mode->height);
 
+    if (!MultiByteToWideChar(CP_UTF8, 0, output->name, -1, output_name, ARRAY_SIZE(output_name)))
+        output_name[0] = 0;
+
     /* Create GUID_DEVCLASS_MONITOR instance */
     sprintfW(bufferW, monitor_instance_fmtW, video_index, monitor_index);
-    SetupDiCreateDeviceInfoW(devinfo, bufferW, &GUID_DEVCLASS_MONITOR, output->name, NULL, 0, &device_data);
+    SetupDiCreateDeviceInfoW(devinfo, bufferW, &GUID_DEVCLASS_MONITOR, output_name, NULL, 0, &device_data);
     if (!SetupDiRegisterDeviceInfo(devinfo, &device_data, 0, NULL, NULL, NULL))
         goto done;
 
@@ -469,29 +473,40 @@ void wayland_init_display_devices(struct wayland *wayland, BOOL force)
     }
 
     /* Avoid unnecessary reinit */
-    if (!force && disposition != REG_CREATED_NEW_KEY)
-        goto done;
+    if (force || disposition == REG_CREATED_NEW_KEY)
+    {
+        prepare_devices(video_hkey);
 
-    prepare_devices(video_hkey);
+        gpu_devinfo = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_DISPLAY, NULL);
+        monitor_devinfo = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_MONITOR, NULL);
 
-    gpu_devinfo = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_DISPLAY, NULL);
-    monitor_devinfo = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_MONITOR, NULL);
+        /* TODO: Support multiple GPUs. Note that wayland doesn't currently expose GPU info. */
+        if (!wayland_init_gpu(gpu_devinfo, &gpu, gpu_index, gpu_guidW, driverW, &gpu_luid))
+            goto done;
 
-    /* TODO: Support multiple GPUs. Note that wayland doesn't currently expose GPU info. */
-    if (!wayland_init_gpu(gpu_devinfo, &gpu, gpu_index, gpu_guidW, driverW, &gpu_luid))
-        goto done;
+        wl_list_for_each(output, &wayland->output_list, link)
+        {
+            /* TODO: Detect and support multiple monitors per adapter (i.e., mirroring). */
+            if (!wayland_init_adapter(video_hkey, output_index, gpu_index, output_index, 1,
+                                      &gpu, gpu_guidW, driverW))
+                goto done;
 
+            if (!wayland_init_monitor(monitor_devinfo, output, output_index, output_index,
+                                      &gpu_luid, output_id++))
+                goto done;
+
+            output_index++;
+        }
+    }
+
+    /* Set wine name in wayland_output so that we can look it up. */
+    output_index = 0;
     wl_list_for_each(output, &wayland->output_list, link)
     {
-        /* TODO: Detect and support multiple monitors per adapter (i.e., mirroring). */
-        if (!wayland_init_adapter(video_hkey, output_index, gpu_index, output_index, 1,
-                                  &gpu, gpu_guidW, driverW))
-            goto done;
-
-        if (!wayland_init_monitor(monitor_devinfo, output, output_index, output_index,
-                                  &gpu_luid, output_id++))
-            goto done;
-
+        snprintfW(output->wine_name, ARRAY_SIZE(output->wine_name),
+                  adapter_name_fmtW, output_index + 1);
+        TRACE("output->id=0x%x name=%s wine_name=%s\n",
+              output->id, output->name, wine_dbgstr_w(output->wine_name));
         output_index++;
     }
 
@@ -645,7 +660,7 @@ static struct wayland_output *wayland_get_output(struct wayland *wayland, LPCWST
 
     wl_list_for_each(output, &wayland->output_list, link)
     {
-        if (!lstrcmpiW(name, output->name))
+        if (!lstrcmpiW(name, output->wine_name))
             return output;
     }
 

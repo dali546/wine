@@ -29,6 +29,7 @@
 #include <wayland-egl.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-compose.h>
+#include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "pointer-constraints-unstable-v1-client-protocol.h"
@@ -120,7 +121,9 @@ struct wayland
     struct wl_data_device *wl_data_device;
     struct zwp_pointer_constraints_v1 *zwp_pointer_constraints_v1;
     struct zwp_relative_pointer_manager_v1 *zwp_relative_pointer_manager_v1;
-    int next_output_id;
+    struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
+    uint32_t output_id_fnv_offset;
+    uint32_t next_fallback_output_id;
     struct wl_list output_list;
     struct wl_list surface_list;
     struct wayland_keyboard keyboard;
@@ -146,7 +149,9 @@ struct wayland_output_mode
 struct wayland_output
 {
     struct wl_list link;
+    struct wayland *wayland;
     struct wl_output *wl_output;
+    struct zxdg_output_v1 *zxdg_output_v1;
     struct wl_list mode_list;
     struct wayland_output_mode *current_mode;
     struct wayland_output_mode *current_wine_mode;
@@ -154,8 +159,9 @@ struct wayland_output
      * space to get values in the wayland coordinate space for this output. Used
      * when emulating a display mode change. */
     double wine_scale;
-    WCHAR name[128];
-    int id;
+    char *name;
+    WCHAR wine_name[128];
+    uint32_t id;
 };
 
 struct wayland_buffer_queue

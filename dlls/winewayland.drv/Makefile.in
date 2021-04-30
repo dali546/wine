@@ -28,6 +28,7 @@ C_SRCS = \
 	wayland_buffer_queue.c \
 	waylanddrv_main.c \
 	window.c \
+	xdg-output-unstable-v1-protocol.c \
 	xdg-shell-protocol.c \
 	xkb_util.c \
 

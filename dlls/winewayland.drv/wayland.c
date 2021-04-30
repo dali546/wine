@@ -141,6 +141,65 @@ static void wayland_output_add_mode(struct wayland_output *output,
     wl_list_insert(&output->mode_list, &mode->link);
 }
 
+/* The output id is computed using the FNV-1a hash of the name. We start
+ * with the default FNV offset basis, but we update it (and recompute
+ * all ids) if we find a collision. From the author's page at
+ * http://www.isthe.com/chongo/tech/comp/fnv/index.html:
+ *
+ *   "In the general case, almost any offset_basis will serve so long as
+ *    it is non-zero"
+ */
+static void wayland_output_recompute_id(struct wayland_output *output)
+{
+    static const uint32_t fnv_prime = 0x01000193;
+    uint32_t hash = output->wayland->output_id_fnv_offset;
+    const char *p;
+
+    if (output->name)
+    {
+        for(p = output->name; *p; p++)
+        {
+            hash ^= *p;
+            hash *= fnv_prime;
+        }
+    }
+
+    output->id = hash;
+}
+
+static BOOL wayland_output_ids_conflict(struct wayland *wayland)
+{
+    struct wayland_output *o;
+    struct wayland_output *n;
+
+    wl_list_for_each(o, &wayland->output_list, link)
+    {
+        for (n = wl_container_of(o->link.next, n, link);
+             &n->link != &wayland->output_list;
+             n = wl_container_of(n->link.next, n, link))
+        {
+            if (o->id == n->id) return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static void wayland_recompute_output_ids_until_no_conflict(struct wayland *wayland)
+{
+    while (wayland_output_ids_conflict(wayland))
+    {
+        struct wayland_output *output;
+
+        wayland->output_id_fnv_offset += 2;
+        TRACE("recomputing output ids using fnv_offset=0x%x\n",
+              wayland->output_id_fnv_offset);
+
+        wl_list_for_each(output, &wayland->output_list, link)
+            wayland_output_recompute_id(output);
+    }
+}
+
 static void output_handle_geometry(void *data, struct wl_output *wl_output,
                                    int32_t x, int32_t y,
                                    int32_t physical_width, int32_t physical_height,
@@ -177,24 +236,90 @@ static const struct wl_output_listener output_listener = {
     output_handle_scale
 };
 
+static void zxdg_output_v1_handle_logical_position(void *data,
+                                                   struct zxdg_output_v1 *zxdg_output_v1,
+                                                   int32_t x,
+                                                   int32_t y)
+{
+}
+
+static void zxdg_output_v1_handle_logical_size(void *data,
+                                               struct zxdg_output_v1 *zxdg_output_v1,
+                                               int32_t width,
+                                               int32_t height)
+{
+}
+
+static void zxdg_output_v1_handle_done(void *data,
+                                       struct zxdg_output_v1 *zxdg_output_v1)
+{
+}
+
+static void zxdg_output_v1_handle_name(void *data,
+                                       struct zxdg_output_v1 *zxdg_output_v1,
+                                       const char *name)
+{
+    struct wayland_output *output = data;
+
+    free(output->name);
+    output->name = strdup(name);
+    wayland_output_recompute_id(output);
+
+    wayland_recompute_output_ids_until_no_conflict(output->wayland);
+}
+
+static void zxdg_output_v1_handle_description(void *data,
+                                              struct zxdg_output_v1 *zxdg_output_v1,
+                                              const char *description)
+{
+}
+
+static const struct zxdg_output_v1_listener zxdg_output_v1_listener = {
+    zxdg_output_v1_handle_logical_position,
+    zxdg_output_v1_handle_logical_size,
+    zxdg_output_v1_handle_done,
+    zxdg_output_v1_handle_name,
+    zxdg_output_v1_handle_description,
+};
+
 static void wayland_add_output(struct wayland *wayland, uint32_t id, uint32_t version)
 {
-    struct wayland_output *output = heap_alloc_zero (sizeof(*output));
-    static const WCHAR name_fmtW[] = { '\\','\\','.','\\','D','I','S','P','L','A','Y','%','d',0 };
+    struct wayland_output *output = heap_alloc_zero(sizeof(*output));
 
+    output->wayland = wayland;
     output->wl_output = wl_registry_bind(wayland->wl_registry, id,
                                          &wl_output_interface, 1);
     wl_output_add_listener(output->wl_output, &output_listener, output);
+
+    if (wayland->zxdg_output_manager_v1)
+    {
+        output->zxdg_output_v1 =
+            zxdg_output_manager_v1_get_xdg_output(wayland->zxdg_output_manager_v1,
+                                                  output->wl_output);
+        zxdg_output_v1_add_listener(output->zxdg_output_v1, &zxdg_output_v1_listener,
+                                    output);
+    }
+
     wl_list_init(&output->mode_list);
-    output->id = wayland->next_output_id++;
-    /* TODO: We assume that the compositor sends the outputs in the same order
-     * to all thread wl_registry instances, and thus the same output id will
-     * refer to the same output in all threads. That's not guaranteed. Use
-     * xdg_output to check names instead. */
-    sprintfW(output->name, name_fmtW, output->id);
+
     output->wine_scale = 1.0;
 
-    wl_list_insert(&wayland->output_list, &output->link);
+    wl_list_insert(wayland->output_list.prev, &output->link);
+
+    /* Fallbacks if xdg_output is not supported or name not sent. */
+    output->name = malloc(20);
+    if (output->name)
+    {
+        snprintf(output->name, 20, "WaylandOutput%d",
+                 wayland->next_fallback_output_id++);
+        wayland_output_recompute_id(output);
+        wayland_recompute_output_ids_until_no_conflict(output->wayland);
+    }
+    else
+    {
+        ERR("Couldn't allocate space for output name\n");
+    }
+
 }
 
 static void wayland_output_destroy(struct wayland_output *output)
@@ -208,6 +333,9 @@ static void wayland_output_destroy(struct wayland_output *output)
     }
 
     wl_list_remove(&output->link);
+    free(output->name);
+    if (output->zxdg_output_v1)
+        zxdg_output_v1_destroy(output->zxdg_output_v1);
     wl_output_destroy(output->wl_output);
 
     heap_free(output);
@@ -865,6 +993,12 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
         wayland->zwp_relative_pointer_manager_v1 =
             wl_registry_bind(registry, id, &zwp_relative_pointer_manager_v1_interface, 1);
     }
+    else if (strcmp(interface, "zxdg_output_manager_v1") == 0)
+    {
+        wayland->zxdg_output_manager_v1 =
+            wl_registry_bind(registry, id, &zxdg_output_manager_v1_interface,
+                             version < 3 ? version : 3);
+    }
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
@@ -922,7 +1056,9 @@ BOOL wayland_init(struct wayland *wayland)
     }
     wl_proxy_set_queue((struct wl_proxy *) wayland->wl_registry, wayland->wl_event_queue);
 
-    wayland->next_output_id = 1;
+    /* Start with the default FNV-1a offset for 32-bits. */
+    wayland->output_id_fnv_offset = 0x811c9dc5;
+
     wl_list_init(&wayland->output_list);
     wl_list_init(&wayland->surface_list);
 

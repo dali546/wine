@@ -330,10 +330,9 @@ static BOOL wayland_init_monitor(HDEVINFO devinfo, struct wayland_output *output
     DWORD state_flags = DISPLAY_DEVICE_ATTACHED | DISPLAY_DEVICE_ACTIVE;
     RECT rc_mode;
 
-    /* Get the wayland output width and height */
-    if (!output->current_wine_mode)
-        goto done;
-    SetRect(&rc_mode, 0, 0, output->current_wine_mode->width, output->current_wine_mode->height);
+    SetRect(&rc_mode, output->x, output->y,
+            output->x + output->current_wine_mode->width,
+            output->y + output->current_wine_mode->height);
 
     if (!MultiByteToWideChar(CP_UTF8, 0, output->name, -1, output_name, ARRAY_SIZE(output_name)))
         output_name[0] = 0;
@@ -446,7 +445,7 @@ static void cleanup_devices(void)
     SetupDiDestroyDeviceInfoList(devinfo);
 }
 
-void wayland_init_display_devices(struct wayland *wayland, BOOL force)
+static void wayland_init_display_devices_internal(struct wayland *wayland, BOOL force_send_change)
 {
     HANDLE mutex;
     HDEVINFO gpu_devinfo = NULL, monitor_devinfo = NULL;
@@ -473,31 +472,29 @@ void wayland_init_display_devices(struct wayland *wayland, BOOL force)
         goto done;
     }
 
-    /* Avoid unnecessary reinit */
-    if (force || disposition == REG_CREATED_NEW_KEY)
+    prepare_devices(video_hkey);
+
+    gpu_devinfo = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_DISPLAY, NULL);
+    monitor_devinfo = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_MONITOR, NULL);
+
+    /* TODO: Support multiple GPUs. Note that wayland doesn't currently expose GPU info. */
+    if (!wayland_init_gpu(gpu_devinfo, &gpu, gpu_index, gpu_guidW, driverW, &gpu_luid))
+        goto done;
+
+    wl_list_for_each(output, &wayland->output_list, link)
     {
-        prepare_devices(video_hkey);
+        if (!output->current_wine_mode) continue;
 
-        gpu_devinfo = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_DISPLAY, NULL);
-        monitor_devinfo = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_MONITOR, NULL);
-
-        /* TODO: Support multiple GPUs. Note that wayland doesn't currently expose GPU info. */
-        if (!wayland_init_gpu(gpu_devinfo, &gpu, gpu_index, gpu_guidW, driverW, &gpu_luid))
+        /* TODO: Detect and support multiple monitors per adapter (i.e., mirroring). */
+        if (!wayland_init_adapter(video_hkey, output_index, gpu_index, output_index, 1,
+                                  &gpu, gpu_guidW, driverW))
             goto done;
 
-        wl_list_for_each(output, &wayland->output_list, link)
-        {
-            /* TODO: Detect and support multiple monitors per adapter (i.e., mirroring). */
-            if (!wayland_init_adapter(video_hkey, output_index, gpu_index, output_index, 1,
-                                      &gpu, gpu_guidW, driverW))
-                goto done;
+        if (!wayland_init_monitor(monitor_devinfo, output, output_index, output_index,
+                                  &gpu_luid, output_id++))
+            goto done;
 
-            if (!wayland_init_monitor(monitor_devinfo, output, output_index, output_index,
-                                      &gpu_luid, output_id++))
-                goto done;
-
-            output_index++;
-        }
+        output_index++;
     }
 
     /* Set wine name in wayland_output so that we can look it up. */
@@ -517,6 +514,27 @@ done:
     SetupDiDestroyDeviceInfoList(gpu_devinfo);
     RegCloseKey(video_hkey);
     release_display_devices_init_mutex(mutex);
+
+    if (force_send_change ||
+        GetCurrentThreadId() == GetWindowThreadProcessId(GetDesktopWindow(), NULL))
+    {
+        /* The first valid output is the primary. */
+        wl_list_for_each(output, &wayland->output_list, link)
+        {
+            if (!output->current_wine_mode) continue;
+
+            SendMessageTimeoutW(HWND_BROADCAST, WM_DISPLAYCHANGE, 32,
+                                MAKELPARAM(output->current_wine_mode->width,
+                                           output->current_wine_mode->height),
+                                SMTO_ABORTIFHUNG, 2000, NULL);
+            break;
+        }
+    }
+}
+
+void wayland_init_display_devices(struct wayland *wayland)
+{
+    wayland_init_display_devices_internal(wayland, FALSE);
 }
 
 static BOOL get_display_device_reg_key(const WCHAR *device_name, WCHAR *key, unsigned len)
@@ -655,7 +673,7 @@ done:
     return ret;
 }
 
-static struct wayland_output *wayland_get_output(struct wayland *wayland, LPCWSTR name)
+struct wayland_output *wayland_get_output_by_wine_name(struct wayland *wayland, LPCWSTR name)
 {
     struct wayland_output *output;
 
@@ -686,7 +704,7 @@ static BOOL wayland_get_native_devmode(struct wayland *wayland, LPCWSTR name, DE
 {
     struct wayland_output *output;
 
-    output = wayland_get_output(wayland, name);
+    output = wayland_get_output_by_wine_name(wayland, name);
     if (!output)
         return FALSE;
 
@@ -702,7 +720,7 @@ static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, D
 {
     struct wayland_output *output;
 
-    output = wayland_get_output(wayland, name);
+    output = wayland_get_output_by_wine_name(wayland, name);
     if (!output)
         return FALSE;
 
@@ -720,7 +738,7 @@ static BOOL wayland_get_devmode(struct wayland *wayland, LPCWSTR name, DWORD n, 
     struct wayland_output_mode *output_mode;
     DWORD i = 0;
 
-    output = wayland_get_output(wayland, name);
+    output = wayland_get_output_by_wine_name(wayland, name);
     if (!output)
         return FALSE;
 
@@ -821,7 +839,7 @@ LONG CDECL WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
           devmode->dmPelsWidth, devmode->dmPelsHeight,
           devmode->dmDisplayFrequency, wayland);
 
-    output = wayland_get_output(wayland, devname);
+    output = wayland_get_output_by_wine_name(wayland, devname);
     if (!output)
         return DISP_CHANGE_BADPARAM;
 
@@ -845,14 +863,10 @@ LONG CDECL WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
      * in order for the reinit to read the new current mode. */
     wayland_notify_wine_mode_change(output->id, output_mode->width, output_mode->height);
 
-    wayland_init_display_devices(wayland, TRUE);
+    wayland_init_display_devices_internal(wayland, TRUE);
 
     TRACE("set current wine mode %dx%d wine_scale %f\n",
           output_mode->width, output_mode->height, output->wine_scale);
-
-    SendMessageTimeoutW(HWND_BROADCAST, WM_DISPLAYCHANGE, 32,
-                        MAKELPARAM(output_mode->width, output_mode->height),
-                        SMTO_ABORTIFHUNG, 2000, NULL);
 
     return DISP_CHANGE_SUCCESSFUL;
 }

@@ -130,6 +130,50 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
     handle_xdg_toplevel_close,
 };
 
+static void handle_wl_surface_enter(void *data,
+                                    struct wl_surface *wl_surface,
+                                    struct wl_output *wl_output)
+{
+    struct wayland_surface *surface = data;
+    struct wayland_output *output =
+        wl_output ? wl_output_get_user_data(wl_output) : NULL;
+    struct wayland_output_ref *ref;
+
+    if (!output || output->wayland != surface->wayland) return;
+
+    TRACE("hwnd=%p output->name=%s output->id=0x%x\n",
+          surface->hwnd, output->name, output->id);
+
+    ref = heap_alloc_zero(sizeof(*ref));
+    if (!ref) { ERR("memory allocation failed"); return; }
+    ref->output = output;
+    wl_list_insert(&surface->output_ref_list, &ref->link);
+
+    if (surface->hwnd)
+        PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);
+}
+
+static void handle_wl_surface_leave(void *data,
+                                    struct wl_surface *wl_surface,
+                                    struct wl_output *wl_output)
+{
+    struct wayland_surface *surface = data;
+    struct wayland_output *output =
+        wl_output ? wl_output_get_user_data(wl_output) : NULL;
+
+    if (!output || output->wayland != surface->wayland) return;
+
+    TRACE("hwnd=%p output->name=%s output->id=0x%x\n",
+          surface->hwnd, output->name, output->id);
+
+    wayland_surface_leave_output(surface, output);
+}
+
+static const struct wl_surface_listener wl_surface_listener = {
+    handle_wl_surface_enter,
+    handle_wl_surface_leave,
+};
+
 static struct wayland_surface *wayland_surface_create_common(struct wayland *wayland)
 {
     struct wayland_surface *surface;
@@ -154,6 +198,7 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
                                        surface->wl_surface);
     }
 
+    wl_list_init(&surface->output_ref_list);
     wl_list_insert(&wayland->surface_list, &surface->link);
     wl_surface_set_user_data(surface->wl_surface, surface);
 
@@ -183,6 +228,9 @@ struct wayland_surface *wayland_surface_create_toplevel(struct wayland *wayland,
     surface = wayland_surface_create_common(wayland);
     if (!surface)
         goto err;
+
+    /* We want enter/leave events only for toplevels */
+    wl_surface_add_listener(surface->wl_surface, &wl_surface_listener, surface);
 
     surface->xdg_surface =
         xdg_wm_base_get_xdg_surface(wayland->xdg_wm_base, surface->wl_surface);
@@ -428,6 +476,7 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
 void wayland_surface_destroy(struct wayland_surface *surface)
 {
     struct wayland *wayland = surface->wayland;
+    struct wayland_output_ref *ref, *tmp;
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
     surface->crit.DebugInfo->Spare[0] = 0;
@@ -435,6 +484,12 @@ void wayland_surface_destroy(struct wayland_surface *surface)
 
     if (surface->glvk)
         wayland_surface_destroy(surface->glvk);
+
+    wl_list_for_each_safe(ref, tmp, &surface->output_ref_list, link)
+    {
+        wl_list_remove(&ref->link);
+        heap_free(ref);
+    }
 
     if (surface->zwp_locked_pointer_v1)
     {
@@ -732,16 +787,6 @@ void wayland_surface_coords_from_screen(struct wayland_surface *surface,
           *wayland_x, *wayland_y);
 }
 
-static struct wayland_output *wayland_first_output(struct wayland *wayland)
-{
-    struct wayland_output *output = NULL;
-
-    wl_list_for_each(output, &wayland->output_list, link)
-        break;
-
-    return output;
-}
-
 /**********************************************************************
  *          wayland_surface_coords_from_wine
  *
@@ -751,7 +796,7 @@ void wayland_surface_coords_from_wine(struct wayland_surface *surface,
                                       int wine_x, int wine_y,
                                       double *wayland_x, double *wayland_y)
 {
-    struct wayland_output *output = wayland_first_output(surface->wayland);
+    struct wayland_output *output = surface->main_output;
 
     if (output)
     {
@@ -794,7 +839,7 @@ void wayland_surface_coords_to_wine(struct wayland_surface *surface,
                                     double wayland_x, double wayland_y,
                                     int *wine_x, int *wine_y)
 {
-    struct wayland_output *output = wayland_first_output(surface->wayland);
+    struct wayland_output *output = surface->main_output;
 
     if (output)
     {
@@ -824,7 +869,7 @@ void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
                                               int wayland_width, int wayland_height,
                                               int *wine_width, int *wine_height)
 {
-    struct wayland_output *output = wayland_first_output(surface->wayland);
+    struct wayland_output *output = surface->main_output;
     double subarea_width, subarea_height;
 
     TRACE("hwnd=%p wayland_width=%d wayland_height=%d\n",
@@ -1091,4 +1136,56 @@ void wayland_surface_update_pointer_confinement(struct wayland_surface *surface)
 
     if (needs_confine || needs_lock)
         wl_surface_commit(surface->wl_surface);
+}
+
+/**********************************************************************
+ *          wayland_surface_set_main_output
+ *
+ * Sets the main output for a surface, i.e., the output whose scale will be
+ * used for surface scaling.
+ */
+void wayland_surface_set_main_output(struct wayland_surface *surface,
+                                     struct wayland_output *output)
+{
+    TRACE("surface=%p output->id,name=0x%x,%s => output->id=0x%x,%s\n",
+          surface,
+          surface->main_output ? surface->main_output->id : 0,
+          surface->main_output ? surface->main_output->name : NULL,
+          output ? output->id : -1, output ? output->name : NULL);
+
+    surface->main_output = output;
+    if (surface->glvk)
+        surface->glvk->main_output = output;
+}
+
+/**********************************************************************
+ *          wayland_surface_leave_output
+ *
+ * Removes an output from the set of outputs a surface is presented on.
+ *
+ * It is OK to call this function even if the surface is not presented
+ * on the specified output, in which case this function is a NOP.
+ */
+void wayland_surface_leave_output(struct wayland_surface *surface,
+                                  struct wayland_output *output)
+{
+    struct wayland_output_ref *ref, *tmp;
+    BOOL left_output = FALSE;
+
+    wl_list_for_each_safe(ref, tmp, &surface->output_ref_list, link)
+    {
+        if (ref->output == output)
+        {
+            wl_list_remove(&ref->link);
+            heap_free(ref);
+            left_output = TRUE;
+            break;
+        }
+    }
+
+    if (surface->main_output == output)
+        wayland_surface_set_main_output(surface, NULL);
+
+    if (left_output && surface->hwnd)
+        PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);
 }

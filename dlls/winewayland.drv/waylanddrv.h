@@ -47,6 +47,7 @@ enum wayland_window_message
     WM_WAYLAND_CONFIGURE = 0x80001000,
     WM_WAYLAND_MODE_CHANGE = 0x80001001,
     WM_WAYLAND_POINTER_CONFINEMENT_UPDATE = 0x80001002,
+    WM_WAYLAND_SURFACE_OUTPUT_CHANGE = 0x80001003,
 };
 
 enum wayland_configure_flags
@@ -147,6 +148,7 @@ struct wayland_output
     struct wl_list mode_list;
     struct wayland_output_mode *current_mode;
     struct wayland_output_mode *current_wine_mode;
+    int x, y;  /* position in global compositor space */
     /* Scale factor by which we need to multiply values in the wine coordinate
      * space to get values in the wayland coordinate space for this output. Used
      * when emulating a display mode change. */
@@ -154,6 +156,7 @@ struct wayland_output
     char *name;
     WCHAR wine_name[128];
     uint32_t id;
+    uint32_t global_id;
 };
 
 struct wayland_buffer_queue
@@ -172,6 +175,12 @@ struct wayland_surface_configure
     int height;
     enum wayland_configure_flags configure_flags;
     uint32_t serial;
+};
+
+struct wayland_output_ref
+{
+    struct wl_list link;
+    struct wayland_output *output;
 };
 
 struct wayland_surface
@@ -195,6 +204,8 @@ struct wayland_surface
     struct wayland_surface_configure current;
     BOOL mapped;
     LONG ref;
+    struct wl_list output_ref_list;
+    struct wayland_output *main_output;
 };
 
 struct wayland_shm_buffer
@@ -266,6 +277,8 @@ BOOL wayland_read_events(void);
  */
 void wayland_change_wine_mode(struct wayland *wayland, int output_id, int width, int height);
 void wayland_notify_wine_mode_change(int output_id, int width, int height);
+struct wayland_output *wayland_get_output_by_wine_name(struct wayland *wayland, LPCWSTR name);
+void wayland_output_destroy(struct wayland_output *output);
 
 /**********************************************************************
  *          Wayland buffer queue
@@ -326,6 +339,10 @@ void wayland_surface_ensure_mapped(struct wayland_surface *surface);
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
 void wayland_surface_update_pointer_confinement(struct wayland_surface *surface);
+void wayland_surface_set_main_output(struct wayland_surface *surface,
+                                     struct wayland_output *output);
+void wayland_surface_leave_output(struct wayland_surface *surface,
+                                  struct wayland_output *output);
 
 /**********************************************************************
  *          Wayland SHM buffer

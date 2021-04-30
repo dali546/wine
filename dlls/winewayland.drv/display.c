@@ -332,7 +332,10 @@ static BOOL wayland_init_monitor(HDEVINFO devinfo, struct wayland_output *output
     /* Get the wayland output width and height */
     if (!output->current_wine_mode)
         goto done;
-    SetRect(&rc_mode, 0, 0, output->current_wine_mode->width, output->current_wine_mode->height);
+
+    SetRect(&rc_mode, output->x, output->y,
+            output->x + output->current_wine_mode->width,
+            output->y + output->current_wine_mode->height);
 
     if (!MultiByteToWideChar(CP_UTF8, 0, output->name, -1, output_name, ARRAY_SIZE(output_name)))
         output_name[0] = 0;
@@ -654,7 +657,7 @@ done:
     return ret;
 }
 
-static struct wayland_output *wayland_get_output(struct wayland *wayland, LPCWSTR name)
+struct wayland_output *wayland_get_output_by_wine_name(struct wayland *wayland, LPCWSTR name)
 {
     struct wayland_output *output;
 
@@ -685,7 +688,7 @@ static BOOL wayland_get_native_devmode(struct wayland *wayland, LPCWSTR name, DE
 {
     struct wayland_output *output;
 
-    output = wayland_get_output(wayland, name);
+    output = wayland_get_output_by_wine_name(wayland, name);
     if (!output)
         return FALSE;
 
@@ -701,7 +704,7 @@ static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, D
 {
     struct wayland_output *output;
 
-    output = wayland_get_output(wayland, name);
+    output = wayland_get_output_by_wine_name(wayland, name);
     if (!output)
         return FALSE;
 
@@ -719,7 +722,7 @@ static BOOL wayland_get_devmode(struct wayland *wayland, LPCWSTR name, DWORD n, 
     struct wayland_output_mode *output_mode;
     DWORD i = 0;
 
-    output = wayland_get_output(wayland, name);
+    output = wayland_get_output_by_wine_name(wayland, name);
     if (!output)
         return FALSE;
 
@@ -820,7 +823,7 @@ LONG CDECL WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
           devmode->dmPelsWidth, devmode->dmPelsHeight,
           devmode->dmDisplayFrequency, wayland);
 
-    output = wayland_get_output(wayland, devname);
+    output = wayland_get_output_by_wine_name(wayland, devname);
     if (!output)
         return DISP_CHANGE_BADPARAM;
 

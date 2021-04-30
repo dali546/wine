@@ -98,14 +98,15 @@ static void wayland_output_add_mode(struct wayland_output *output,
                                     BOOL native)
 {
     struct wayland_output_mode *mode;
-    int32_t max_width = 0;
-    int32_t max_height = 0;
 
     /* Update mode if already in list */
     wl_list_for_each(mode, &output->mode_list, link)
     {
-        if (mode->width == width && mode->height == height && mode->refresh == refresh)
+        if (mode->width == width && mode->height == height &&
+            mode->refresh == refresh)
         {
+            /* Upgrade modes from virtual to native, never the reverse. */
+            if (native) mode->native = TRUE;
             if (current)
             {
                 output->current_mode = mode;
@@ -113,18 +114,6 @@ static void wayland_output_add_mode(struct wayland_output *output,
             }
             return;
         }
-
-        max_width = mode->width > max_width ? mode->width : max_width;
-        max_height = mode->height > max_height ? mode->height : max_height;
-    }
-
-    /* Skip if this is a simulated mode larger than the largest native mode */
-    if (!native && (width > max_width || height > max_height))
-    {
-        TRACE("Skipping mode %dx%d (max: %dx%d)\n",
-                width, height, max_width, max_height);
-
-        return;
     }
 
     mode = heap_alloc_zero(sizeof(*mode));
@@ -132,6 +121,7 @@ static void wayland_output_add_mode(struct wayland_output *output,
     mode->width = width;
     mode->height = height;
     mode->refresh = refresh;
+    mode->native = native;
 
     if (current)
     {
@@ -201,6 +191,64 @@ static void wayland_recompute_output_ids_until_no_conflict(struct wayland *wayla
     }
 }
 
+static void wayland_output_add_default_modes(struct wayland_output *output)
+{
+    int i;
+    struct wayland_output_mode *mode, *tmp;
+    int32_t max_width = 0;
+    int32_t max_height = 0;
+
+    /* Remove all existing virtual modes and get the maximum native
+     * mode size. */
+    wl_list_for_each_safe(mode, tmp, &output->mode_list, link)
+    {
+        if (!mode->native)
+        {
+            wl_list_remove(&mode->link);
+            heap_free(mode);
+        }
+        else
+        {
+            max_width = mode->width > max_width ? mode->width : max_width;
+            max_height = mode->height > max_height ? mode->height : max_height;
+        }
+    }
+
+    for (i = 0; i < ARRAY_SIZE(default_modes); i++)
+    {
+        int32_t width = default_modes[i].width;
+        int32_t height = default_modes[i].height;
+
+        /* Skip if this mode is larger than the largest native mode. */
+        if (width > max_width || height > max_height)
+        {
+            TRACE("Skipping mode %dx%d (max: %dx%d)\n",
+                    width, height, max_width, max_height);
+            continue;
+        }
+
+        wayland_output_add_mode(output, width, height, 60000, FALSE, FALSE);
+    }
+}
+
+static void wayland_output_done(struct wayland_output *output)
+{
+    struct wayland_output_mode *mode;
+
+    TRACE("output->name=%s\n", output->name);
+
+    wayland_output_add_default_modes(output);
+
+    wl_list_for_each(mode, &output->mode_list, link)
+    {
+        TRACE("mode %dx%d @ %d %s\n",
+              mode->width, mode->height, mode->refresh,
+              output->current_mode == mode ? "*" : "");
+    }
+
+    wayland_init_display_devices(output->wayland);
+}
+
 static void output_handle_geometry(void *data, struct wl_output *wl_output,
                                    int32_t x, int32_t y,
                                    int32_t physical_width, int32_t physical_height,
@@ -223,6 +271,12 @@ static void output_handle_mode(void *data, struct wl_output *wl_output,
 
 static void output_handle_done(void *data, struct wl_output *wl_output)
 {
+    struct wayland_output *output = data;
+    if (!output->zxdg_output_v1 ||
+        zxdg_output_v1_get_version(output->zxdg_output_v1) >= 3)
+    {
+        wayland_output_done(output);
+    }
 }
 
 static void output_handle_scale(void *data, struct wl_output *wl_output,
@@ -242,6 +296,10 @@ static void zxdg_output_v1_handle_logical_position(void *data,
                                                    int32_t x,
                                                    int32_t y)
 {
+    struct wayland_output *output = data;
+    TRACE("x=%d y=%d\n", x, y);
+    output->x = x;
+    output->y = y;
 }
 
 static void zxdg_output_v1_handle_logical_size(void *data,
@@ -254,6 +312,11 @@ static void zxdg_output_v1_handle_logical_size(void *data,
 static void zxdg_output_v1_handle_done(void *data,
                                        struct zxdg_output_v1 *zxdg_output_v1)
 {
+    if (zxdg_output_v1_get_version(zxdg_output_v1) < 3)
+    {
+        struct wayland_output *output = data;
+        wayland_output_done(output);
+    }
 }
 
 static void zxdg_output_v1_handle_name(void *data,
@@ -290,6 +353,7 @@ static void wayland_add_output(struct wayland *wayland, uint32_t id, uint32_t ve
     output->wayland = wayland;
     output->wl_output = wl_registry_bind(wayland->wl_registry, id,
                                          &wl_output_interface, 1);
+    output->global_id = id;
     wl_output_add_listener(output->wl_output, &output_listener, output);
 
     if (wayland->zxdg_output_manager_v1)
@@ -305,7 +369,7 @@ static void wayland_add_output(struct wayland *wayland, uint32_t id, uint32_t ve
 
     output->wine_scale = 1.0;
 
-    wl_list_insert(wayland->output_list.prev, &output->link);
+    wl_list_insert(output->wayland->output_list.prev, &output->link);
 
     /* Fallbacks if xdg_output is not supported or name not sent. */
     output->name = malloc(20);
@@ -323,7 +387,7 @@ static void wayland_add_output(struct wayland *wayland, uint32_t id, uint32_t ve
 
 }
 
-static void wayland_output_destroy(struct wayland_output *output)
+void wayland_output_destroy(struct wayland_output *output)
 {
     struct wayland_output_mode *mode,*tmp;
 
@@ -941,7 +1005,7 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
 {
     struct wayland *wayland = data;
 
-    TRACE("interface=%s version=%d\n", interface, version);
+    TRACE("interface=%s version=%d\n id=%u\n", interface, version, id);
 
     if (strcmp(interface, "wl_compositor") == 0)
     {
@@ -996,16 +1060,50 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     }
     else if (strcmp(interface, "zxdg_output_manager_v1") == 0)
     {
+        struct wayland_output *output;
+
         wayland->zxdg_output_manager_v1 =
             wl_registry_bind(registry, id, &zxdg_output_manager_v1_interface,
                              version < 3 ? version : 3);
+
+        /* Add zxdg_output_v1 to existing outputs. */
+        wl_list_for_each(output, &wayland->output_list, link)
+        {
+            output->zxdg_output_v1 =
+                zxdg_output_manager_v1_get_xdg_output(wayland->zxdg_output_manager_v1,
+                                                      output->wl_output);
+            zxdg_output_v1_add_listener(output->zxdg_output_v1, &zxdg_output_v1_listener,
+                                        output);
+        }
     }
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
-                                          uint32_t name)
+                                          uint32_t id)
 {
-    /* TODO */
+    struct wayland *wayland = data;
+    struct wayland_output *output, *tmp;
+
+    TRACE("id=%d\n", id);
+
+    wl_list_for_each_safe(output, tmp, &wayland->output_list, link)
+    {
+        if (output->global_id == id)
+        {
+            struct wayland_surface *surface;
+
+            TRACE("removing output->name=%s\n", output->name);
+
+            /* Remove the output from surfaces, as some compositor don't send
+             * a leave event if the output is disconnected. */
+            wl_list_for_each(surface, &wayland->surface_list, link)
+                wayland_surface_leave_output(surface, output);
+
+            wayland_output_destroy(output);
+            wayland_init_display_devices(wayland);
+            return;
+        }
+    }
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -1020,7 +1118,6 @@ static const struct wl_registry_listener registry_listener = {
  */
 BOOL wayland_init(struct wayland *wayland)
 {
-    struct wayland_output *output;
     int flags;
 
     TRACE("wayland=%p wl_display=%p\n", wayland, process_wl_display);
@@ -1094,30 +1191,6 @@ BOOL wayland_init(struct wayland *wayland)
     EnterCriticalSection(&thread_wayland_section);
     wl_list_insert(&thread_wayland_list, &wayland->thread_link);
     LeaveCriticalSection(&thread_wayland_section);
-
-    wl_list_for_each(output, &wayland->output_list, link)
-    {
-        struct wayland_output_mode *mode;
-        int i;
-
-        /* Add default modes */
-        for (i = 0; i < sizeof(default_modes) / sizeof(*default_modes); i++)
-        {
-            wayland_output_add_mode(output,
-                                    default_modes[i].width,
-                                    default_modes[i].height,
-                                    60000, FALSE, FALSE);
-        }
-
-        TRACE("Output with modes:\n");
-
-        wl_list_for_each(mode, &output->mode_list, link)
-        {
-            TRACE("  mode %dx%d @ %d %s\n",
-                  mode->width, mode->height, mode->refresh,
-                  output->current_mode == mode ? "*" : "");
-        }
-    }
 
     SetRect(&wayland->cursor_clip, INT_MIN, INT_MIN, INT_MAX, INT_MAX);
 

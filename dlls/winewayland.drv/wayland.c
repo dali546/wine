@@ -1144,7 +1144,6 @@ BOOL wayland_process_init(void)
 void wayland_deinit(struct wayland *wayland)
 {
     struct wayland_output *output, *output_tmp;
-    struct wayland_surface *surface, *surface_tmp;
 
     TRACE("%p\n", wayland);
 
@@ -1154,6 +1153,20 @@ void wayland_deinit(struct wayland *wayland)
     EnterCriticalSection(&thread_wayland_section);
     wl_list_remove(&wayland->thread_link);
     LeaveCriticalSection(&thread_wayland_section);
+
+    /* Destroying a surface may destroy other related surfaces too.
+     * wl_list_for_each_safe doesn't handle this scenario well, so manually
+     * keep destroying the first surface in the list, until we have cleared the
+     * whole list.  */
+    while (wayland->surface_list.next != &wayland->surface_list)
+    {
+        struct wayland_surface *surface =
+            wl_container_of(wayland->surface_list.next, surface, link);
+        wayland_surface_destroy(surface);
+    }
+
+    wl_list_for_each_safe(output, output_tmp, &wayland->output_list, link)
+        wayland_output_destroy(output);
 
     if (wayland->pointer.wl_pointer)
         wayland_pointer_deinit(&wayland->pointer);
@@ -1197,6 +1210,12 @@ void wayland_deinit(struct wayland *wayland)
         wayland->wl_compositor = NULL;
     }
 
+    if (wayland->wl_registry)
+    {
+        wl_registry_destroy(wayland->wl_registry);
+        wayland->wl_registry = NULL;
+    }
+
     if (wayland->wl_event_queue)
     {
         wl_event_queue_destroy(wayland->wl_event_queue);
@@ -1208,26 +1227,6 @@ void wayland_deinit(struct wayland *wayland)
         wl_event_queue_destroy(wayland->buffer_wl_event_queue);
         wayland->buffer_wl_event_queue = NULL;
     }
-
-    if (wayland->wl_registry)
-    {
-        wl_registry_destroy(wayland->wl_registry);
-        wayland->wl_registry = NULL;
-    }
-
-    wl_list_for_each_safe(output, output_tmp, &wayland->output_list, link)
-        wayland_output_destroy(output);
-
-    /* GL surfaces will be destroyed along with their parent surface, so
-     * remove them from the list to avoid direct destruction. */
-    wl_list_for_each_safe(surface, surface_tmp, &wayland->surface_list, link)
-    {
-        if (surface->wl_egl_window)
-            wl_list_remove(&surface->link);
-    }
-
-    wl_list_for_each_safe(surface, surface_tmp, &wayland->surface_list, link)
-        wayland_surface_destroy(surface);
 
     wl_display_flush(wayland->wl_display);
 

@@ -429,9 +429,6 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     surface->crit.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection(&surface->crit);
 
-    if (surface->glvk)
-        wayland_surface_destroy(surface->glvk);
-
     if (surface->zwp_locked_pointer_v1)
     {
         zwp_locked_pointer_v1_destroy(surface->zwp_locked_pointer_v1);

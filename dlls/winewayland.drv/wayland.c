@@ -1194,18 +1194,6 @@ void wayland_deinit(struct wayland *wayland)
         wayland->wl_compositor = NULL;
     }
 
-    if (wayland->wl_event_queue)
-    {
-        wl_event_queue_destroy(wayland->wl_event_queue);
-        wayland->wl_event_queue = NULL;
-    }
-
-    if (wayland->buffer_wl_event_queue)
-    {
-        wl_event_queue_destroy(wayland->buffer_wl_event_queue);
-        wayland->buffer_wl_event_queue = NULL;
-    }
-
     if (wayland->wl_registry)
     {
         wl_registry_destroy(wayland->wl_registry);
@@ -1225,6 +1213,18 @@ void wayland_deinit(struct wayland *wayland)
 
     wl_list_for_each_safe(surface, surface_tmp, &wayland->surface_list, link)
         wayland_surface_destroy(surface);
+
+    if (wayland->wl_event_queue)
+    {
+        wl_event_queue_destroy(wayland->wl_event_queue);
+        wayland->wl_event_queue = NULL;
+    }
+
+    if (wayland->buffer_wl_event_queue)
+    {
+        wl_event_queue_destroy(wayland->buffer_wl_event_queue);
+        wayland->buffer_wl_event_queue = NULL;
+    }
 
     wl_display_flush(wayland->wl_display);
 

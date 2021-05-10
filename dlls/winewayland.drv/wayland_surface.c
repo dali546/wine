@@ -357,6 +357,7 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
                                    HRGN surface_damage_region)
 {
     RGNDATA *surface_damage;
+    int wayland_width, wayland_height;
 
     /* Since multiple threads can commit a buffer to a wayland surface
      * (e.g., subwindows in different threads), we guard this function
@@ -369,13 +370,17 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
             surface->current.configure_flags,
             shm_buffer, shm_buffer->width, shm_buffer->height);
 
+    wayland_surface_coords_rounded_from_wine(surface,
+                                             shm_buffer->width, shm_buffer->height,
+                                             &wayland_width, &wayland_height);
+
     /* Maximized surfaces are very strict about the dimensions of buffers
      * they accept. To avoid wayland protocol errors, drop buffers not matching
      * the expected dimensions of maximized surfaces. This typically happens
      * transiently during resizing operations. */
     if (!wayland_surface_configure_is_compatible(&surface->current,
-                                                 shm_buffer->width,
-                                                 shm_buffer->height,
+                                                 wayland_width,
+                                                 wayland_height,
                                                  surface->current.configure_flags))
     {
         LeaveCriticalSection(&surface->crit);

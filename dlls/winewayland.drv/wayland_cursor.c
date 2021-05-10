@@ -148,7 +148,7 @@ failed:
 
 
 static struct wayland_cursor *
-wayland_cursor_from_win32(struct wayland *wayland, HCURSOR handle)
+wayland_cursor_from_win32(struct wayland_pointer *pointer, HCURSOR handle)
 {
     ICONINFOEXW info;
     struct wayland_cursor *wayland_cursor = NULL;
@@ -165,13 +165,13 @@ wayland_cursor_from_win32(struct wayland *wayland, HCURSOR handle)
     {
         HDC hdc = CreateCompatibleDC(0);
         wayland_cursor->shm_buffer =
-            create_color_cursor_buffer(wayland, hdc, info.hbmColor, info.hbmMask);
+            create_color_cursor_buffer(pointer->wayland, hdc, info.hbmColor, info.hbmMask);
         DeleteDC(hdc);
     }
     else
     {
         wayland_cursor->shm_buffer =
-            create_mono_cursor_buffer(wayland, info.hbmMask);
+            create_mono_cursor_buffer(pointer->wayland, info.hbmMask);
     }
 
     if (!wayland_cursor->shm_buffer) goto failed;
@@ -184,8 +184,18 @@ wayland_cursor_from_win32(struct wayland *wayland, HCURSOR handle)
         info.yHotspot = wayland_cursor->shm_buffer->height / 2;
     }
 
-    wayland_cursor->hotspot_x = info.xHotspot;
-    wayland_cursor->hotspot_y = info.yHotspot;
+    if (pointer->focused_surface)
+    {
+        wayland_surface_coords_rounded_from_wine(pointer->focused_surface,
+                                                 info.xHotspot, info.yHotspot,
+                                                 &wayland_cursor->hotspot_x,
+                                                 &wayland_cursor->hotspot_y);
+    }
+    else
+    {
+        wayland_cursor->hotspot_x = info.xHotspot;
+        wayland_cursor->hotspot_y = info.yHotspot;
+    }
 
     DeleteObject(info.hbmColor);
     DeleteObject(info.hbmMask);
@@ -218,7 +228,7 @@ void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
 
     if (pointer->hcursor != handle)
     {
-        wayland_cursor = wayland_cursor_from_win32(pointer->wayland, handle);
+        wayland_cursor = wayland_cursor_from_win32(pointer, handle);
         /* If we can't create a cursor from a valid handle, better to keep the
          * previous cursor than make it disappear completely. */
         if (!wayland_cursor && handle)

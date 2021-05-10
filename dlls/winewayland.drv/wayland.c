@@ -613,23 +613,24 @@ static void pointer_handle_motion_internal(void *data, struct wl_pointer *pointe
     HWND focused_hwnd = wayland->pointer.focused_surface ?
                         wayland->pointer.focused_surface->hwnd : 0;
     INPUT input = {0};
-    POINT screen_pos;
+    int screen_x, screen_y;
 
     if (!focused_hwnd)
         return;
 
-    screen_pos = wayland_surface_coords_to_screen(wayland->pointer.focused_surface,
-                                                  wl_fixed_to_int(sx),
-                                                  wl_fixed_to_int(sy));
+    wayland_surface_coords_to_screen(wayland->pointer.focused_surface,
+                                     wl_fixed_to_double(sx),
+                                     wl_fixed_to_double(sy),
+                                     &screen_x, &screen_y);
 
-    TRACE("surface=%p hwnd=%p wayland_xy=%d,%d screen_xy=%d,%d\n",
+    TRACE("surface=%p hwnd=%p wayland_xy=%.2f,%.2f screen_xy=%d,%d\n",
           wayland->pointer.focused_surface, focused_hwnd,
-          wl_fixed_to_int(sx), wl_fixed_to_int(sy),
-          screen_pos.x, screen_pos.y);
+          wl_fixed_to_double(sx), wl_fixed_to_double(sy),
+          screen_x, screen_y);
 
     input.type           = INPUT_MOUSE;
-    input.mi.dx          = screen_pos.x;
-    input.mi.dy          = screen_pos.y;
+    input.mi.dx          = screen_x;
+    input.mi.dy          = screen_y;
     input.mi.dwFlags     = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
 
     wayland->last_dispatch_mask |= QS_MOUSEMOVE;

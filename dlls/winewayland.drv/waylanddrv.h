@@ -313,14 +313,20 @@ BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *c
                                              int width, int height,
                                              enum wayland_configure_flags flags);
 struct wayland_surface *wayland_surface_for_hwnd(HWND hwnd);
-POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, int y);
-POINT wayland_surface_coords_from_screen(struct wayland_surface *surface,
-                                         int screen_x, int screen_y);
+void wayland_surface_coords_to_screen(struct wayland_surface *surface,
+                                      double wayland_x, double wayland_y,
+                                      int *screen_x, int *screen_y);
+void wayland_surface_coords_from_screen(struct wayland_surface *surface,
+                                        int screen_x, int screen_y,
+                                        double *wayland_x, double *wayland_y);
 void wayland_surface_coords_from_wine(struct wayland_surface *surface,
                                       int wine_x, int wine_y,
-                                      int *wayland_x, int *wayland_y);
+                                      double *wayland_x, double *wayland_y);
+void wayland_surface_coords_rounded_from_wine(struct wayland_surface *surface,
+                                              int wine_x, int wine_y,
+                                              int *wayland_x, int *wayland_y);
 void wayland_surface_coords_to_wine(struct wayland_surface *surface,
-                                    int wayland_x, int wayland_y,
+                                    double wayland_x, double wayland_y,
                                     int *wine_x, int *wine_y);
 void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
                                               int wayland_width, int wayland_height,

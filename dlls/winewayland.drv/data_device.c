@@ -761,9 +761,9 @@ static void data_device_enter(void *data, struct wl_data_device *wl_data_device,
     data_device->dnd_x = wl_fixed_to_int(x_w);
     data_device->dnd_y = wl_fixed_to_int(y_w);
 
-    point = wayland_surface_coords_to_screen(data_device->dnd_surface,
-                                             data_device->dnd_x,
-                                             data_device->dnd_y);
+    wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                     data_device->dnd_x, data_device->dnd_y,
+                                     &point.x, &point.y);
 
     TRACE("surface=%p hwnd=%p source_actions=%x action=%x\n",
           data_device->dnd_surface, data_device->dnd_surface->hwnd,
@@ -803,9 +803,9 @@ static void data_device_leave(void *data, struct wl_data_device *wl_data_device)
     if (!data_device->dnd_wl_data_offer)
         return;
 
-    point = wayland_surface_coords_to_screen(data_device->dnd_surface,
-                                             data_device->dnd_x,
-                                             data_device->dnd_y);
+    wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                     data_device->dnd_x, data_device->dnd_y,
+                                     &point.x, &point.y);
 
     drop_target = drop_target_from_window_point(data_device->dnd_surface->hwnd,
                                                 point);
@@ -838,9 +838,9 @@ static void data_device_motion(void *data, struct wl_data_device *wl_data_device
     data_device->dnd_x = wl_fixed_to_int(x_w);
     data_device->dnd_y = wl_fixed_to_int(y_w);
 
-    point = wayland_surface_coords_to_screen(data_device->dnd_surface,
-                                             data_device->dnd_x,
-                                             data_device->dnd_y);
+    wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                     data_device->dnd_x, data_device->dnd_y,
+                                     &point.x, &point.y);
 
     TRACE("surface=%p hwnd=%p source_actions=%x action=%x\n",
           data_device->dnd_surface, data_device->dnd_surface->hwnd,
@@ -879,9 +879,9 @@ static void data_device_drop(void *data, struct wl_data_device *wl_data_device)
 
     data_offer = wl_data_offer_get_user_data(data_device->dnd_wl_data_offer);
 
-    point = wayland_surface_coords_to_screen(data_device->dnd_surface,
-                                             data_device->dnd_x,
-                                             data_device->dnd_y);
+    wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                     data_device->dnd_x, data_device->dnd_y,
+                                     &point.x, &point.y);
 
     TRACE("surface=%p hwnd=%p source_actions=%x action=%x\n",
           data_device->dnd_surface, data_device->dnd_surface->hwnd,

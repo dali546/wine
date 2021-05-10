@@ -1113,11 +1113,17 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
 
     /* If we have a pending configure event, and it is compatible with the new state,
      * ack the event. */
-    if (data->wayland_surface->pending.serial &&
-        wayland_surface_configure_is_compatible(&data->wayland_surface->pending,
-                                                width, height, conf_flags))
+    if (data->wayland_surface->pending.serial)
     {
-        wayland_surface_ack_configure(data->wayland_surface);
+        int wayland_width, wayland_height;
+        wayland_surface_coords_rounded_from_wine(data->wayland_surface, width, height,
+                                                 &wayland_width, &wayland_height);
+        if (wayland_surface_configure_is_compatible(&data->wayland_surface->pending,
+                                                    wayland_width, wayland_height,
+                                                    conf_flags))
+        {
+            wayland_surface_ack_configure(data->wayland_surface);
+        }
     }
 
     wayland_surface_update_pointer_confinement(data->wayland_surface);
@@ -1567,16 +1573,22 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
      * the current size. */
     if (width == 0)
     {
+        int ignore;
         width = data->restore_rect.right - data->restore_rect.left;
         if (width == 0)
             width = data->window_rect.right - data->window_rect.left;
+        wayland_surface_coords_rounded_from_wine(wsurface, width, 0,
+                                                 &width, &ignore);
         wsurface->pending.width = width;
     }
     if (height == 0)
     {
+        int ignore;
         height = data->restore_rect.bottom - data->restore_rect.top;
         if (height == 0)
             height = data->window_rect.bottom - data->window_rect.top;
+        wayland_surface_coords_rounded_from_wine(wsurface, 0, height,
+                                                 &ignore, &height);
         wsurface->pending.height = height;
     }
 

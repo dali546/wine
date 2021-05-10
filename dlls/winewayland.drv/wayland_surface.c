@@ -264,9 +264,9 @@ void wayland_surface_reconfigure(struct wayland_surface *surface,
 {
     int x, y, width, height;
 
-    wayland_surface_coords_from_wine(surface, wine_x, wine_y, &x, &y);
-    wayland_surface_coords_from_wine(surface, wine_width, wine_height,
-                                     &width, &height);
+    wayland_surface_coords_rounded_from_wine(surface, wine_x, wine_y, &x, &y);
+    wayland_surface_coords_rounded_from_wine(surface, wine_width, wine_height,
+                                             &width, &height);
 
     TRACE("surface=%p hwnd=%p %d,%d+%dx%d %d,%d+%dx%d\n",
           surface, surface->hwnd,
@@ -620,9 +620,9 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
     if (!glvk)
         return;
 
-    wayland_surface_coords_from_wine(surface, wine_x, wine_y, &x, &y);
-    wayland_surface_coords_from_wine(surface, wine_width, wine_height,
-                                     &width, &height);
+    wayland_surface_coords_rounded_from_wine(surface, wine_x, wine_y, &x, &y);
+    wayland_surface_coords_rounded_from_wine(surface, wine_width, wine_height,
+                                             &width, &height);
 
     TRACE("surface=%p hwnd=%p %d,%d+%dx%d %d,%d+%dx%d\n",
           surface, surface->hwnd,
@@ -673,13 +673,15 @@ void wayland_surface_unmap(struct wayland_surface *surface)
  *
  * Converts the surface-local coordinates to Windows screen coordinates.
  */
-POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, int y)
+void wayland_surface_coords_to_screen(struct wayland_surface *surface,
+                                      double wayland_x, double wayland_y,
+                                      int *screen_x, int *screen_y)
 {
-    POINT point;
     RECT window_rect = {0};
     int wine_x, wine_y;
 
-    wayland_surface_coords_to_wine(surface, x, y, &wine_x, &wine_y);
+    wayland_surface_coords_to_wine(surface, wayland_x, wayland_y,
+                                   &wine_x, &wine_y);
 
     GetWindowRect(surface->hwnd, &window_rect);
 
@@ -687,14 +689,12 @@ POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, i
      * e.g., GL subsurfaces. */
     OffsetRect(&window_rect, surface->offset_x, surface->offset_y);
 
-    point.x = wine_x + window_rect.left;
-    point.y = wine_y + window_rect.top;
+    *screen_x = wine_x + window_rect.left;
+    *screen_y = wine_y + window_rect.top;
 
-    TRACE("hwnd=%p x=%d y=%d rect %s => %d,%d\n",
-          surface->hwnd, x, y, wine_dbgstr_rect(&window_rect),
-          point.x, point.y);
-
-    return point;
+    TRACE("hwnd=%p wayland=%.2f,%.2f rect=%s => screen=%d,%d\n",
+          surface->hwnd, wayland_x, wayland_y, wine_dbgstr_rect(&window_rect),
+          *screen_x, *screen_y);
 }
 
 
@@ -703,33 +703,28 @@ POINT wayland_surface_coords_to_screen(struct wayland_surface *surface, int x, i
  *
  * Converts the Windows screen coordinates to surface-local coordinates.
  */
-POINT wayland_surface_coords_from_screen(struct wayland_surface *surface,
-                                         int screen_x, int screen_y)
+void wayland_surface_coords_from_screen(struct wayland_surface *surface,
+                                        int screen_x, int screen_y,
+                                        double *wayland_x, double *wayland_y)
+
 {
-    POINT wine_point;
+    int wine_x, wine_y;
     RECT window_rect = {0};
-    POINT wayland_point;
-    int wayland_x, wayland_y;
 
     /* Screen to window */
     GetWindowRect(surface->hwnd, &window_rect);
     OffsetRect(&window_rect, surface->offset_x, surface->offset_y);
 
-    wine_point.x = screen_x - window_rect.left;
-    wine_point.y = screen_y - window_rect.top;
+    wine_x = screen_x - window_rect.left;
+    wine_y = screen_y - window_rect.top;
 
     /* Window to wayland surface */
-    wayland_surface_coords_from_wine(surface, wine_point.x, wine_point.y,
-                                     &wayland_x, &wayland_y);
+    wayland_surface_coords_from_wine(surface, wine_x, wine_y,
+                                     wayland_x, wayland_y);
 
-    wayland_point.x = wayland_x;
-    wayland_point.y = wayland_y;
-
-    TRACE("hwnd=%p screen_x=%d screen_y=%d rect %s => %d,%d\n",
+    TRACE("hwnd=%p screen=%d,%d rect=%s => wayland=%.2f,%.2f\n",
           surface->hwnd, screen_x, screen_y, wine_dbgstr_rect(&window_rect),
-          wayland_point.x, wayland_point.y);
-
-    return wayland_point;
+          *wayland_x, *wayland_y);
 }
 
 static struct wayland_output *wayland_first_output(struct wayland *wayland)
@@ -749,23 +744,40 @@ static struct wayland_output *wayland_first_output(struct wayland *wayland)
  */
 void wayland_surface_coords_from_wine(struct wayland_surface *surface,
                                       int wine_x, int wine_y,
-                                      int *wayland_x, int *wayland_y)
+                                      double *wayland_x, double *wayland_y)
 {
     struct wayland_output *output = wayland_first_output(surface->wayland);
 
-    TRACE("hwnd=%p scale=%f wine_x=%d wine_y=%d\n",
-          surface->hwnd, output ? output->wine_scale : -1.0, wine_x, wine_y);
-
     if (output)
     {
-        *wayland_x = round(wine_x * output->wine_scale);
-        *wayland_y = round(wine_y * output->wine_scale);
+        *wayland_x = wine_x * output->wine_scale;
+        *wayland_y = wine_y * output->wine_scale;
     }
     else
     {
         *wayland_x = wine_x;
         *wayland_y = wine_y;
     }
+
+    TRACE("hwnd=%p scale=%f wine=%d,%d => wayland=%.2f,%.2f\n",
+          surface->hwnd, output ? output->wine_scale : -1.0, wine_x, wine_y,
+          *wayland_x, *wayland_y);
+}
+
+/**********************************************************************
+ *          wayland_surface_coords_rounded_from_wine
+ *
+ * Converts the window-local wine coordinates to wayland surface-local coordinates
+ * rounding to the closest integer value.
+ */
+void wayland_surface_coords_rounded_from_wine(struct wayland_surface *surface,
+                                              int wine_x, int wine_y,
+                                              int *wayland_x, int *wayland_y)
+{
+    double w_x, w_y;
+    wayland_surface_coords_from_wine(surface, wine_x, wine_y, &w_x, &w_y);
+    *wayland_x = round(w_x);
+    *wayland_y = round(w_y);
 }
 
 /**********************************************************************
@@ -774,14 +786,10 @@ void wayland_surface_coords_from_wine(struct wayland_surface *surface,
  * Converts the surface-local coordinates to wine windows-local coordinates.
  */
 void wayland_surface_coords_to_wine(struct wayland_surface *surface,
-                                    int wayland_x, int wayland_y,
+                                    double wayland_x, double wayland_y,
                                     int *wine_x, int *wine_y)
 {
     struct wayland_output *output = wayland_first_output(surface->wayland);
-
-    TRACE("hwnd=%p scale=%f wayland_x=%d wayland_y=%d\n",
-          surface->hwnd, output ? output->wine_scale : -1.0,
-          wayland_x, wayland_y);
 
     if (output)
     {
@@ -793,6 +801,11 @@ void wayland_surface_coords_to_wine(struct wayland_surface *surface,
         *wine_x = wayland_x;
         *wine_y = wayland_y;
     }
+
+    TRACE("hwnd=%p scale=%f wayland=%.2f,%.2f => wine=%d,%d\n",
+          surface->hwnd, output ? output->wine_scale : -1.0,
+          wayland_x, wayland_y, *wine_x, *wine_y);
+
 }
 
 /**********************************************************************
@@ -807,7 +820,7 @@ void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
                                               int *wine_width, int *wine_height)
 {
     struct wayland_output *output = wayland_first_output(surface->wayland);
-    int subarea_width, subarea_height;
+    double subarea_width, subarea_height;
 
     TRACE("hwnd=%p wayland_width=%d wayland_height=%d\n",
           surface->hwnd, wayland_width, wayland_height);
@@ -822,13 +835,13 @@ void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
                              output->current_wine_mode->height;
         if (aspect > wine_aspect)
         {
-            subarea_width = round(wayland_height * wine_aspect);
+            subarea_width = wayland_height * wine_aspect;
             subarea_height = wayland_height;
         }
         else
         {
             subarea_width = wayland_width;
-            subarea_height = round(wayland_width / wine_aspect);
+            subarea_height = wayland_width / wine_aspect;
         }
     }
     else
@@ -991,15 +1004,15 @@ void wayland_surface_update_pointer_confinement(struct wayland_surface *surface)
 
         if (GetCursorPos(&cursor_pos) && PtInRect(&client_rect, cursor_pos))
         {
-            POINT wayland_pos =
-                wayland_surface_coords_from_screen(surface,
-                                                   cursor_pos.x,
-                                                   cursor_pos.y);
+            double wayland_x, wayland_y;
+            wayland_surface_coords_from_screen(surface,
+                                               cursor_pos.x, cursor_pos.y,
+                                               &wayland_x, &wayland_y);
 
             zwp_locked_pointer_v1_set_cursor_position_hint(
                     surface->zwp_locked_pointer_v1,
-                    wl_fixed_from_int(wayland_pos.x),
-                    wl_fixed_from_int(wayland_pos.y));
+                    wl_fixed_from_double(wayland_x),
+                    wl_fixed_from_double(wayland_y));
 
             wl_surface_commit(surface->wl_surface);
         }
@@ -1017,13 +1030,20 @@ void wayland_surface_update_pointer_confinement(struct wayland_surface *surface)
     /* Set up (or update) pointer confinement or lock. */
     if (needs_confine)
     {
-        POINT tl = wayland_surface_coords_from_screen(surface, client_clip_rect.left,
-                                                      client_clip_rect.top);
-        POINT br = wayland_surface_coords_from_screen(surface, client_clip_rect.right,
-                                                      client_clip_rect.bottom);
+        double top, left, bottom, right;
+
+        wayland_surface_coords_from_screen(surface,
+                                           client_clip_rect.left,
+                                           client_clip_rect.top,
+                                           &left, &top);
+        wayland_surface_coords_from_screen(surface,
+                                           client_clip_rect.right,
+                                           client_clip_rect.bottom,
+                                           &right, &bottom);
 
         region = wl_compositor_create_region(wayland->wl_compositor);
-        wl_region_add(region, tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+        wl_region_add(region, round(left), round(top),
+                      round(right - left), round(bottom - top));
 
         if (!surface->zwp_confined_pointer_v1)
         {

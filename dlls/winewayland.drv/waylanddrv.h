@@ -157,7 +157,10 @@ struct wayland_output
     struct wl_list mode_list;
     struct wayland_output_mode *current_mode;
     struct wayland_output_mode *current_wine_mode;
-    int x, y;  /* position in global compositor space */
+    int logical_x, logical_y;  /* logical position */
+    int logical_w, logical_h;  /* logical size */
+    int x, y;  /* position in native pixel coordinate space */
+    int scale; /* wayland output scale factor for hidpi */
     /* Scale factor by which we need to multiply values in the wine coordinate
      * space to get values in the wayland coordinate space for this output. Used
      * when emulating a display mode change. */
@@ -353,6 +356,7 @@ void wayland_surface_set_main_output(struct wayland_surface *surface,
                                      struct wayland_output *output);
 void wayland_surface_leave_output(struct wayland_surface *surface,
                                   struct wayland_output *output);
+int wayland_surface_get_buffer_scale(struct wayland_surface *surface);
 
 /**********************************************************************
  *          Wayland SHM buffer

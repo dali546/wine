@@ -1681,8 +1681,8 @@ static void handle_wm_wayland_surface_output_change(HWND hwnd)
 {
     struct wayland_win_data *data;
     struct wayland_surface *wsurface;
-    struct wayland_output_ref *ref;
-    struct wayland_output *exclusive = NULL;
+    int x, y, w, h;
+    UINT swp_flags;
 
     TRACE("hwnd=%p\n", hwnd);
     if (!(data = get_win_data(hwnd))) return;
@@ -1702,20 +1702,47 @@ static void handle_wm_wayland_surface_output_change(HWND hwnd)
         return;
     }
 
-    wl_list_for_each(ref, &wsurface->output_ref_list, link)
+    swp_flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER |
+                SWP_FRAMECHANGED | SWP_NOSENDCHANGING;
+
+    if (wsurface->main_output)
     {
-        if (exclusive) { exclusive = NULL; break; }
-        exclusive = ref->output;
+        x = wsurface->main_output->x;
+        y = wsurface->main_output->y;
+        TRACE("moving window to %d,%d\n", x, y);
+    }
+    else
+    {
+        x = y = 0;
+        swp_flags |= SWP_NOMOVE;
     }
 
-    /* If the surface has moved to a different output update its origin */
-    if (exclusive && wsurface->main_output != exclusive)
+    /* If we are fullscreen or maximized we need to provide a particular buffer
+     * size to the wayland compositor on the new output (hence swp_flags
+     * includes SWP_NOSENDCHANGING). */
+    if (wsurface->current.serial &&
+        (wsurface->current.configure_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
     {
-        wayland_surface_set_main_output(wsurface, exclusive);
-        SetWindowPos(hwnd, 0, exclusive->x, exclusive->y, 0, 0,
-                     SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER |
-                     SWP_NOSIZE | SWP_NOREDRAW);
+        wayland_surface_coords_to_wine(wsurface, wsurface->current.width,
+                                       wsurface->current.height,
+                                       &w, &h);
+        TRACE("resizing window to maximized %dx%d\n", w, h);
     }
+    else if (wsurface->current.serial &&
+             (wsurface->current.configure_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
+    {
+        wayland_surface_find_wine_fullscreen_fit(wsurface, wsurface->current.width,
+                                                 wsurface->current.height,
+                                                 &w, &h);
+        TRACE("resizing window to fullscreen %dx%d\n", w, h);
+    }
+    else
+    {
+        w = h = 0;
+        swp_flags |= SWP_NOSIZE;
+    }
+
+    SetWindowPos(hwnd, 0, x, y, w, h, swp_flags);
 }
 
 static void CALLBACK post_configure(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD elapsed)

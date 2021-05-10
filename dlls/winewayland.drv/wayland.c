@@ -231,19 +231,100 @@ static void wayland_output_add_default_modes(struct wayland_output *output)
     }
 }
 
+static struct wayland_output **
+wayland_output_array_append(struct wayland_output **array, int size,
+                            struct wayland_output *output)
+{
+    struct wayland_output **realloc_array;
+
+    realloc_array = heap_realloc(array, sizeof(*array) * size);
+    if (!realloc_array)
+    {
+        heap_free(array);
+        return NULL;
+    }
+
+    realloc_array[size - 1] = output;
+
+    return realloc_array;
+}
+
+static void wayland_output_update_physical_coords(struct wayland_output *output)
+{
+    struct wayland_output *o;
+    struct wayland_output **changed = NULL;
+    int changed_size = 0;
+    int changed_i = 0;
+
+    /* Set some default values. */
+    output->x = output->logical_x;
+    output->y = output->logical_y;
+
+    /* Update output->x,y based on other outputs that are to
+     * to the left or above. */
+    wl_list_for_each(o, &output->wayland->output_list, link)
+    {
+        if (o == output || o->logical_w == 0 || o->logical_h == 0) continue;
+        if (output->logical_x == o->logical_x + o->logical_w)
+            output->x = o->x + o->current_mode->width;
+        if (output->logical_y == o->logical_y + o->logical_h)
+            output->y = o->y + o->current_mode->height;
+    }
+
+    changed = wayland_output_array_append(changed, ++changed_size, output);
+    if (!changed) { ERR("memory allocation failed"); return; }
+
+    /* Update the x,y of other outputs that are to the right or below and are
+     * directly or indirectly affected by the change output->x,y.
+     */
+    for (changed_i = 0; changed_i < changed_size; changed_i++)
+    {
+        struct wayland_output *cur = changed[changed_i];
+        wl_list_for_each(o, &output->wayland->output_list, link)
+        {
+            if (o == cur || o->logical_w == 0 || o->logical_h == 0) continue;
+            if (o->logical_x == cur->logical_x + cur->logical_w)
+            {
+                o->x = cur->x + cur->current_mode->width;
+                changed = wayland_output_array_append(changed, ++changed_size, o);
+                if (!changed) { ERR("memory allocation failed"); return; }
+            }
+            if (o->logical_y == cur->logical_y + cur->logical_h)
+            {
+                o->y = cur->y + cur->current_mode->height;
+                changed = wayland_output_array_append(changed, ++changed_size, o);
+                if (!changed) { ERR("memory allocation failed"); return; }
+            }
+        }
+    }
+
+    heap_free(changed);
+}
+
 static void wayland_output_done(struct wayland_output *output)
 {
     struct wayland_output_mode *mode;
+    struct wayland_output *o;
 
     TRACE("output->name=%s\n", output->name);
 
     wayland_output_add_default_modes(output);
+    wayland_output_update_physical_coords(output);
 
     wl_list_for_each(mode, &output->mode_list, link)
     {
         TRACE("mode %dx%d @ %d %s\n",
               mode->width, mode->height, mode->refresh,
               output->current_mode == mode ? "*" : "");
+    }
+
+    wl_list_for_each(o, &output->wayland->output_list, link)
+    {
+        if (!o->current_mode) continue;
+        TRACE("output->name=%s logical=%d,%d+%dx%d physical=%d,%d+%dx%d\n",
+              o->name,
+              o->logical_x, output->logical_y, o->logical_w, o->logical_h,
+              o->x, o->y, o->current_mode->width, o->current_mode->height);
     }
 
     wayland_init_display_devices(output->wayland);
@@ -282,6 +363,9 @@ static void output_handle_done(void *data, struct wl_output *wl_output)
 static void output_handle_scale(void *data, struct wl_output *wl_output,
                                 int32_t scale)
 {
+    struct wayland_output *output = data;
+    TRACE("output=%p scale=%d\n", output, scale);
+    output->scale = scale;
 }
 
 static const struct wl_output_listener output_listener = {
@@ -297,9 +381,9 @@ static void zxdg_output_v1_handle_logical_position(void *data,
                                                    int32_t y)
 {
     struct wayland_output *output = data;
-    TRACE("x=%d y=%d\n", x, y);
-    output->x = x;
-    output->y = y;
+    TRACE("logical_x=%d logical_y=%d\n", x, y);
+    output->logical_x = x;
+    output->logical_y = y;
 }
 
 static void zxdg_output_v1_handle_logical_size(void *data,
@@ -307,6 +391,10 @@ static void zxdg_output_v1_handle_logical_size(void *data,
                                                int32_t width,
                                                int32_t height)
 {
+    struct wayland_output *output = data;
+    TRACE("logical_w=%d logical_h=%d\n", width, height);
+    output->logical_w = width;
+    output->logical_h = height;
 }
 
 static void zxdg_output_v1_handle_done(void *data,
@@ -352,7 +440,8 @@ static void wayland_add_output(struct wayland *wayland, uint32_t id, uint32_t ve
 
     output->wayland = wayland;
     output->wl_output = wl_registry_bind(wayland->wl_registry, id,
-                                         &wl_output_interface, 1);
+                                         &wl_output_interface,
+                                         version < 2 ? version : 2);
     output->global_id = id;
     wl_output_add_listener(output->wl_output, &output_listener, output);
 
@@ -367,6 +456,7 @@ static void wayland_add_output(struct wayland *wayland, uint32_t id, uint32_t ve
 
     wl_list_init(&output->mode_list);
 
+    output->scale = 1;
     output->wine_scale = 1.0;
 
     wl_list_insert(output->wayland->output_list.prev, &output->link);

@@ -130,6 +130,21 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
     handle_xdg_toplevel_close,
 };
 
+static struct wayland_output *
+wayland_surface_get_exclusive_output(struct wayland_surface *surface)
+{
+    struct wayland_output *exclusive = NULL;
+    struct wayland_output_ref *ref;
+
+    wl_list_for_each(ref, &surface->output_ref_list, link)
+    {
+        if (exclusive) { exclusive = NULL; break; }
+        exclusive = ref->output;
+    }
+
+    return exclusive;
+}
+
 static void handle_wl_surface_enter(void *data,
                                     struct wl_surface *wl_surface,
                                     struct wl_output *wl_output)
@@ -138,6 +153,7 @@ static void handle_wl_surface_enter(void *data,
     struct wayland_output *output =
         wl_output ? wl_output_get_user_data(wl_output) : NULL;
     struct wayland_output_ref *ref;
+    struct wayland_output *exclusive;
 
     if (!output || output->wayland != surface->wayland) return;
 
@@ -149,8 +165,10 @@ static void handle_wl_surface_enter(void *data,
     ref->output = output;
     wl_list_insert(&surface->output_ref_list, &ref->link);
 
-    if (surface->hwnd)
-        PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);
+    exclusive = wayland_surface_get_exclusive_output(surface);
+    if (exclusive)
+        wayland_surface_set_main_output(surface, exclusive);
+
 }
 
 static void handle_wl_surface_leave(void *data,
@@ -806,19 +824,20 @@ void wayland_surface_coords_from_wine(struct wayland_surface *surface,
                                       double *wayland_x, double *wayland_y)
 {
     struct wayland_output *output = surface->main_output;
+    int scale = wayland_surface_get_buffer_scale(surface);
 
     if (output)
     {
-        *wayland_x = wine_x * output->wine_scale;
-        *wayland_y = wine_y * output->wine_scale;
+        *wayland_x = wine_x * output->wine_scale / scale;
+        *wayland_y = wine_y * output->wine_scale / scale;
     }
     else
     {
-        *wayland_x = wine_x;
-        *wayland_y = wine_y;
+        *wayland_x = wine_x / scale;
+        *wayland_y = wine_y / scale;
     }
 
-    TRACE("hwnd=%p scale=%f wine=%d,%d => wayland=%.2f,%.2f\n",
+    TRACE("hwnd=%p wine_scale=%f wine=%d,%d => wayland=%.2f,%.2f\n",
           surface->hwnd, output ? output->wine_scale : -1.0, wine_x, wine_y,
           *wayland_x, *wayland_y);
 }
@@ -849,19 +868,20 @@ void wayland_surface_coords_to_wine(struct wayland_surface *surface,
                                     int *wine_x, int *wine_y)
 {
     struct wayland_output *output = surface->main_output;
+    int scale = wayland_surface_get_buffer_scale(surface);
 
     if (output)
     {
-        *wine_x = round(wayland_x / output->wine_scale);
-        *wine_y = round(wayland_y / output->wine_scale);
+        *wine_x = round(wayland_x * scale / output->wine_scale);
+        *wine_y = round(wayland_y * scale / output->wine_scale);
     }
     else
     {
-        *wine_x = wayland_x;
-        *wine_y = wayland_y;
+        *wine_x = wayland_x * scale;
+        *wine_y = wayland_y * scale;
     }
 
-    TRACE("hwnd=%p scale=%f wayland=%.2f,%.2f => wine=%d,%d\n",
+    TRACE("hwnd=%p wine_scale=%f wayland=%.2f,%.2f => wine=%d,%d\n",
           surface->hwnd, output ? output->wine_scale : -1.0,
           wayland_x, wayland_y, *wine_x, *wine_y);
 
@@ -957,8 +977,11 @@ void wayland_surface_ensure_mapped(struct wayland_surface *surface)
         int height = surface->current.height;
         struct wayland_shm_buffer *dummy_shm_buffer;
 
-        if (width == 0) width = 1;
-        if (height == 0) height = 1;
+        /* Use a large enough width/height, so even when the target
+         * surface is scaled by the compositor, this will not end up
+         * being 0x0. */
+        if (width == 0) width = 32;
+        if (height == 0) height = 32;
 
         dummy_shm_buffer = wayland_shm_buffer_create(surface->wayland,
                                                      width, height,
@@ -1146,6 +1169,37 @@ void wayland_surface_update_pointer_confinement(struct wayland_surface *surface)
         wl_surface_commit(surface->wl_surface);
 }
 
+static inline struct wayland_surface *
+wayland_surface_get_toplevel(struct wayland_surface *surface)
+{
+    while (surface->parent) surface = surface->parent;
+    return surface;
+}
+
+static void wayland_surface_tree_update_buffer_scale(struct wayland_surface *surface,
+                                                     int new_scale)
+{
+    struct wayland_surface *s;
+
+    wl_list_for_each(s, &surface->wayland->surface_list, link)
+    {
+        struct wayland_surface *toplevel = wayland_surface_get_toplevel(s);
+        if (toplevel == surface)
+            wl_surface_set_buffer_scale(s->wl_surface, new_scale);
+    }
+}
+
+static BOOL wayland_surface_presented_in_output(struct wayland_surface *surface,
+                                                struct wayland_output *output)
+{
+    struct wayland_output_ref *ref;
+
+    wl_list_for_each(ref, &surface->output_ref_list, link)
+        if (ref->output == output) return TRUE;
+
+    return FALSE;
+}
+
 /**********************************************************************
  *          wayland_surface_set_main_output
  *
@@ -1155,15 +1209,34 @@ void wayland_surface_update_pointer_confinement(struct wayland_surface *surface)
 void wayland_surface_set_main_output(struct wayland_surface *surface,
                                      struct wayland_output *output)
 {
+    int old_scale = wayland_surface_get_buffer_scale(surface);
+    int new_scale;
+
+    /* Don't update non-toplevels. */
+    if (surface->parent) return;
+    if (!wayland_surface_presented_in_output(surface, output)) return;
+
     TRACE("surface=%p output->id,name=0x%x,%s => output->id=0x%x,%s\n",
           surface,
           surface->main_output ? surface->main_output->id : 0,
           surface->main_output ? surface->main_output->name : NULL,
           output ? output->id : -1, output ? output->name : NULL);
 
-    surface->main_output = output;
-    if (surface->glvk)
-        surface->glvk->main_output = output;
+    if (surface->main_output != output)
+    {
+        surface->main_output = output;
+        if (surface->glvk)
+            surface->glvk->main_output = output;
+
+        new_scale = wayland_surface_get_buffer_scale(surface);
+
+        /* Changing outputs may have changed surface scale. */
+        if (old_scale != new_scale)
+            wayland_surface_tree_update_buffer_scale(surface, new_scale);
+
+        if (surface->hwnd)
+            PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);
+    }
 }
 
 /**********************************************************************
@@ -1178,7 +1251,6 @@ void wayland_surface_leave_output(struct wayland_surface *surface,
                                   struct wayland_output *output)
 {
     struct wayland_output_ref *ref, *tmp;
-    BOOL left_output = FALSE;
 
     wl_list_for_each_safe(ref, tmp, &surface->output_ref_list, link)
     {
@@ -1186,14 +1258,32 @@ void wayland_surface_leave_output(struct wayland_surface *surface,
         {
             wl_list_remove(&ref->link);
             heap_free(ref);
-            left_output = TRUE;
             break;
         }
     }
 
     if (surface->main_output == output)
-        wayland_surface_set_main_output(surface, NULL);
+    {
+        struct wayland_output *exclusive =
+            wayland_surface_get_exclusive_output(surface);
 
-    if (left_output && surface->hwnd)
-        PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);
+        wayland_surface_set_main_output(surface, exclusive);
+    }
+}
+
+/**********************************************************************
+ *          wayland_surface_get_buffer_scale
+ *
+ */
+int wayland_surface_get_buffer_scale(struct wayland_surface *surface)
+{
+    /* Use the toplevel surface to get the scale */
+    struct wayland_surface *toplevel = wayland_surface_get_toplevel(surface);
+    int scale = 1;
+
+    if (toplevel->main_output)
+        scale = toplevel->main_output->scale;
+
+    TRACE("hwnd=%p (toplevel=%p) => scale=%d\n", surface->hwnd, toplevel->hwnd, scale);
+    return scale;
 }

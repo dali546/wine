@@ -36,6 +36,9 @@ DWORD thread_data_tls_index = TLS_OUT_OF_INDEXES;
 static DWORD WINAPI wayland_read_thread(void *arg)
 {
     while (wayland_read_events()) continue;
+    /* This thread terminates only if an unrecoverable error occured during
+     * event reading. */
+    exit(1);
     return 0;
 }
 

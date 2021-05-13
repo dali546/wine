@@ -1321,6 +1321,7 @@ static void wayland_notify_threads(void)
 BOOL wayland_read_events(void)
 {
     struct pollfd pfd = {0};
+    int ret;
 
     pfd.fd = wl_display_get_fd(process_wl_display);
     pfd.events = POLLIN;
@@ -1332,21 +1333,43 @@ BOOL wayland_read_events(void)
      * otherwise unused (all struct wayland instances dispatch to
      * their own queues). */
     while (wl_display_prepare_read(process_wl_display) != 0)
-        wl_display_dispatch_pending(process_wl_display);
+    {
+        if (wl_display_dispatch_pending(process_wl_display) == -1)
+        {
+            TRACE("... failed wl_display_dispatch_pending errno=%d\n", errno);
+            return FALSE;
+        }
+    }
 
     wl_display_flush(process_wl_display);
 
-    if (poll(&pfd, 1, -1) > 0)
+    while ((ret = poll(&pfd, 1, -1)) == -1 && errno == EINTR) continue;
+
+    if (ret == -1 || !(pfd.revents & POLLIN))
     {
-        wl_display_read_events(process_wl_display);
-        wl_display_dispatch_pending(process_wl_display);
-        wayland_notify_threads();
-        TRACE("waiting for events... done\n");
-        return TRUE;
+        TRACE("... failed poll errno=%d revents=0x%x\n",
+              ret == -1 ? errno : 0, pfd.revents);
+        wl_display_cancel_read(process_wl_display);
+        return FALSE;
     }
 
-    wl_display_cancel_read(process_wl_display);
-    return FALSE;
+    if (wl_display_read_events(process_wl_display) == -1)
+    {
+        TRACE("... failed wl_display_read_events errno=%d\n", errno);
+        return FALSE;
+    }
+
+    if (wl_display_dispatch_pending(process_wl_display) == -1)
+    {
+        TRACE("... failed wl_display_dispatch_pending errno=%d\n", errno);
+        return FALSE;
+    }
+
+    wayland_notify_threads();
+
+    TRACE("... done\n");
+
+    return TRUE;
 }
 
 /**********************************************************************

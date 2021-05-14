@@ -17,6 +17,7 @@ C_SRCS = \
 	keyboard.c \
 	keyboard_layout.c \
 	opengl.c \
+	options.c \
 	pointer-constraints-unstable-v1-protocol.c \
 	relative-pointer-unstable-v1-protocol.c \
 	viewporter-protocol.c \

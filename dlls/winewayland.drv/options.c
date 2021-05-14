@@ -55,6 +55,7 @@ static inline DWORD get_config_key(HKEY defkey, HKEY appkey, const char *name,
 void wayland_read_options_from_registry(struct wayland *wayland)
 {
     static const WCHAR waylanddriverW[] = {'\\','W','a','y','l','a','n','d',' ','D','r','i','v','e','r',0};
+    char buffer[64];
     WCHAR bufferW[MAX_PATH + 16];
     HKEY hkey, appkey = 0;
     DWORD len;
@@ -79,6 +80,14 @@ void wayland_read_options_from_registry(struct wayland *wayland)
             if (RegOpenKeyW(tmpkey, appname, &appkey)) appkey = 0;
             RegCloseKey(tmpkey);
         }
+    }
+
+    if (!get_config_key(hkey, appkey, "HiDPIScaling", RRF_RT_REG_SZ, buffer, sizeof(buffer)))
+    {
+        if (!strcmp(buffer, "Application"))
+            wayland->hidpi_scaling = WAYLAND_HIDPI_SCALING_APPLICATION;
+        else if (!strcmp(buffer, "Compositor"))
+            wayland->hidpi_scaling = WAYLAND_HIDPI_SCALING_COMPOSITOR;
     }
 
     if (appkey) RegCloseKey(appkey);

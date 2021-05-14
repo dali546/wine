@@ -58,6 +58,12 @@ enum wayland_configure_flags
     WAYLAND_CONFIGURE_FLAG_FULLSCREEN = (1 << 3),
 };
 
+enum wayland_hidpi_scaling
+{
+    WAYLAND_HIDPI_SCALING_APPLICATION,
+    WAYLAND_HIDPI_SCALING_COMPOSITOR,
+};
+
 /**********************************************************************
  *          Definitions for wayland types
  */
@@ -128,6 +134,7 @@ struct wayland
     int event_notification_pipe[2];
     struct wl_list thread_link;
     HWND clipboard_hwnd;
+    enum wayland_hidpi_scaling hidpi_scaling;
     CRITICAL_SECTION crit;
 };
 

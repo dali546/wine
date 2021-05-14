@@ -427,7 +427,6 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
         TRACE("surface=%p hwnd=%p\n", wayland_surface, wayland_surface->hwnd);
         wayland->keyboard.focused_surface = wayland_surface;
         wayland->keyboard.enter_serial = serial;
-        SetFocus(wayland_surface->hwnd);
     }
 }
 

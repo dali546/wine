@@ -1220,6 +1220,8 @@ BOOL wayland_init(struct wayland *wayland)
     /* Start with the default FNV-1a offset for 32-bits. */
     wayland->output_id_fnv_offset = 0x811c9dc5;
 
+    wayland_read_options_from_registry(wayland);
+
     wl_list_init(&wayland->output_list);
     wl_list_init(&wayland->surface_list);
 

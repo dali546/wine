@@ -130,6 +130,21 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
     handle_xdg_toplevel_close,
 };
 
+static struct wayland_output *
+wayland_surface_get_exclusive_output(struct wayland_surface *surface)
+{
+    struct wayland_output *exclusive = NULL;
+    struct wayland_output_ref *ref;
+
+    wl_list_for_each(ref, &surface->output_ref_list, link)
+    {
+        if (exclusive) { exclusive = NULL; break; }
+        exclusive = ref->output;
+    }
+
+    return exclusive;
+}
+
 static void handle_wl_surface_enter(void *data,
                                     struct wl_surface *wl_surface,
                                     struct wl_output *wl_output)
@@ -138,6 +153,7 @@ static void handle_wl_surface_enter(void *data,
     struct wayland_output *output =
         wl_output ? wl_output_get_user_data(wl_output) : NULL;
     struct wayland_output_ref *ref;
+    struct wayland_output *exclusive;
 
     if (!output || output->wayland != surface->wayland) return;
 
@@ -149,8 +165,10 @@ static void handle_wl_surface_enter(void *data,
     ref->output = output;
     wl_list_insert(&surface->output_ref_list, &ref->link);
 
-    if (surface->hwnd)
-        PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);
+    exclusive = wayland_surface_get_exclusive_output(surface);
+    if (exclusive)
+        wayland_surface_set_main_output(surface, exclusive);
+
 }
 
 static void handle_wl_surface_leave(void *data,
@@ -1168,6 +1186,17 @@ static void wayland_surface_tree_update_buffer_scale(struct wayland_surface *sur
     }
 }
 
+static BOOL wayland_surface_presented_in_output(struct wayland_surface *surface,
+                                                struct wayland_output *output)
+{
+    struct wayland_output_ref *ref;
+
+    wl_list_for_each(ref, &surface->output_ref_list, link)
+        if (ref->output == output) return TRUE;
+
+    return FALSE;
+}
+
 /**********************************************************************
  *          wayland_surface_set_main_output
  *
@@ -1182,6 +1211,7 @@ void wayland_surface_set_main_output(struct wayland_surface *surface,
 
     /* Don't update non-toplevels. */
     if (surface->parent) return;
+    if (!wayland_surface_presented_in_output(surface, output)) return;
 
     TRACE("surface=%p output->id,name=0x%x,%s => output->id=0x%x,%s\n",
           surface,
@@ -1189,18 +1219,20 @@ void wayland_surface_set_main_output(struct wayland_surface *surface,
           surface->main_output ? surface->main_output->name : NULL,
           output ? output->id : -1, output ? output->name : NULL);
 
-    surface->main_output = output;
-    if (surface->glvk)
-        surface->glvk->main_output = output;
-
-    new_scale = wayland_surface_get_buffer_scale(surface);
-
-    /* Changing outputs may have changed surface scale. */
-    if (old_scale != new_scale)
+    if (surface->main_output != output)
     {
-        wayland_surface_tree_update_buffer_scale(surface, new_scale);
-        RedrawWindow(surface->hwnd, NULL, 0,
-                     RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        surface->main_output = output;
+        if (surface->glvk)
+            surface->glvk->main_output = output;
+
+        new_scale = wayland_surface_get_buffer_scale(surface);
+
+        /* Changing outputs may have changed surface scale. */
+        if (old_scale != new_scale)
+            wayland_surface_tree_update_buffer_scale(surface, new_scale);
+
+        if (surface->hwnd)
+            PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);
     }
 }
 
@@ -1216,7 +1248,6 @@ void wayland_surface_leave_output(struct wayland_surface *surface,
                                   struct wayland_output *output)
 {
     struct wayland_output_ref *ref, *tmp;
-    BOOL left_output = FALSE;
 
     wl_list_for_each_safe(ref, tmp, &surface->output_ref_list, link)
     {
@@ -1224,16 +1255,17 @@ void wayland_surface_leave_output(struct wayland_surface *surface,
         {
             wl_list_remove(&ref->link);
             heap_free(ref);
-            left_output = TRUE;
             break;
         }
     }
 
     if (surface->main_output == output)
-        wayland_surface_set_main_output(surface, NULL);
+    {
+        struct wayland_output *exclusive =
+            wayland_surface_get_exclusive_output(surface);
 
-    if (left_output && surface->hwnd)
-        PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);
+        wayland_surface_set_main_output(surface, exclusive);
+    }
 }
 
 /**********************************************************************

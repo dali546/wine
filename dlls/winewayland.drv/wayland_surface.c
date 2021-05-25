@@ -229,6 +229,7 @@ struct wayland_surface *wayland_surface_create_subsurface(struct wayland *waylan
     if (!surface)
         goto err;
 
+    surface->parent = wayland_surface_ref(parent);
     surface->wl_subsurface =
         wl_subcompositor_get_subsurface(wayland->wl_subcompositor,
                                         surface->wl_surface,
@@ -470,6 +471,12 @@ void wayland_surface_destroy(struct wayland_surface *surface)
 
     wl_list_remove(&surface->link);
 
+    if (surface->parent)
+    {
+        wayland_surface_unref(surface->parent);
+        surface->parent = NULL;
+    }
+
     heap_free(surface);
 
     /* Destroying the surface can lead to events that we need to handle
@@ -487,6 +494,7 @@ static struct wayland_surface *wayland_surface_create_glvk_common(struct wayland
     if (!glvk)
         goto err;
 
+    glvk->parent = wayland_surface_ref(surface);
     glvk->wl_subsurface =
         wl_subcompositor_get_subsurface(glvk->wayland->wl_subcompositor,
                                         glvk->wl_surface,
@@ -533,7 +541,6 @@ BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
         goto err;
 
     surface->glvk = glvk;
-    wayland_surface_ref(surface);
 
     wl_surface_commit(glvk->wl_surface);
 
@@ -598,8 +605,6 @@ void wayland_surface_unref_glvk(struct wayland_surface *surface)
 
     wayland_surface_destroy(surface->glvk);
     surface->glvk = NULL;
-
-    wayland_surface_unref(surface);
 }
 
 /**********************************************************************

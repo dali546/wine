@@ -192,6 +192,7 @@ struct wayland_surface
     struct xdg_toplevel *xdg_toplevel;
     struct wp_viewport *wp_viewport;
     struct wl_egl_window *wl_egl_window;
+    struct wayland_surface *parent;
     struct wayland_surface *glvk;
     struct zwp_confined_pointer_v1 *zwp_confined_pointer_v1;
     struct zwp_locked_pointer_v1 *zwp_locked_pointer_v1;

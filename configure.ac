@@ -1325,14 +1325,20 @@ fi
 dnl **** Check for Wayland ****
 if test "x$with_wayland" = "xyes"
 then
-    WINE_PACKAGE_FLAGS(WAYLAND_CLIENT,[wayland-client])
-    WINE_PACKAGE_FLAGS(WAYLAND_EGL,[wayland-egl])
-    WINE_PACKAGE_FLAGS(XKBCOMMON,[xkbcommon])
+    WINE_PACKAGE_FLAGS(WAYLAND_CLIENT,[wayland-client],,,,
+        [AC_CHECK_HEADERS([wayland-client.h])
+         AC_CHECK_LIB(wayland-client,wl_display_connect,[:],[WAYLAND_CLIENT_LIBS=""],[$WAYLAND_CLIENT_LIBS])])
+    WINE_PACKAGE_FLAGS(WAYLAND_EGL,[wayland-egl],,,,
+        [AC_CHECK_HEADERS([wayland-egl.h])
+         AC_CHECK_LIB(wayland-egl,wl_egl_window_create,[:],[WAYLAND_EGL_LIBS=""],[$WAYLAND_EGL_LIBS])])
+    WINE_PACKAGE_FLAGS(XKBCOMMON,[xkbcommon],,,,
+        [AC_CHECK_HEADERS([xkbcommon/xkbcommon.h])
+         AC_CHECK_LIB(xkbcommon,xkb_context_new,[:],[XKBCOMMON_LIBS=""],[$XKBCOMMON_LIBS])])
     WINE_CHECK_SONAME(EGL,eglGetProcAddress)
     WINE_CHECK_SONAME(GL,glFlush)
     WINE_CHECK_SONAME(GLESv2,glFlush)
 fi
-WINE_NOTICE_WITH(wayland, [test -z "$WAYLAND_CLIENT_LIBS"],
+WINE_NOTICE_WITH(wayland, [test -z "$WAYLAND_CLIENT_LIBS" || test -z "$WAYLAND_EGL_LIBS" || test -z "$XKBCOMMON_LIBS"],
                  [Wayland ${notice_platform}development files not found, the Wayland driver won't be supported.],
                  [enable_winewayland_drv])
 

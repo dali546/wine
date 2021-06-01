@@ -217,7 +217,7 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
     }
 
     wl_list_init(&surface->output_ref_list);
-    wl_list_insert(&wayland->surface_list, &surface->link);
+    wl_list_init(&surface->link);
     wl_surface_set_user_data(surface->wl_surface, surface);
 
     surface->ref = 1;
@@ -265,6 +265,10 @@ struct wayland_surface *wayland_surface_create_toplevel(struct wayland *wayland,
     if (parent && parent->xdg_toplevel)
         xdg_toplevel_set_parent(surface->xdg_toplevel, parent->xdg_toplevel);
 
+    EnterCriticalSection(&wayland->crit);
+    wl_list_insert(&wayland->surface_list, &surface->link);
+    LeaveCriticalSection(&wayland->crit);
+
     wl_surface_commit(surface->wl_surface);
 
     /* Wait for the first configure event. */
@@ -303,6 +307,10 @@ struct wayland_surface *wayland_surface_create_subsurface(struct wayland *waylan
     if (!surface->wl_subsurface)
         goto err;
     wl_subsurface_set_desync(surface->wl_subsurface);
+
+    EnterCriticalSection(&wayland->crit);
+    wl_list_insert(&wayland->surface_list, &surface->link);
+    LeaveCriticalSection(&wayland->crit);
 
     wl_surface_commit(surface->wl_surface);
 
@@ -498,8 +506,9 @@ void wayland_surface_destroy(struct wayland_surface *surface)
 
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
-    surface->crit.DebugInfo->Spare[0] = 0;
-    DeleteCriticalSection(&surface->crit);
+    EnterCriticalSection(&surface->wayland->crit);
+    wl_list_remove(&surface->link);
+    LeaveCriticalSection(&surface->wayland->crit);
 
     wl_list_for_each_safe(ref, tmp, &surface->output_ref_list, link)
     {
@@ -544,13 +553,14 @@ void wayland_surface_destroy(struct wayland_surface *surface)
         surface->wl_surface = NULL;
     }
 
-    wl_list_remove(&surface->link);
-
     if (surface->parent)
     {
         wayland_surface_unref(surface->parent);
         surface->parent = NULL;
     }
+
+    surface->crit.DebugInfo->Spare[0] = 0;
+    DeleteCriticalSection(&surface->crit);
 
     heap_free(surface);
 
@@ -597,6 +607,16 @@ err:
 
 }
 
+static struct wayland_surface *wayland_surface_ref_glvk(struct wayland_surface *surface)
+{
+    struct wayland_surface *glvk = NULL;
+    EnterCriticalSection(&surface->crit);
+    if (surface->glvk)
+        glvk = wayland_surface_ref(surface->glvk);
+    LeaveCriticalSection(&surface->crit);
+    return glvk;
+}
+
 /**********************************************************************
  *          wayland_surface_create_gl
  *
@@ -608,11 +628,8 @@ BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
 
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
-    if (surface->glvk)
-    {
-        wayland_surface_ref(surface->glvk);
+    if (wayland_surface_ref_glvk(surface))
         return TRUE;
-    }
 
     glvk = wayland_surface_create_glvk_common(surface);
     if (!glvk)
@@ -622,7 +639,13 @@ BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
     if (!glvk->wl_egl_window)
         goto err;
 
+    EnterCriticalSection(&surface->crit);
     surface->glvk = glvk;
+    LeaveCriticalSection(&surface->crit);
+
+    EnterCriticalSection(&glvk->wayland->crit);
+    wl_list_insert(&glvk->wayland->surface_list, &glvk->link);
+    LeaveCriticalSection(&glvk->wayland->crit);
 
     wl_surface_commit(glvk->wl_surface);
 
@@ -644,30 +667,26 @@ BOOL wayland_surface_create_or_ref_vk(struct wayland_surface *surface)
 {
     struct wayland_surface *glvk;
 
-    TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+    TRACE("surface=%p glvk=%p hwnd=%p\n", surface, surface->glvk, surface->hwnd);
 
-    if (surface->glvk)
-    {
-        wayland_surface_ref(surface->glvk);
+    if (wayland_surface_ref_glvk(surface))
         return TRUE;
-    }
 
     glvk = wayland_surface_create_glvk_common(surface);
     if (!glvk)
-        goto err;
+        return FALSE;
 
+    EnterCriticalSection(&surface->crit);
     surface->glvk = glvk;
-    wayland_surface_ref(surface);
+    LeaveCriticalSection(&surface->crit);
+
+    EnterCriticalSection(&glvk->wayland->crit);
+    wl_list_insert(&glvk->wayland->surface_list, &glvk->link);
+    LeaveCriticalSection(&glvk->wayland->crit);
 
     wl_surface_commit(glvk->wl_surface);
 
     return TRUE;
-
-err:
-    if (glvk)
-        wayland_surface_destroy(glvk);
-
-    return FALSE;
 }
 
 /**********************************************************************
@@ -677,16 +696,21 @@ err:
  */
 void wayland_surface_unref_glvk(struct wayland_surface *surface)
 {
-    if (!surface->glvk)
-        return;
+    struct wayland_surface *glvk_to_destroy = NULL;
+    LONG ref = -12345;
 
-    TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+    EnterCriticalSection(&surface->crit);
+    if (surface->glvk && (ref = InterlockedDecrement(&surface->glvk->ref)) == 0)
+    {
+        glvk_to_destroy = surface->glvk;
+        surface->glvk = NULL;
+    }
+    TRACE("surface=%p glvk=%p ref=%d->%d\n",
+          surface, glvk_to_destroy ? glvk_to_destroy : surface->glvk, ref + 1, ref);
+    LeaveCriticalSection(&surface->crit);
 
-    if (InterlockedDecrement(&surface->glvk->ref))
-        return;
-
-    wayland_surface_destroy(surface->glvk);
-    surface->glvk = NULL;
+    if (glvk_to_destroy)
+        wayland_surface_destroy(glvk_to_destroy);
 }
 
 /**********************************************************************
@@ -702,7 +726,7 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
                                       int wine_width, int wine_height)
 {
     int x, y, width, height;
-    struct wayland_surface *glvk = surface->glvk;
+    struct wayland_surface *glvk = wayland_surface_ref_glvk(surface);
 
     if (!glvk)
         return;
@@ -737,6 +761,8 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
     }
 
     wl_surface_commit(glvk->wl_surface);
+
+    wayland_surface_unref_glvk(surface);
 }
 
 /**********************************************************************
@@ -1003,7 +1029,8 @@ void wayland_surface_ensure_mapped(struct wayland_surface *surface)
  */
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface)
 {
-    InterlockedIncrement(&surface->ref);
+    LONG ref = InterlockedIncrement(&surface->ref);
+    TRACE("surface=%p ref=%d->%d\n", surface, ref - 1, ref);
     return surface;
 }
 
@@ -1014,10 +1041,12 @@ struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface)
  */
 void wayland_surface_unref(struct wayland_surface *surface)
 {
-    if (InterlockedDecrement(&surface->ref))
-        return;
+    LONG ref = InterlockedDecrement(&surface->ref);
 
-    wayland_surface_destroy(surface);
+    TRACE("surface=%p ref=%d->%d\n", surface, ref + 1, ref);
+
+    if (ref == 0)
+        wayland_surface_destroy(surface);
 }
 
 /**********************************************************************
@@ -1029,6 +1058,7 @@ void wayland_surface_unref(struct wayland_surface *surface)
 void wayland_surface_update_pointer_confinement(struct wayland_surface *surface)
 {
     struct wayland *wayland = surface->wayland;
+    struct wayland_surface *glvk;
     struct wl_region *region;
     RECT vscreen_rect;
     RECT clip_rect = wayland->cursor_clip;
@@ -1060,7 +1090,8 @@ void wayland_surface_update_pointer_confinement(struct wayland_surface *surface)
           wine_dbgstr_rect(&vscreen_rect),
           GetCursor());
 
-    surface = surface->glvk ? surface->glvk : surface;
+    glvk = wayland_surface_ref_glvk(surface);
+    surface = glvk ? glvk : surface;
 
     /* Only confine or lock if the cursor is actually clipped within this window. */
     if (!IsRectEmpty(&client_clip_rect))
@@ -1167,6 +1198,9 @@ void wayland_surface_update_pointer_confinement(struct wayland_surface *surface)
 
     if (needs_confine || needs_lock)
         wl_surface_commit(surface->wl_surface);
+
+    if (glvk)
+        wayland_surface_unref_glvk(glvk->parent);
 }
 
 static inline struct wayland_surface *
@@ -1181,12 +1215,16 @@ static void wayland_surface_tree_update_buffer_scale(struct wayland_surface *sur
 {
     struct wayland_surface *s;
 
+    EnterCriticalSection(&surface->wayland->crit);
+
     wl_list_for_each(s, &surface->wayland->surface_list, link)
     {
         struct wayland_surface *toplevel = wayland_surface_get_toplevel(s);
         if (toplevel == surface)
             wl_surface_set_buffer_scale(s->wl_surface, new_scale);
     }
+
+    LeaveCriticalSection(&surface->wayland->crit);
 }
 
 static BOOL wayland_surface_presented_in_output(struct wayland_surface *surface,
@@ -1224,9 +1262,13 @@ void wayland_surface_set_main_output(struct wayland_surface *surface,
 
     if (surface->main_output != output)
     {
+        struct wayland_surface *glvk = wayland_surface_ref_glvk(surface);
         surface->main_output = output;
-        if (surface->glvk)
-            surface->glvk->main_output = output;
+        if (glvk)
+        {
+            glvk->main_output = output;
+            wayland_surface_unref_glvk(surface);
+        }
 
         new_scale = wayland_surface_get_buffer_scale(surface);
 

@@ -822,6 +822,30 @@ static struct wayland_output_mode *get_matching_output_mode(struct wayland_outpu
     return NULL;
 }
 
+static BOOL wayland_restore_all_outputs(struct wayland *wayland)
+{
+    struct wayland_output *output;
+
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        struct wayland_output_mode *output_mode = NULL;
+        DEVMODEW devmode;
+
+        if (read_registry_settings(output->wine_name, &devmode))
+            output_mode = get_matching_output_mode(output, &devmode);
+        else
+            output_mode = output->current_mode;
+
+        if (!output_mode)
+            return FALSE;
+
+        if (output_mode != output->current_wine_mode)
+            wayland_notify_wine_mode_change(output->id, output_mode->width, output_mode->height);
+    }
+
+    return TRUE;
+}
+
 /***********************************************************************
  *		ChangeDisplaySettingsEx  (WAYLAND.@)
  *
@@ -835,23 +859,27 @@ LONG CDECL WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
 
     TRACE("(%s,%p,%p,0x%08x,%p) %dx%d@%d wayland=%p\n",
           debugstr_w(devname), devmode, hwnd, flags, lpvoid,
-          devmode->dmPelsWidth, devmode->dmPelsHeight,
-          devmode->dmDisplayFrequency, wayland);
+          devmode ? devmode->dmPelsWidth : -1,
+          devmode ? devmode->dmPelsHeight : -1,
+          devmode ? devmode->dmDisplayFrequency : -1, wayland);
 
-    output = wayland_get_output_by_wine_name(wayland, devname);
-    if (!output)
-        return DISP_CHANGE_BADPARAM;
-
-    output_mode = get_matching_output_mode(output, devmode);
-    if (!output_mode)
-        return DISP_CHANGE_BADMODE;
-
-    if (flags & CDS_UPDATEREGISTRY)
+    if (devname && devmode)
     {
-        if (!write_registry_settings(devname, devmode))
+        output = wayland_get_output_by_wine_name(wayland, devname);
+        if (!output)
+            return DISP_CHANGE_BADPARAM;
+
+        output_mode = get_matching_output_mode(output, devmode);
+        if (!output_mode)
+            return DISP_CHANGE_BADMODE;
+
+        if (flags & CDS_UPDATEREGISTRY)
         {
-            ERR("Failed to write %s display settings to registry.\n", wine_dbgstr_w(devname));
-            return DISP_CHANGE_NOTUPDATED;
+            if (!write_registry_settings(devname, devmode))
+            {
+                ERR("Failed to write %s display settings to registry.\n", wine_dbgstr_w(devname));
+                return DISP_CHANGE_NOTUPDATED;
+            }
         }
     }
 
@@ -860,12 +888,27 @@ LONG CDECL WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
 
     /* The notification needs to happen before we reinit the display devices,
      * in order for the reinit to read the new current mode. */
-    wayland_notify_wine_mode_change(output->id, output_mode->width, output_mode->height);
+    if (devname && devmode)
+    {
+        wayland_notify_wine_mode_change(output->id, output_mode->width, output_mode->height);
+    }
+    else
+    {
+        if (!wayland_restore_all_outputs(wayland))
+            return DISP_CHANGE_BADMODE;
+    }
 
     wayland_init_display_devices_internal(wayland, TRUE);
 
-    TRACE("set current wine mode %dx%d wine_scale %f\n",
-          output_mode->width, output_mode->height, output->wine_scale);
+    if (devname && devmode)
+    {
+        TRACE("set current wine mode %dx%d wine_scale %f\n",
+              output_mode->width, output_mode->height, output->wine_scale);
+    }
+    else
+    {
+        TRACE("restored all outputs to registry (or native) settings\n");
+    }
 
     return DISP_CHANGE_SUCCESSFUL;
 }

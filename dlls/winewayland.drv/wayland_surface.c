@@ -625,6 +625,7 @@ static struct wayland_surface *wayland_surface_ref_glvk(struct wayland_surface *
 BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
 {
     struct wayland_surface *glvk;
+    RECT client_rect;
 
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
@@ -647,7 +648,14 @@ BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
     wl_list_insert(&glvk->wayland->surface_list, &glvk->link);
     LeaveCriticalSection(&glvk->wayland->crit);
 
-    wl_surface_commit(glvk->wl_surface);
+    /* Set initial position in the client area. */
+    GetClientRect(surface->hwnd, &client_rect);
+    MapWindowPoints(surface->hwnd, NULL, (POINT*)&client_rect, 2);
+
+    wayland_surface_reconfigure_glvk(surface,
+                                     client_rect.left, client_rect.top,
+                                     client_rect.right - client_rect.left,
+                                     client_rect.bottom - client_rect.top);
 
     return TRUE;
 
@@ -666,6 +674,7 @@ err:
 BOOL wayland_surface_create_or_ref_vk(struct wayland_surface *surface)
 {
     struct wayland_surface *glvk;
+    RECT client_rect;
 
     TRACE("surface=%p glvk=%p hwnd=%p\n", surface, surface->glvk, surface->hwnd);
 
@@ -684,7 +693,14 @@ BOOL wayland_surface_create_or_ref_vk(struct wayland_surface *surface)
     wl_list_insert(&glvk->wayland->surface_list, &glvk->link);
     LeaveCriticalSection(&glvk->wayland->crit);
 
-    wl_surface_commit(glvk->wl_surface);
+    /* Set initial position in the client area. */
+    GetClientRect(surface->hwnd, &client_rect);
+    MapWindowPoints(surface->hwnd, NULL, (POINT*)&client_rect, 2);
+
+    wayland_surface_reconfigure_glvk(surface,
+                                     client_rect.left, client_rect.top,
+                                     client_rect.right - client_rect.left,
+                                     client_rect.bottom - client_rect.top);
 
     return TRUE;
 }

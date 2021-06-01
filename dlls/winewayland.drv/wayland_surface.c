@@ -423,7 +423,6 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
  */
 void wayland_surface_destroy(struct wayland_surface *surface)
 {
-    struct wayland *wayland = surface->wayland;
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
     surface->crit.DebugInfo->Spare[0] = 0;
@@ -477,8 +476,15 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     heap_free(surface);
 
     /* Destroying the surface can lead to events that we need to handle
-     * immediately to get the latest state, so force a round trip. */
-    wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
+     * immediately to get the latest state, so force a round trip, but only if
+     * we are in the same thread that handles the window (otherwise we will
+     * call wayland event handlers in an arbitrary thread, a scenario which we
+     * do not support). */
+    if (surface->wayland->thread_id == GetCurrentThreadId())
+    {
+        wl_display_roundtrip_queue(surface->wayland->wl_display,
+                                   surface->wayland->wl_event_queue);
+    }
 }
 
 static struct wayland_surface *wayland_surface_create_glvk_common(struct wayland_surface *surface)

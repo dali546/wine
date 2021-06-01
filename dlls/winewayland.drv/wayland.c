@@ -1340,12 +1340,11 @@ void wayland_deinit(struct wayland *wayland)
 
     TRACE("%p\n", wayland);
 
-    wayland->crit.DebugInfo->Spare[0] = 0;
-    DeleteCriticalSection(&wayland->crit);
-
     EnterCriticalSection(&thread_wayland_section);
     wl_list_remove(&wayland->thread_link);
     LeaveCriticalSection(&thread_wayland_section);
+
+    EnterCriticalSection(&wayland->crit);
 
     /* Destroying a surface may destroy other related surfaces too.
      * wl_list_for_each_safe doesn't handle this scenario well, so manually
@@ -1357,6 +1356,8 @@ void wayland_deinit(struct wayland *wayland)
             wl_container_of(wayland->surface_list.next, surface, link);
         wayland_surface_destroy(surface);
     }
+
+    LeaveCriticalSection(&wayland->crit);
 
     wl_list_for_each_safe(output, output_tmp, &wayland->output_list, link)
         wayland_output_destroy(output);
@@ -1424,6 +1425,9 @@ void wayland_deinit(struct wayland *wayland)
     wl_display_flush(wayland->wl_display);
 
     wayland->wl_display = NULL;
+
+    wayland->crit.DebugInfo->Spare[0] = 0;
+    DeleteCriticalSection(&wayland->crit);
 }
 
 /**********************************************************************

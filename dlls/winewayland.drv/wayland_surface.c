@@ -308,6 +308,9 @@ struct wayland_surface *wayland_surface_create_subsurface(struct wayland *waylan
         goto err;
     wl_subsurface_set_desync(surface->wl_subsurface);
 
+    surface->main_output = parent->main_output;
+    wl_surface_set_buffer_scale(surface->wl_surface, wayland_surface_get_buffer_scale(parent));
+
     EnterCriticalSection(&wayland->crit);
     wl_list_insert(&wayland->surface_list, &surface->link);
     LeaveCriticalSection(&wayland->crit);
@@ -596,6 +599,8 @@ static struct wayland_surface *wayland_surface_create_glvk_common(struct wayland
     wl_subsurface_set_desync(glvk->wl_subsurface);
 
     glvk->hwnd = surface->hwnd;
+    glvk->main_output = surface->main_output;
+    wl_surface_set_buffer_scale(glvk->wl_surface, wayland_surface_get_buffer_scale(surface));
 
     return glvk;
 
@@ -1226,23 +1231,6 @@ wayland_surface_get_toplevel(struct wayland_surface *surface)
     return surface;
 }
 
-static void wayland_surface_tree_update_buffer_scale(struct wayland_surface *surface,
-                                                     int new_scale)
-{
-    struct wayland_surface *s;
-
-    EnterCriticalSection(&surface->wayland->crit);
-
-    wl_list_for_each(s, &surface->wayland->surface_list, link)
-    {
-        struct wayland_surface *toplevel = wayland_surface_get_toplevel(s);
-        if (toplevel == surface)
-            wl_surface_set_buffer_scale(s->wl_surface, new_scale);
-    }
-
-    LeaveCriticalSection(&surface->wayland->crit);
-}
-
 static BOOL wayland_surface_presented_in_output(struct wayland_surface *surface,
                                                 struct wayland_output *output)
 {
@@ -1263,9 +1251,6 @@ static BOOL wayland_surface_presented_in_output(struct wayland_surface *surface,
 void wayland_surface_set_main_output(struct wayland_surface *surface,
                                      struct wayland_output *output)
 {
-    int old_scale = wayland_surface_get_buffer_scale(surface);
-    int new_scale;
-
     /* Don't update non-toplevels. */
     if (surface->parent) return;
     if (!wayland_surface_presented_in_output(surface, output)) return;
@@ -1278,19 +1263,26 @@ void wayland_surface_set_main_output(struct wayland_surface *surface,
 
     if (surface->main_output != output)
     {
-        struct wayland_surface *glvk = wayland_surface_ref_glvk(surface);
-        surface->main_output = output;
-        if (glvk)
-        {
-            glvk->main_output = output;
-            wayland_surface_unref_glvk(surface);
-        }
+        struct wayland_surface *s;
+        int new_scale;
 
+        surface->main_output = output;
         new_scale = wayland_surface_get_buffer_scale(surface);
 
-        /* Changing outputs may have changed surface scale. */
-        if (old_scale != new_scale)
-            wayland_surface_tree_update_buffer_scale(surface, new_scale);
+        EnterCriticalSection(&surface->wayland->crit);
+
+        /* Update all surfaces in the surface tree. */
+        wl_list_for_each(s, &surface->wayland->surface_list, link)
+        {
+            struct wayland_surface *toplevel = wayland_surface_get_toplevel(s);
+            if (toplevel == surface)
+            {
+                s->main_output = output;
+                wl_surface_set_buffer_scale(s->wl_surface, new_scale);
+            }
+        }
+
+        LeaveCriticalSection(&surface->wayland->crit);
 
         if (surface->hwnd)
             PostMessageW(surface->hwnd, WM_WAYLAND_SURFACE_OUTPUT_CHANGE, 0, 0);

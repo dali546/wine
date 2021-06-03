@@ -62,11 +62,9 @@ struct wayland_win_data
     HWND           hwnd;
     /* parent hwnd for child windows */
     HWND           parent;
-    /* owner hwnd for owned windows */
-    HWND           owner;
-    /* effective owner hwnd for owned windows (what the driver considers to
-     * be the effective owner for relative positioning, see alloc_win_data) */
-    HWND           effective_owner;
+    /* effective parent hwnd (what the driver considers to
+     * be the parent for relative positioning, see create_win_data) */
+    HWND           effective_parent;
     /* USER window rectangle relative to parent */
     RECT           window_rect;
     /* client area relative to parent */
@@ -131,7 +129,7 @@ static inline int get_dib_image_size(const BITMAPINFO *info)
            abs(info->bmiHeader.biHeight);
 }
 
-static HWND guess_popup_owner(struct wayland *wayland)
+static HWND guess_popup_parent(struct wayland *wayland)
 {
     HWND cursor_hwnd;
     HWND keyboard_hwnd;
@@ -146,7 +144,7 @@ static HWND guess_popup_owner(struct wayland *wayland)
 
     TRACE("cursor_hwnd=%p keyboard_hwnd=%p\n", cursor_hwnd, keyboard_hwnd);
 
-    /* If we have a recent mouse event, the popup owner is likely the window
+    /* If we have a recent mouse event, the popup parent is likely the window
      * under the cursor, so prefer it. Otherwise prefer the window with
      * the keyboard focus. */
     if (wayland->last_event_type == INPUT_MOUSE)
@@ -155,67 +153,62 @@ static HWND guess_popup_owner(struct wayland *wayland)
         return keyboard_hwnd ? keyboard_hwnd : cursor_hwnd;
 }
 
-/***********************************************************************
- *           alloc_win_data
- */
-static struct wayland_win_data *alloc_win_data(HWND hwnd)
+static HWND get_effective_parent(HWND hwnd, const RECT *window_rect)
 {
-    struct wayland_win_data *data;
+    struct wayland *wayland = thread_init_wayland();
     DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
+    HWND parent_hwnd = GetParent(hwnd);
+    HWND effective_parent_hwnd;
+    MONITORINFOEXW mi;
+    double monitor_width;
+    double monitor_height;
+    double window_width;
+    double window_height;
 
-    if (!(data = heap_alloc_zero(sizeof(*data))))
-        return NULL;
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(MonitorFromRect(window_rect, MONITOR_DEFAULTTOPRIMARY),
+                    (MONITORINFO *)&mi);
 
-    data->hwnd = hwnd;
+    monitor_width = mi.rcMonitor.right - mi.rcMonitor.left;
+    monitor_height = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    window_width = window_rect->right - window_rect->left;
+    window_height = window_rect->bottom - window_rect->top;
 
-    /* Don't create native wayland surfaces for child windows. Let Wine core
-     * handle their drawing in their corresponding top level window surface. */
-    if (!(style & WS_CHILD))
+    if (parent_hwnd == GetDesktopWindow()) parent_hwnd = 0;
+
+    /* Child windows don't have an effective parent, unless they are children
+     * of the desktop (thus effectively top-level). */
+    if ((style & WS_CHILD) && parent_hwnd) return 0;
+
+    /* Many applications use top level, unowned (or owned by the desktop)
+     * popup windows for menus and tooltips and depend on screen
+     * coordinates for correct positioning. Since wayland can't deal with
+     * screen coordinates, try to guess the effective parent window of such
+     * popups and manage them as wayland subsurfaces. Our heuristic is to
+     * treat all unowned, undecorated top-level windows with reasonable size
+     * as transient popups.  */
+    if (!parent_hwnd && (style & WS_CAPTION) != WS_CAPTION &&
+        window_width > 1.0 && window_height > 1.0 &&
+        window_width * window_height < 0.5 * monitor_width * monitor_height)
     {
-        struct wayland *wayland = thread_init_wayland();
-        HWND owner_hwnd = GetWindow(hwnd, GW_OWNER);
-        HWND effective_owner_hwnd;
-        struct wayland_surface *owner_surface = NULL;
-
-        /* Many applications use top level, unowned (or owned by the desktop)
-         * popup windows for menus and tooltips and depend on screen
-         * coordinates for correct positioning. Since wayland can't deal with
-         * screen coordinates, try to guess the effective owner window of such
-         * popups and manage them as wayland subsurfaces. */
-        if ((!owner_hwnd || owner_hwnd == GetDesktopWindow()) &&
-            (style & WS_POPUP) && (style & WS_CAPTION) != WS_CAPTION)
+        effective_parent_hwnd = guess_popup_parent(wayland);
+        if (effective_parent_hwnd == hwnd ||
+            effective_parent_hwnd == GetDesktopWindow())
         {
-            effective_owner_hwnd = guess_popup_owner(wayland);
+            effective_parent_hwnd = 0;
         }
-        else
-        {
-            effective_owner_hwnd = owner_hwnd;
-        }
-
-        TRACE("owner=%p effective_owner=%p\n", owner_hwnd, effective_owner_hwnd);
-
-        if (effective_owner_hwnd && effective_owner_hwnd != GetDesktopWindow())
-            owner_surface = wayland_surface_for_hwnd(effective_owner_hwnd);
-
-        data->owner = owner_hwnd;
-        data->effective_owner = effective_owner_hwnd;
-
-        /* Use wayland subsurfaces for owned win32 windows that are transient (i.e., don't have
-         * a titlebar). Otherwise make them wayland toplevels. */
-        if ((style & WS_CAPTION) != WS_CAPTION && owner_surface)
-            data->wayland_surface = wayland_surface_create_subsurface(wayland, owner_surface);
-        else
-            data->wayland_surface = wayland_surface_create_toplevel(wayland, owner_surface);
-
-        data->wayland_surface->hwnd = hwnd;
+    }
+    else
+    {
+        effective_parent_hwnd = parent_hwnd;
     }
 
-    EnterCriticalSection(&win_data_section);
-    win_data_context[context_idx(hwnd)] = data;
+    TRACE("hwnd=%p parent=%p effective_parent=%p style=0x%08x rect=%s monitor=%s\n",
+          hwnd, parent_hwnd, effective_parent_hwnd, style,
+          wine_dbgstr_rect(window_rect),
+          wine_dbgstr_rect(&mi.rcMonitor));
 
-    TRACE("hwnd=%p wayland_surface=%p\n", data->hwnd, data->wayland_surface);
-
-    return data;
+    return effective_parent_hwnd;
 }
 
 /***********************************************************************
@@ -832,20 +825,53 @@ void CDECL WAYLAND_DestroyWindow(HWND hwnd)
  * Create a data window structure for an existing window.
  */
 static struct wayland_win_data *create_win_data(HWND hwnd, const RECT *window_rect,
-                                                 const RECT *client_rect)
+                                                const RECT *client_rect)
 {
     struct wayland_win_data *data;
+    DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
     HWND parent;
 
     /* Don't create win_data for desktop or HWND_MESSAGE windows. */
     if (!(parent = GetAncestor(hwnd, GA_PARENT))) return NULL;
     if (parent != GetDesktopWindow() && !GetAncestor(parent, GA_PARENT)) return NULL;
 
-    if (!(data = alloc_win_data(hwnd))) return NULL;
+    if (!(data = heap_alloc_zero(sizeof(*data))))
+        return NULL;
 
+    data->hwnd = hwnd;
     data->parent = (parent == GetDesktopWindow()) ? 0 : parent;
     data->window_rect = *window_rect;
     data->client_rect = *client_rect;
+
+    /* Only create wayland surfaces for toplevel windows. Let Wine core handle
+     * the drawing of other windows in their corresponding top level window
+     * surface. */
+    if (!data->parent)
+    {
+        struct wayland *wayland = thread_init_wayland();
+        HWND effective_parent_hwnd = get_effective_parent(hwnd, window_rect);
+        struct wayland_surface *parent_surface = NULL;
+
+        if (effective_parent_hwnd)
+            parent_surface = wayland_surface_for_hwnd(effective_parent_hwnd);
+
+        data->effective_parent = effective_parent_hwnd;
+
+        /* Use wayland subsurfaces for owned win32 windows that are transient (i.e., don't have
+         * a titlebar). Otherwise make them wayland toplevels. */
+        if ((style & WS_CAPTION) != WS_CAPTION && parent_surface)
+            data->wayland_surface = wayland_surface_create_subsurface(wayland, parent_surface);
+        else
+            data->wayland_surface = wayland_surface_create_toplevel(wayland, parent_surface);
+
+        data->wayland_surface->hwnd = hwnd;
+    }
+
+    EnterCriticalSection(&win_data_section);
+    win_data_context[context_idx(hwnd)] = data;
+
+    TRACE("hwnd=%p wayland_surface=%p\n", data->hwnd, data->wayland_surface);
+
     return data;
 }
 
@@ -859,6 +885,7 @@ static struct wayland_win_data *recreate_win_data(struct wayland_win_data *data,
                                                   HWND hwnd, const RECT *window_rect,
                                                   const RECT *client_rect)
 {
+    TRACE("hwnd=%p\n", hwnd);
     wayland_invalidate_vulkan_objects(hwnd);
     free_win_data(data);
     data = create_win_data(hwnd, window_rect, client_rect);
@@ -879,7 +906,6 @@ BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     COLORREF key;
     BYTE alpha;
     BOOL layered = GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED;
-    HWND owner = GetWindow(hwnd, GW_OWNER);
     HWND parent = GetAncestor(hwnd, GA_PARENT);
 
     TRACE("win %p window %s client %s visible %s style %08x flags %08x layered %d after %p\n",
@@ -891,12 +917,15 @@ BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
 
     if (parent == GetDesktopWindow()) parent = 0;
 
-    /* Change of ownership or parentage requires recreating the whole win_data
-     * to ensure we have a properly owned wayland surface. */
-    if (data->owner != owner || data->parent != parent)
+    /* Change of parentage (either actual or effective) requires recreating the
+     * whole win_data to ensure we have a properly owned wayland surface. We
+     * check for change of effective parent only if the window moved in any way. */
+    if ((!EqualRect(&data->window_rect, window_rect) &&
+         data->effective_parent != get_effective_parent(hwnd, window_rect)) ||
+        data->parent != parent)
     {
         EnterCriticalSection(&win_data_section);
-        recreate_win_data(data, hwnd, window_rect, client_rect);
+        data = recreate_win_data(data, hwnd, window_rect, client_rect);
         LeaveCriticalSection(&win_data_section);
     }
 
@@ -1062,38 +1091,21 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
         return;
     }
 
-    parent_data = get_win_data((HWND)GetWindowLongPtrW(data->hwnd, GWLP_HWNDPARENT));
-    /* We manage some top level, popup window with subsurfaces (see alloc_win_data),
+    /* We manage some top level, popup window with subsurfaces (see create_win_data),
      * which use coordinates relative to their parent surface. In order to properly
-     * handle the positioning of such windows, we treat the effective owner window
+     * handle the positioning of such windows, we treat the effective parent window
      * as the "parent" below. */
-    if (!parent_data)
-        parent_data = get_win_data(data->effective_owner);
+    parent_data = get_win_data(data->effective_parent);
 
     if (parent_data)
     {
-        if (style & WS_POPUP)
-        {
-            /* Popup windows are in screen coordinates */
-            offset_rect = parent_data->window_rect;
-            TRACE("popup parent hwnd=%p window %s client %s\n",
-                  parent_data->hwnd,
-                  wine_dbgstr_rect(&parent_data->window_rect),
-                  wine_dbgstr_rect(&parent_data->client_rect));
-            offset_rect.left = -offset_rect.left;
-            offset_rect.top = -offset_rect.top;
-        }
-        else
-        {
-            /* Other windows are in client coordinates */
-            TRACE("non-popup parent hwnd=%p window %s client %s\n",
-                  parent_data->hwnd,
-                  wine_dbgstr_rect(&parent_data->window_rect),
-                  wine_dbgstr_rect(&parent_data->client_rect));
-            offset_rect = parent_data->client_rect;
-            offset_rect.left -= parent_data->window_rect.left;
-            offset_rect.top -= parent_data->window_rect.top;
-        }
+        TRACE("positioning relative to parent hwnd=%p window %s client %s\n",
+              parent_data->hwnd,
+              wine_dbgstr_rect(&parent_data->window_rect),
+              wine_dbgstr_rect(&parent_data->client_rect));
+        offset_rect = parent_data->window_rect;
+        offset_rect.left = -offset_rect.left;
+        offset_rect.top = -offset_rect.top;
     }
 
     wayland_surface_reconfigure(data->wayland_surface,
@@ -1150,9 +1162,10 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
 
     if (!(data = get_win_data(hwnd))) return;
 
-    TRACE("hwnd %p window %s client %s visible %s style %08x owner %p after %p flags %08x\n",
+    TRACE("hwnd %p window %s client %s visible %s style %08x effective_parent %p after %p flags %08x\n",
           hwnd, wine_dbgstr_rect(window_rect), wine_dbgstr_rect(client_rect),
-          wine_dbgstr_rect(visible_rect), new_style, data->owner, insert_after, swp_flags);
+          wine_dbgstr_rect(visible_rect), new_style, data->effective_parent,
+          insert_after, swp_flags);
 
     old_window_rect = data->window_rect;
 

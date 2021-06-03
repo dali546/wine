@@ -1616,16 +1616,6 @@ void wayland_change_wine_mode(struct wayland *wayland, int output_id, int width,
     }
 }
 
-struct mode_change_info { int output_id; int width; int height; };
-
-static BOOL CALLBACK send_wm_wayland_mode_change(HWND hwnd, LPARAM lp)
-{
-    struct mode_change_info *m = (struct mode_change_info *) lp;
-    SendMessageW(hwnd, WM_WAYLAND_MODE_CHANGE,
-                 m->output_id, MAKELPARAM(m->width, m->height));
-    return FALSE;
-}
-
 /**********************************************************************
  *          wayland_notify_wine_mode_change
  *
@@ -1636,15 +1626,19 @@ static BOOL CALLBACK send_wm_wayland_mode_change(HWND hwnd, LPARAM lp)
 void wayland_notify_wine_mode_change(int output_id, int width, int height)
 {
     struct wayland *w;
-    struct mode_change_info m = { output_id, width, height };
 
     EnterCriticalSection(&thread_wayland_section);
 
-    /* For each thread, find a window in that thread and send the message to
-     * it. We do this instead of using, e.g., PostThreadMessage, so that we
+    /* For each thread, send the message to a window in that thread.
+     * It doesn't really matter which window we choose, so use the
+     * clipboard message window which we know is always present. We
+     * do this instead of using, e.g., PostThreadMessage, so that we
      * get synchronous handling of the message. */
     wl_list_for_each(w, &thread_wayland_list, thread_link)
-        EnumThreadWindows(w->thread_id, send_wm_wayland_mode_change, (LPARAM)&m);
+    {
+        SendMessageW(w->clipboard_hwnd, WM_WAYLAND_MODE_CHANGE,
+                     output_id, MAKELPARAM(width, height));
+    }
 
     LeaveCriticalSection(&thread_wayland_section);
 }

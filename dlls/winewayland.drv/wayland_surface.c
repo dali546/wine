@@ -354,7 +354,7 @@ void wayland_surface_reconfigure(struct wayland_surface *surface,
     if (surface->wl_subsurface)
     {
         wl_subsurface_set_position(surface->wl_subsurface, x, y);
-        wl_surface_commit(surface->wl_surface);
+        wl_surface_commit(surface->parent->wl_surface);
     }
 
     /* Use a viewport, if supported, to handle display mode changes. */

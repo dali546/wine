@@ -1264,6 +1264,7 @@ static struct unix_funcs unix_funcs =
     __wine_get_vulkan_driver,
     __wine_get_wgl_driver,
     __wine_send_input,
+    __wine_send_internal_message_timeout,
 };
 
 NTSTATUS gdi_init(void)

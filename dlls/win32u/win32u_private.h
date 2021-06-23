@@ -209,6 +209,9 @@ struct unix_funcs
     BOOL (CDECL *get_icm_profile)( HDC hdc, BOOL allow_default, DWORD *size, WCHAR *filename );
     struct opengl_funcs * (CDECL *get_wgl_driver)( HDC hdc, UINT version );
     BOOL (CDECL *wine_send_input)( HWND hwnd, const INPUT *input, const RAWINPUT *rawinput );
+    LRESULT (CDECL *wine_send_internal_message_timeout)( DWORD dest_pid, DWORD dest_tid,
+                                                         UINT msg, WPARAM wparam, LPARAM lparam,
+                                                         UINT flags, UINT timeout, PDWORD_PTR res_ptr );
 };
 
 /* clipboard.c */

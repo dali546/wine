@@ -3388,6 +3388,19 @@ LRESULT MSG_SendInternalMessageTimeout( DWORD dest_pid, DWORD dest_tid,
     return ret;
 }
 
+/***********************************************************************
+ *		__wine_send_internal_message_timeout  (USER32.@)
+ *
+ * Same as SendMessageTimeoutW but sends the message to a specific thread
+ * without requiring a window handle. Only works for internal Wine messages.
+ */
+LRESULT CDECL __wine_send_internal_message_timeout( DWORD dest_pid, DWORD dest_tid,
+                                                    UINT msg, WPARAM wparam, LPARAM lparam,
+                                                    UINT flags, UINT timeout, PDWORD_PTR res_ptr )
+{
+    return MSG_SendInternalMessageTimeout( dest_pid, dest_tid, msg, wparam, lparam,
+                                           flags, timeout, res_ptr );
+}
 
 /***********************************************************************
  *		SendMessageTimeoutW  (USER32.@)

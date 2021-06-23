@@ -836,3 +836,4 @@
 #
 @ cdecl __wine_send_input(long ptr)
 @ cdecl __wine_set_pixel_format(long long)
+@ cdecl __wine_send_internal_message_timeout(long long long long long long long ptr)

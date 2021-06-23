@@ -1825,6 +1825,9 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_WAYLAND_SURFACE_OUTPUT_CHANGE:
         handle_wm_wayland_surface_output_change(hwnd);
         break;
+    case WM_WAYLAND_CLIPBOARD_WINDOW_CREATE:
+        wayland_data_device_ensure_clipboard_window(thread_wayland());
+        break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
     }

@@ -915,6 +915,11 @@ static void data_device_selection(void *data,
     TRACE("wl_data_offer=%u\n",
           wl_data_offer ? wl_proxy_get_id((struct wl_proxy*)wl_data_offer) : 0);
 
+    /* We may get a selection event before we have had a chance to create the
+     * clipboard window after thread init (see wayland_init_thread_data), so
+     * we need to ensure we have a valid window here. */
+    wayland_data_device_ensure_clipboard_window(wayland);
+
     /* Destroy any previous data offer. */
     data_device_destroy_clipboard_data_offer(data_device);
 
@@ -1151,12 +1156,7 @@ static LRESULT CALLBACK clipboard_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
     return DefWindowProcW( hwnd, msg, wp, lp );
 }
 
-/**********************************************************************
- *          wayland_data_device_init_clipboard_window
- *
- * Initializes the window which handles clipboard messages.
- */
-HWND wayland_data_device_create_clipboard_window(void)
+static HWND wayland_data_device_create_clipboard_window(void)
 {
     static const WCHAR clipboard_classname[] = {
         '_','_','w','i','n','e','_','c','l','i','p','b','o','a','r','d',
@@ -1188,6 +1188,18 @@ HWND wayland_data_device_create_clipboard_window(void)
 
     TRACE("clipboard_hwnd=%p\n", clipboard_hwnd);
     return clipboard_hwnd;
+}
+
+/**********************************************************************
+ *          wayland_data_device_ensure_clipboard_window
+ *
+ * Creates (if not already created) the window which handles clipboard
+ * messages for the specified wayland instance.
+ */
+void wayland_data_device_ensure_clipboard_window(struct wayland *wayland)
+{
+    if (!wayland->clipboard_hwnd)
+        wayland->clipboard_hwnd = wayland_data_device_create_clipboard_window();
 }
 
 /*********************************************************

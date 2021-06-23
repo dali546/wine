@@ -48,6 +48,7 @@ enum wayland_window_message
     WM_WAYLAND_MODE_CHANGE = 0x80001001,
     WM_WAYLAND_POINTER_CONFINEMENT_UPDATE = 0x80001002,
     WM_WAYLAND_SURFACE_OUTPUT_CHANGE = 0x80001003,
+    WM_WAYLAND_CLIPBOARD_WINDOW_CREATE = 0x80001004,
 };
 
 enum wayland_configure_flags
@@ -386,7 +387,7 @@ RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_bu
  */
 
 void wayland_data_device_init(struct wayland *wayland);
-HWND wayland_data_device_create_clipboard_window(void);
+void wayland_data_device_ensure_clipboard_window(struct wayland *wayland);
 
 /**********************************************************************
  *          Keyboard helpers

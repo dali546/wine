@@ -1243,6 +1243,7 @@ BOOL wayland_init(struct wayland *wayland)
     wayland->event_notification_pipe[0] = -1;
     wayland->event_notification_pipe[1] = -1;
 
+    wayland->process_id = GetCurrentProcessId();
     wayland->thread_id = GetCurrentThreadId();
     wayland->wl_display = process_wl_display;
 
@@ -1629,15 +1630,18 @@ void wayland_notify_wine_mode_change(int output_id, int width, int height)
 
     EnterCriticalSection(&thread_wayland_section);
 
-    /* For each thread, send the message to a window in that thread.
-     * It doesn't really matter which window we choose, so use the
-     * clipboard message window which we know is always present. We
-     * do this instead of using, e.g., PostThreadMessage, so that we
-     * get synchronous handling of the message. */
+    /* Each thread maintains its own output mode information, so we need to
+     * notify all threads about the wine mode change. We can't guarantee that
+     * all threads will have windows to which we could potentially send the
+     * notification message to, so we use the internal send function to target
+     * the threads directly. We can't use PostThreadMessage since we require
+     * synchronous message handling. */
     wl_list_for_each(w, &thread_wayland_list, thread_link)
     {
-        SendMessageW(w->clipboard_hwnd, WM_WAYLAND_MODE_CHANGE,
-                     output_id, MAKELPARAM(width, height));
+        __wine_send_internal_message_timeout(w->process_id, w->thread_id,
+                                             WM_WAYLAND_MODE_CHANGE,
+                                             output_id, MAKELPARAM(width, height),
+                                             0, -1, NULL);
     }
 
     LeaveCriticalSection(&thread_wayland_section);

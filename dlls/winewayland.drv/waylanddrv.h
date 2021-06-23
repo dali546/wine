@@ -113,6 +113,7 @@ struct wayland_pointer
 
 struct wayland
 {
+    DWORD process_id;
     DWORD thread_id;
     struct wl_display *wl_display;
     struct wl_event_queue *wl_event_queue;

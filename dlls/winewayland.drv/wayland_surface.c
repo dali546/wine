@@ -765,6 +765,8 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
     glvk->offset_y = wine_y;
 
     wl_subsurface_set_position(glvk->wl_subsurface, x, y);
+    wl_surface_commit(glvk->parent->wl_surface);
+
     /* The EGL window size needs to be in wine coords since this affects
      * the effective EGL buffer size. */
     if (glvk->wl_egl_window)

@@ -979,7 +979,6 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
     int monitor_width;
     int monitor_height;
     struct wayland_win_data *parent_data;
-    BOOL wait_for_configure = FALSE;
     enum wayland_configure_flags conf_flags = 0;
     struct wayland_output *output;
 
@@ -1030,30 +1029,21 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
     if (data->maximized && !(conf_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
     {
         if (!data->handling_wayland_configure_event)
-        {
             xdg_toplevel_unset_maximized(data->wayland_surface->xdg_toplevel);
-            wait_for_configure = TRUE;
-        }
         data->maximized = FALSE;
     }
 
     if (data->fullscreen && !(conf_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
     {
         if (!data->handling_wayland_configure_event)
-        {
             xdg_toplevel_unset_fullscreen(data->wayland_surface->xdg_toplevel);
-            wait_for_configure = TRUE;
-        }
         data->fullscreen = FALSE;
     }
 
     if (!data->maximized && (conf_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
     {
         if (!data->handling_wayland_configure_event)
-        {
             xdg_toplevel_set_maximized(data->wayland_surface->xdg_toplevel);
-            wait_for_configure = TRUE;
-        }
         data->maximized = TRUE;
     }
 
@@ -1065,7 +1055,6 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
         {
             xdg_toplevel_set_fullscreen(data->wayland_surface->xdg_toplevel,
                                         output ? output->wl_output : NULL);
-            wait_for_configure = TRUE;
         }
         data->fullscreen = TRUE;
     }
@@ -1076,20 +1065,56 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
     TRACE("hwnd=%p current state maximized=%d fullscreen=%d\n",
           data->hwnd, data->maximized, data->fullscreen);
 
-    /* If have just requested a state change, wayland hasn't yet replied with a
-     * configure for the new state (and thus we haven't acked it), so all
-     * current maximize/fullscreen limitations still apply. To avoid wayland
-     * compositors erroring out on us, don't reconfigure the surfaces yet. We
-     * will reconfigure them when we get the configure event. */
-    if (wait_for_configure)
+    if (data->wayland_surface->xdg_toplevel)
     {
-        /* Reset any pending configure serial to avoid handling events older than
-         * the ones we expect to get from the new state. */
-        data->wayland_surface->pending.serial = 0;
-        wl_display_flush(data->wayland_surface->wayland->wl_display);
-        TRACE("hwnd=%p waiting for configure for state maximized=%d fullscreen=%d\n",
-              data->hwnd, data->maximized, data->fullscreen);
-        return;
+        int wayland_width, wayland_height;
+        BOOL compat_with_current = FALSE;
+        BOOL compat_with_pending = FALSE;
+
+        wayland_surface_coords_rounded_from_wine(data->wayland_surface, width, height,
+                                                 &wayland_width, &wayland_height);
+
+        if (data->wayland_surface->current.serial &&
+            wayland_surface_configure_is_compatible(&data->wayland_surface->current,
+                                                    wayland_width, wayland_height,
+                                                    conf_flags))
+        {
+            compat_with_current = TRUE;
+        }
+
+        if (data->wayland_surface->pending.serial &&
+            wayland_surface_configure_is_compatible(&data->wayland_surface->pending,
+                                                    wayland_width, wayland_height,
+                                                    conf_flags))
+        {
+            compat_with_pending = TRUE;
+        }
+
+        TRACE("current conf serial=%d size=%dx%d flags=%#x\n compat=%d\n",
+              data->wayland_surface->current.serial,
+              data->wayland_surface->current.width,
+              data->wayland_surface->current.height,
+              data->wayland_surface->current.configure_flags,
+              compat_with_current);
+        TRACE("pending conf serial=%d size=%dx%d flags=%#x compat=%d\n",
+              data->wayland_surface->pending.serial,
+              data->wayland_surface->pending.width,
+              data->wayland_surface->pending.height,
+              data->wayland_surface->pending.configure_flags,
+              compat_with_pending);
+
+        /* Only update the wayland surface state to match the window
+         * configuration if the surface can accept the new config, in order to
+         * avoid causing a protocol error. */
+        if (!compat_with_pending && !compat_with_current)
+        {
+            TRACE("hwnd=%p window state not compatible with current or "
+                  "pending wayland surface configuration\n", data->hwnd);
+            return;
+        }
+
+        if (compat_with_pending)
+            wayland_surface_ack_configure(data->wayland_surface);
     }
 
     /* We manage some top level, popup window with subsurfaces (see create_win_data),
@@ -1123,27 +1148,6 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
                                      data->client_rect.bottom - data->client_rect.top);
 
     wayland_surface_reconfigure_apply(data->wayland_surface);
-
-    TRACE("conf->serial=%d conf->size=%dx%d conf->flags=%#x\n",
-          data->wayland_surface->pending.serial,
-          data->wayland_surface->pending.width,
-          data->wayland_surface->pending.height,
-          data->wayland_surface->pending.configure_flags);
-
-    /* If we have a pending configure event, and it is compatible with the new state,
-     * ack the event. */
-    if (data->wayland_surface->pending.serial)
-    {
-        int wayland_width, wayland_height;
-        wayland_surface_coords_rounded_from_wine(data->wayland_surface, width, height,
-                                                 &wayland_width, &wayland_height);
-        if (wayland_surface_configure_is_compatible(&data->wayland_surface->pending,
-                                                    wayland_width, wayland_height,
-                                                    conf_flags))
-        {
-            wayland_surface_ack_configure(data->wayland_surface);
-        }
-    }
 
     wayland_surface_update_pointer_confinement(data->wayland_surface);
 

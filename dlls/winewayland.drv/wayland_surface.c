@@ -335,6 +335,10 @@ err:
  *
  * Note that this doesn't configure any associated GL/VK subsurface,
  * wayland_surface_reconfigure_glvk() needs to be called separately.
+ *
+ * This function sets up but doesn't actually apply any new configuration.
+ * The wayland_surface_reconfigure_apply() needs to be called for changes
+ * to take effect.
  */
 void wayland_surface_reconfigure(struct wayland_surface *surface,
                                  int wine_x, int wine_y,
@@ -352,10 +356,7 @@ void wayland_surface_reconfigure(struct wayland_surface *surface,
           x, y, width, height);
 
     if (surface->wl_subsurface)
-    {
         wl_subsurface_set_position(surface->wl_subsurface, x, y);
-        wl_surface_commit(surface->parent->wl_surface);
-    }
 
     /* Use a viewport, if supported, to handle display mode changes. */
     if (surface->wp_viewport)
@@ -662,6 +663,8 @@ BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
                                      client_rect.right - client_rect.left,
                                      client_rect.bottom - client_rect.top);
 
+    wayland_surface_reconfigure_apply(surface);
+
     return TRUE;
 
 err:
@@ -707,6 +710,8 @@ BOOL wayland_surface_create_or_ref_vk(struct wayland_surface *surface)
                                      client_rect.right - client_rect.left,
                                      client_rect.bottom - client_rect.top);
 
+    wayland_surface_reconfigure_apply(surface);
+
     return TRUE;
 }
 
@@ -741,6 +746,10 @@ void wayland_surface_unref_glvk(struct wayland_surface *surface)
  * a wayland surface.
  *
  * The coordinates and sizes should be given in wine's coordinate space.
+ *
+ * This function sets up but doesn't actually apply any new configuration.
+ * The wayland_surface_reconfigure_apply() needs to be called for changes
+ * to take effect.
  */
 void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
                                       int wine_x, int wine_y,
@@ -765,7 +774,6 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
     glvk->offset_y = wine_y;
 
     wl_subsurface_set_position(glvk->wl_subsurface, x, y);
-    wl_surface_commit(glvk->parent->wl_surface);
 
     /* The EGL window size needs to be in wine coords since this affects
      * the effective EGL buffer size. */
@@ -783,9 +791,30 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
             wp_viewport_set_destination(glvk->wp_viewport, -1, -1);
     }
 
-    wl_surface_commit(glvk->wl_surface);
-
     wayland_surface_unref_glvk(surface);
+}
+
+/**********************************************************************
+ *          wayland_surface_reconfigure_apply
+ *
+ * Applies the configuration set by previous calls to the
+ * wayland_surface_reconfigure{_glvk}() functions.
+ */
+void wayland_surface_reconfigure_apply(struct wayland_surface *surface)
+{
+    struct wayland_surface *glvk = wayland_surface_ref_glvk(surface);
+
+    if (glvk)
+    {
+        wl_surface_commit(glvk->wl_surface);
+        wayland_surface_unref_glvk(surface);
+    }
+
+    wl_surface_commit(surface->wl_surface);
+
+    /* Commit the parent so any subsurface repositioning takes effect. */
+    if (surface->parent)
+        wl_surface_commit(surface->parent->wl_surface);
 }
 
 /**********************************************************************

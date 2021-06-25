@@ -114,6 +114,7 @@ struct wayland_pointer
 
 struct wayland
 {
+    BOOL initialized;
     DWORD process_id;
     DWORD thread_id;
     struct wl_display *wl_display;

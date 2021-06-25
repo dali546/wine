@@ -1315,6 +1315,8 @@ BOOL wayland_init(struct wayland *wayland)
 
     SetRect(&wayland->cursor_clip, INT_MIN, INT_MIN, INT_MAX, INT_MAX);
 
+    wayland->initialized = TRUE;
+
     return TRUE;
 }
 

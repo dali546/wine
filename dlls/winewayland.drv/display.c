@@ -515,8 +515,15 @@ done:
     RegCloseKey(video_hkey);
     release_display_devices_init_mutex(mutex);
 
-    if (force_send_change ||
-        GetCurrentThreadId() == GetWindowThreadProcessId(GetDesktopWindow(), NULL))
+    /* During thread wayland initialization we will get our initial output
+     * information and init the display devices. There is no need to send out
+     * WM_DISPLAYCHANGE in this case, since this is the initial display state.
+     * Additionally, thread initialization may occur in a context that has
+     * acquired the internal Wine user32 lock, and sending messages would lead
+     * to an internal user32 lock error. */
+    if (wayland->initialized &&
+        (force_send_change ||
+         GetCurrentThreadId() == GetWindowThreadProcessId(GetDesktopWindow(), NULL)))
     {
         /* The first valid output is the primary. */
         wl_list_for_each(output, &wayland->output_list, link)

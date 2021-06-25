@@ -1121,6 +1121,8 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
                                      data->client_rect.right - data->client_rect.left,
                                      data->client_rect.bottom - data->client_rect.top);
 
+    wayland_surface_reconfigure_apply(data->wayland_surface);
+
     TRACE("conf->serial=%d conf->size=%dx%d conf->flags=%#x\n",
           data->wayland_surface->pending.serial,
           data->wayland_surface->pending.width,

@@ -1262,17 +1262,6 @@ wayland_surface_get_toplevel(struct wayland_surface *surface)
     return surface;
 }
 
-static BOOL wayland_surface_presented_in_output(struct wayland_surface *surface,
-                                                struct wayland_output *output)
-{
-    struct wayland_output_ref *ref;
-
-    wl_list_for_each(ref, &surface->output_ref_list, link)
-        if (ref->output == output) return TRUE;
-
-    return FALSE;
-}
-
 /**********************************************************************
  *          wayland_surface_set_main_output
  *
@@ -1284,7 +1273,6 @@ void wayland_surface_set_main_output(struct wayland_surface *surface,
 {
     /* Don't update non-toplevels. */
     if (surface->parent) return;
-    if (!wayland_surface_presented_in_output(surface, output)) return;
 
     TRACE("surface=%p output->id,name=0x%x,%s => output->id=0x%x,%s\n",
           surface,

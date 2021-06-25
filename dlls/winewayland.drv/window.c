@@ -993,10 +993,11 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
           data->hwnd, width, height, monitor_width, monitor_height,
           data->maximized, data->fullscreen, data->handling_wayland_configure_event);
 
+    wayland_surface_set_main_output(data->wayland_surface, output);
+
     if (!(style & WS_VISIBLE))
     {
         wayland_surface_unmap(data->wayland_surface);
-        wayland_surface_set_main_output(data->wayland_surface, NULL);
         return;
     }
 
@@ -1145,7 +1146,6 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
     }
 
     wayland_surface_update_pointer_confinement(data->wayland_surface);
-    wayland_surface_set_main_output(data->wayland_surface, output);
 
     release_win_data(parent_data);
 }

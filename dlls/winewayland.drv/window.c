@@ -87,6 +87,8 @@ struct wayland_win_data
     enum wayland_configure_flags wayland_configure_event_flags;
     /* whether this window has been deactivated by wayland after minimization */
     BOOL deactivated_after_minimization;
+    /* whether this window is visible */
+    BOOL visible;
 };
 
 static CRITICAL_SECTION win_data_section;
@@ -828,7 +830,8 @@ void CDECL WAYLAND_DestroyWindow(HWND hwnd)
  *
  * Create a data window structure for an existing window.
  */
-static struct wayland_win_data *create_win_data(HWND hwnd, const RECT *window_rect,
+static struct wayland_win_data *create_win_data(HWND hwnd, UINT swp_flags,
+                                                const RECT *window_rect,
                                                 const RECT *client_rect)
 {
     struct wayland_win_data *data;
@@ -846,6 +849,7 @@ static struct wayland_win_data *create_win_data(HWND hwnd, const RECT *window_re
     data->parent = (parent == GetDesktopWindow()) ? 0 : parent;
     data->window_rect = *window_rect;
     data->client_rect = *client_rect;
+    data->visible = (style & WS_VISIBLE) == WS_VISIBLE || (swp_flags & SWP_SHOWWINDOW);
 
     /* Only create wayland surfaces for toplevel windows. Let Wine core handle
      * the drawing of other windows in their corresponding top level window
@@ -862,11 +866,15 @@ static struct wayland_win_data *create_win_data(HWND hwnd, const RECT *window_re
         data->effective_parent = effective_parent_hwnd;
 
         /* Use wayland subsurfaces for owned win32 windows that are transient (i.e., don't have
-         * a titlebar). Otherwise make them wayland toplevels. */
+         * a titlebar). Otherwise, if the window is visible make it wayland toplevel. Finally,
+         * if the window is not visible create a plain (without a role) surface to avoid
+         * polluting the compositor with empty xdg_toplevels. */
         if ((style & WS_CAPTION) != WS_CAPTION && parent_surface)
             data->wayland_surface = wayland_surface_create_subsurface(wayland, parent_surface);
-        else
+        else if (data->visible)
             data->wayland_surface = wayland_surface_create_toplevel(wayland, parent_surface);
+        else
+            data->wayland_surface = wayland_surface_create_plain(wayland);
 
         data->wayland_surface->hwnd = hwnd;
     }
@@ -886,15 +894,47 @@ static struct wayland_win_data *create_win_data(HWND hwnd, const RECT *window_re
  * any related GL state.
  */
 static struct wayland_win_data *recreate_win_data(struct wayland_win_data *data,
-                                                  HWND hwnd, const RECT *window_rect,
+                                                  HWND hwnd, UINT swp_flags, const RECT *window_rect,
                                                   const RECT *client_rect)
 {
     TRACE("hwnd=%p\n", hwnd);
     wayland_invalidate_vulkan_objects(hwnd);
     free_win_data(data);
-    data = create_win_data(hwnd, window_rect, client_rect);
+    data = create_win_data(hwnd, swp_flags, window_rect, client_rect);
     wayland_update_gl_drawable(hwnd, data->wayland_surface);
     return data;
+}
+
+static BOOL win_data_needs_recreation(struct wayland_win_data *data,
+                                      UINT swp_flags, const RECT *window_rect)
+{
+    HWND parent = GetAncestor(data->hwnd, GA_PARENT);
+
+    if (parent == GetDesktopWindow()) parent = 0;
+
+    /* Change of parentage (either actual or effective) requires recreating the
+     * whole win_data to ensure we have a properly owned wayland surface. We
+     * check for change of effective parent only if the window moved in any
+     * way. */
+    if ((!EqualRect(&data->window_rect, window_rect) &&
+         data->effective_parent != get_effective_parent(data->hwnd, window_rect)) ||
+        data->parent != parent)
+    {
+        return TRUE;
+    }
+
+    /* If this is currently or potentially a toplevel surface, and its
+     * visibility state has changed, recreate win_data so that we only have
+     * xdg_toplevels for visible windows. */
+    if (data->wayland_surface && !data->wayland_surface->wl_subsurface)
+    {
+        BOOL visible = (GetWindowLongW(data->hwnd, GWL_STYLE) & WS_VISIBLE) ||
+                       (swp_flags & SWP_SHOWWINDOW);
+        if (data->visible != visible)
+            return TRUE;
+    }
+
+    return FALSE;
 }
 
 /***********************************************************************
@@ -910,26 +950,19 @@ BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     COLORREF key;
     BYTE alpha;
     BOOL layered = GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED;
-    HWND parent = GetAncestor(hwnd, GA_PARENT);
-
-    TRACE("win %p window %s client %s visible %s style %08x flags %08x layered %d after %p\n",
+    TRACE("win %p window %s client %s visible %s style %08x ex %08x flags %08x layered %d after %p\n",
            hwnd, wine_dbgstr_rect(window_rect), wine_dbgstr_rect(client_rect),
            wine_dbgstr_rect(visible_rect),
-           GetWindowLongW(hwnd, GWL_STYLE), swp_flags , layered, insert_after);
+           GetWindowLongW(hwnd, GWL_STYLE),
+           GetWindowLongW(hwnd, GWL_EXSTYLE),
+           swp_flags , layered, insert_after);
 
-    if (!data && !(data = create_win_data(hwnd, window_rect, client_rect))) return TRUE;
+    if (!data && !(data = create_win_data(hwnd, swp_flags, window_rect, client_rect))) return TRUE;
 
-    if (parent == GetDesktopWindow()) parent = 0;
-
-    /* Change of parentage (either actual or effective) requires recreating the
-     * whole win_data to ensure we have a properly owned wayland surface. We
-     * check for change of effective parent only if the window moved in any way. */
-    if ((!EqualRect(&data->window_rect, window_rect) &&
-         data->effective_parent != get_effective_parent(hwnd, window_rect)) ||
-        data->parent != parent)
+    if (win_data_needs_recreation(data, swp_flags, window_rect))
     {
         EnterCriticalSection(&win_data_section);
-        data = recreate_win_data(data, hwnd, window_rect, client_rect);
+        data = recreate_win_data(data, hwnd, swp_flags, window_rect, client_rect);
         LeaveCriticalSection(&win_data_section);
     }
 

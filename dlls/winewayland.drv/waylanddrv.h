@@ -321,6 +321,7 @@ struct wayland_shm_buffer *wayland_buffer_queue_acquire_buffer(struct wayland_bu
  *          Wayland surface
  */
 
+struct wayland_surface *wayland_surface_create_plain(struct wayland *wayland);
 struct wayland_surface *wayland_surface_create_toplevel(struct wayland *wayland,
                                                         struct wayland_surface *parent);
 struct wayland_surface *wayland_surface_create_subsurface(struct wayland *wayland,

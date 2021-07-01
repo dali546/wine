@@ -237,6 +237,35 @@ err:
 }
 
 /**********************************************************************
+ *          wayland_surface_create_plain
+ *
+ * Creates a plain, role-less wayland surface.
+ */
+struct wayland_surface *wayland_surface_create_plain(struct wayland *wayland)
+{
+    struct wayland_surface *surface;
+
+    TRACE("\n");
+
+    surface = wayland_surface_create_common(wayland);
+    if (!surface)
+        goto err;
+
+    EnterCriticalSection(&wayland->crit);
+    wl_list_insert(&wayland->surface_list, &surface->link);
+    LeaveCriticalSection(&wayland->crit);
+
+    wl_surface_commit(surface->wl_surface);
+
+    return surface;
+
+err:
+    if (surface)
+        wayland_surface_destroy(surface);
+    return NULL;
+}
+
+/**********************************************************************
  *          wayland_surface_create_toplevel
  *
  * Creates a toplevel wayland surface, optionally associated with a parent

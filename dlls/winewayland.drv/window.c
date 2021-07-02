@@ -1547,6 +1547,12 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     int origin_x, origin_y;
 
     if (!(data = get_win_data(hwnd))) return 0;
+    if (!data->wayland_surface || !data->wayland_surface->xdg_toplevel)
+    {
+        TRACE("no suitable wayland surface, returning\n");
+        release_win_data(data);
+        return 0;
+    }
 
     wsurface = data->wayland_surface;
 
@@ -1672,15 +1678,18 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
 
 static void handle_wm_wayland_surface_output_change(HWND hwnd)
 {
-    struct wayland_win_data *data;
     struct wayland_surface *wsurface;
     int x, y, w, h;
     UINT swp_flags;
 
     TRACE("hwnd=%p\n", hwnd);
-    if (!(data = get_win_data(hwnd))) return;
-    wsurface = data->wayland_surface;
-    release_win_data(data);
+
+    wsurface = wayland_surface_for_hwnd(hwnd);
+    if (!wsurface || !wsurface->xdg_toplevel)
+    {
+        TRACE("no suitable wayland surface, returning\n");
+        return;
+    }
 
     /* When becoming fullscreen (particularly on a different output), we may
      * get some confusing enter/leave events from the compositor. Ignore these
@@ -1775,10 +1784,12 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         else
         {
-            struct wayland_win_data *data;
-            if (!(data = get_win_data(hwnd))) return 0;
-            SetTimer(hwnd, (UINT_PTR)data->wayland_surface->wl_surface, 10, post_configure);
-            release_win_data(data);
+            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd(hwnd);
+            if (wayland_surface && wayland_surface->xdg_toplevel)
+            {
+                SetTimer(hwnd, (UINT_PTR)wayland_surface->wl_surface, 10,
+                         post_configure);
+            }
         }
         break;
     case WM_WAYLAND_MODE_CHANGE:

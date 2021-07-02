@@ -157,13 +157,21 @@ static HWND get_effective_parent(HWND hwnd, const RECT *window_rect)
 {
     struct wayland *wayland = thread_init_wayland();
     DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
-    HWND parent_hwnd = GetParent(hwnd);
+    /* GWLP_HWNDPARENT gets the owner for any kind of toplevel windows,
+     * and the parent for child windows. */
+    HWND parent_hwnd = (HWND)GetWindowLongPtrW(hwnd, GWLP_HWNDPARENT);
     HWND effective_parent_hwnd;
     MONITORINFOEXW mi;
     double monitor_width;
     double monitor_height;
     double window_width;
     double window_height;
+
+    if (parent_hwnd == GetDesktopWindow()) parent_hwnd = 0;
+
+    /* Child windows don't have an effective parent, unless they are children
+     * of the desktop (thus effectively top-level). */
+    if ((style & WS_CHILD) && parent_hwnd) return 0;
 
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(MonitorFromRect(window_rect, MONITOR_DEFAULTTOPRIMARY),
@@ -173,12 +181,6 @@ static HWND get_effective_parent(HWND hwnd, const RECT *window_rect)
     monitor_height = mi.rcMonitor.bottom - mi.rcMonitor.top;
     window_width = window_rect->right - window_rect->left;
     window_height = window_rect->bottom - window_rect->top;
-
-    if (parent_hwnd == GetDesktopWindow()) parent_hwnd = 0;
-
-    /* Child windows don't have an effective parent, unless they are children
-     * of the desktop (thus effectively top-level). */
-    if ((style & WS_CHILD) && parent_hwnd) return 0;
 
     /* Many applications use top level, unowned (or owned by the desktop)
      * popup windows for menus and tooltips and depend on screen

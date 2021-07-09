@@ -786,15 +786,17 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface,
     if (glvk->wl_egl_window)
         wl_egl_window_resize(glvk->wl_egl_window, wine_width, wine_height, 0, 0);
 
-    /* Use a viewport, if supported, to ensure GL surfaces remain inside
-     * their parent's boundaries when resizing and also to handle display mode
-     * changes. */
+    /* Use a viewport, if supported, to ensure GL surfaces remain inside their
+     * parent's boundaries when resizing and also to handle display mode
+     * changes. If the size is invalid use a 1x1 destination (instead of
+     * unsetting with -1x-1) since many apps don't respect a GL/VK 0x0 size
+     * which can happen, e.g., when an app is minimized. */
     if (glvk->wp_viewport)
     {
         if (width != 0 && height != 0)
             wp_viewport_set_destination(glvk->wp_viewport, width, height);
         else
-            wp_viewport_set_destination(glvk->wp_viewport, -1, -1);
+            wp_viewport_set_destination(glvk->wp_viewport, 1, 1);
     }
 
     wayland_surface_unref_glvk(surface);

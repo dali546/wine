@@ -40,13 +40,19 @@ static void handle_xdg_surface_configure(void *data, struct xdg_surface *xdg_sur
 {
     struct wayland_surface *surface = data;
     uint32_t last_serial = surface->pending.serial;
+    BOOL last_processed = surface->pending.processed;
 
     TRACE("hwnd=%p serial=%u\n", surface->hwnd, serial);
 
     surface->pending.serial = serial;
+    surface->pending.processed = FALSE;
 
-    /* If we already have a pending configure event, no need to repost */
-    if (last_serial)
+    /* If we have an unprocessed WM_WAYLAND_CONFIGURE message, no need to
+     * repost. Note that checking only for a valid serial is not enough to
+     * guarantee that there is a pending WM_WAYLAND_CONFIGURE message: we may
+     * have processed the message but not acked the configure request due to
+     * surface size incompatibilities (see window.c:update_wayland_state()). */
+    if (last_serial && !last_processed)
     {
         TRACE("not reposting, last_serial=%u\n", last_serial);
         return;

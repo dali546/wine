@@ -1568,6 +1568,8 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
         return 0;
     }
 
+    wsurface->pending.processed = TRUE;
+
     data->handling_wayland_configure_event = TRUE;
     data->wayland_configure_event_flags = wsurface->pending.configure_flags;
 

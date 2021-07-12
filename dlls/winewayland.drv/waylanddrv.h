@@ -197,6 +197,7 @@ struct wayland_surface_configure
     int height;
     enum wayland_configure_flags configure_flags;
     uint32_t serial;
+    BOOL processed;
 };
 
 struct wayland_output_ref

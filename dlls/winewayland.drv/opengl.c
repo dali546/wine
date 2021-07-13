@@ -132,12 +132,16 @@ static struct gl_drawable *create_gl_drawable(HWND hwnd, HDC hdc, int format)
 {
     static const int attribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
     struct gl_drawable *gl = heap_alloc(sizeof(*gl));
-    struct wayland_surface *wayland_surface = wayland_surface_for_hwnd(hwnd);
+    struct wayland_surface *wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
 
     TRACE("hwnd=%p wayland_surface=%p\n", hwnd, wayland_surface);
 
-    if (wayland_surface && !wayland_surface_create_or_ref_gl(wayland_surface))
-        return NULL;
+    if (wayland_surface)
+    {
+        BOOL ref_gl = wayland_surface_create_or_ref_gl(wayland_surface);
+        wayland_surface_for_hwnd_unlock(wayland_surface);
+        if (!ref_gl) return NULL;
+    }
 
     gl->hwnd   = hwnd;
     gl->hdc    = hdc;

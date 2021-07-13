@@ -262,17 +262,26 @@ static void release_win_data(struct wayland_win_data *data)
 }
 
 /***********************************************************************
- *           wayland_surface_for_hwnd
+ *           wayland_surface_for_hwnd_lock
  */
-struct wayland_surface *wayland_surface_for_hwnd(HWND hwnd)
+struct wayland_surface *wayland_surface_for_hwnd_lock(HWND hwnd)
 {
-    struct wayland_surface *ret;
     struct wayland_win_data *data = get_win_data(hwnd);
 
-    ret = !data ? NULL : data->wayland_surface;
+    if (data && data->wayland_surface)
+        return data->wayland_surface;
+
     release_win_data(data);
 
-    return ret;
+    return NULL;
+}
+
+/***********************************************************************
+ *           wayland_surface_for_hwnd_unlock
+ */
+void wayland_surface_for_hwnd_unlock(struct wayland_surface *surface)
+{
+    if (surface) LeaveCriticalSection(&win_data_section);
 }
 
 /* Window surface support */
@@ -691,7 +700,8 @@ static struct window_surface *create_surface(HWND hwnd, const RECT *rect,
     surface->header.rect  = *rect;
     surface->header.ref   = 1;
     surface->hwnd         = hwnd;
-    surface->wayland_surface = wayland_surface_for_hwnd(hwnd);
+    surface->wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
+    wayland_surface_for_hwnd_unlock(surface->wayland_surface);
     surface->wayland_buffer_queue =
         surface->wayland_surface ?
         wayland_buffer_queue_create(surface->wayland_surface->wayland, width, height,
@@ -861,7 +871,10 @@ static struct wayland_win_data *create_win_data(HWND hwnd, UINT swp_flags,
         struct wayland_surface *parent_surface = NULL;
 
         if (effective_parent_hwnd)
-            parent_surface = wayland_surface_for_hwnd(effective_parent_hwnd);
+        {
+            parent_surface = wayland_surface_for_hwnd_lock(effective_parent_hwnd);
+            wayland_surface_for_hwnd_unlock(parent_surface);
+        }
 
         data->effective_parent = effective_parent_hwnd;
 
@@ -1258,8 +1271,10 @@ UINT CDECL WAYLAND_ShowWindow(HWND hwnd, INT cmd, RECT *rect, UINT swp)
         swp &= ~(SWP_NOMOVE | SWP_NOCLIENTMOVE);
     }
 
-    if ((wsurface = wayland_surface_for_hwnd(hwnd)) && wsurface->xdg_toplevel)
+    if ((wsurface = wayland_surface_for_hwnd_lock(hwnd)) && wsurface->xdg_toplevel)
         xdg_toplevel_set_minimized(wsurface->xdg_toplevel);
+
+    wayland_surface_for_hwnd_unlock(wsurface);
 
     return swp;
 }
@@ -1391,12 +1406,14 @@ void CDECL WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style)
  */
 void CDECL WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text)
 {
-    struct wayland_surface *wsurface = wayland_surface_for_hwnd(hwnd);
+    struct wayland_surface *wsurface = wayland_surface_for_hwnd_lock(hwnd);
 
     TRACE("hwnd=%p text=%s\n", hwnd, wine_dbgstr_w(text));
 
     if (wsurface && wsurface->xdg_toplevel)
         wayland_surface_set_title(wsurface, text);
+
+    wayland_surface_for_hwnd_unlock(wsurface);
 }
 
 /***********************************************************************
@@ -1611,6 +1628,7 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     int width, height, wine_width, wine_height;
     BOOL needs_move_to_origin;
     int origin_x, origin_y;
+    UINT swp_flags;
 
     if (!(data = get_win_data(hwnd))) return 0;
     if (!data->wayland_surface || !data->wayland_surface->xdg_toplevel)
@@ -1750,29 +1768,25 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     else
         SetWindowLongW(hwnd, GWL_STYLE, GetWindowLongW(hwnd, GWL_STYLE) & ~WS_MAXIMIZE);
 
-    if (wine_width > 0 && wine_height > 0)
-    {
-        UINT swp_flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER |
-                         SWP_FRAMECHANGED | SWP_NOMOVE;
-        if (needs_move_to_origin) swp_flags &= ~SWP_NOMOVE;
-        /* When we are maximized or fullscreen, wayland is particular about the
-         * surface size it accepts, so don't allow the app to change it. */
-        if (flags & (WAYLAND_CONFIGURE_FLAG_MAXIMIZED|WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
-            swp_flags |= SWP_NOSENDCHANGING;
-        SetWindowPos(hwnd, 0, origin_x, origin_y, wine_width, wine_height, swp_flags);
-    }
-    else
-    {
-        wayland_surface_ack_configure(wsurface);
-        if (needs_move_to_origin)
-        {
-            SetWindowPos(hwnd, 0, origin_x, origin_y, 0, 0,
-                         SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER |
-                         SWP_NOSIZE | SWP_NOREDRAW);
-        }
-    }
+    swp_flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER;
 
-    data->handling_wayland_configure_event = FALSE;
+    if (!needs_move_to_origin) swp_flags |= SWP_NOMOVE;
+    if (wine_width > 0 && wine_height > 0)
+        swp_flags |= SWP_FRAMECHANGED;
+    else
+        swp_flags |= SWP_NOSIZE | SWP_NOREDRAW;
+    /* When we are maximized or fullscreen, wayland is particular about the
+     * surface size it accepts, so don't allow the app to change it. */
+    if (flags & (WAYLAND_CONFIGURE_FLAG_MAXIMIZED|WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
+        swp_flags |= SWP_NOSENDCHANGING;
+
+    SetWindowPos(hwnd, 0, origin_x, origin_y, wine_width, wine_height, swp_flags);
+
+    if ((data = get_win_data(hwnd)))
+    {
+        data->handling_wayland_configure_event = FALSE;
+        release_win_data(data);
+    }
 
     return 0;
 }
@@ -1785,11 +1799,11 @@ static void handle_wm_wayland_surface_output_change(HWND hwnd)
 
     TRACE("hwnd=%p\n", hwnd);
 
-    wsurface = wayland_surface_for_hwnd(hwnd);
+    wsurface = wayland_surface_for_hwnd_lock(hwnd);
     if (!wsurface || !wsurface->xdg_toplevel)
     {
         TRACE("no suitable wayland surface, returning\n");
-        return;
+        goto out;
     }
 
     /* When becoming fullscreen (particularly on a different output), we may
@@ -1802,7 +1816,7 @@ static void handle_wm_wayland_surface_output_change(HWND hwnd)
     {
         TRACE("in the middle of a fullscreen configuration, "
               "ignoring output change notification\n");
-        return;
+        goto out;
     }
 
     swp_flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER |
@@ -1846,6 +1860,9 @@ static void handle_wm_wayland_surface_output_change(HWND hwnd)
     }
 
     SetWindowPos(hwnd, 0, x, y, w, h, swp_flags);
+
+out:
+    wayland_surface_for_hwnd_unlock(wsurface);
 }
 
 static void CALLBACK post_configure(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD elapsed)
@@ -1885,12 +1902,13 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         else
         {
-            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd(hwnd);
+            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
             if (wayland_surface && wayland_surface->xdg_toplevel)
             {
                 SetTimer(hwnd, (UINT_PTR)wayland_surface->wl_surface, 10,
                          post_configure);
             }
+            wayland_surface_for_hwnd_unlock(wayland_surface);
         }
         break;
     case WM_WAYLAND_MODE_CHANGE:
@@ -1898,7 +1916,7 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_WAYLAND_POINTER_CONFINEMENT_UPDATE:
         {
-            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd(hwnd);
+            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
             if (wayland_surface)
             {
                 if (wp == WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP)
@@ -1912,6 +1930,7 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 }
                 wayland_surface_update_pointer_confinement(wayland_surface);
             }
+            wayland_surface_for_hwnd_unlock(wayland_surface);
         }
         break;
     case WM_WAYLAND_SURFACE_OUTPUT_CHANGE:

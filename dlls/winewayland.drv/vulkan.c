@@ -386,15 +386,20 @@ static VkResult wayland_vkCreateWin32SurfaceKHR(VkInstance instance,
 
     list_init(&wine_vk_surface->entry);
 
-    wayland_surface = wayland_surface_for_hwnd(create_info->hwnd);
-    if (wayland_surface && !wayland_surface_create_or_ref_vk(wayland_surface))
+    wayland_surface = wayland_surface_for_hwnd_lock(create_info->hwnd);
+    if (wayland_surface)
     {
-        ERR("Failed to allocate vulkan surface for hwnd=%p\n", create_info->hwnd);
-
-        /* VK_KHR_win32_surface only allows out of host and device memory as errors. */
-        res = VK_ERROR_OUT_OF_HOST_MEMORY;
-        goto err;
+        BOOL ref_vk = wayland_surface_create_or_ref_vk(wayland_surface);
+        wayland_surface_for_hwnd_unlock(wayland_surface);
+        if (!ref_vk)
+        {
+            ERR("Failed to allocate vulkan surface for hwnd=%p\n", create_info->hwnd);
+            /* VK_KHR_win32_surface only allows out of host and device memory as errors. */
+            res = VK_ERROR_OUT_OF_HOST_MEMORY;
+            goto err;
+        }
     }
+
     wine_vk_surface->wayland_surface = wayland_surface;
 
     create_info_host.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;

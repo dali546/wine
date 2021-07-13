@@ -343,7 +343,8 @@ void wayland_surface_unmap(struct wayland_surface *surface);
 BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *conf,
                                              int width, int height,
                                              enum wayland_configure_flags flags);
-struct wayland_surface *wayland_surface_for_hwnd(HWND hwnd);
+struct wayland_surface *wayland_surface_for_hwnd_lock(HWND hwnd);
+void wayland_surface_for_hwnd_unlock(struct wayland_surface *surface);
 void wayland_surface_coords_to_screen(struct wayland_surface *surface,
                                       double wayland_x, double wayland_y,
                                       int *screen_x, int *screen_y);

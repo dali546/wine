@@ -21,6 +21,7 @@
 @ cdecl SetParent(long long long) WAYLAND_SetParent
 @ cdecl SetWindowRgn(long long long) WAYLAND_SetWindowRgn
 @ cdecl SetWindowStyle(ptr long ptr) WAYLAND_SetWindowStyle
+@ cdecl SetWindowText(long wstr) WAYLAND_SetWindowText
 @ cdecl ShowWindow(long long ptr long) WAYLAND_ShowWindow
 @ cdecl SysCommand(long long long) WAYLAND_SysCommand
 @ cdecl UpdateLayeredWindow(long ptr ptr) WAYLAND_UpdateLayeredWindow

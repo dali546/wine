@@ -879,6 +879,13 @@ static struct wayland_win_data *create_win_data(HWND hwnd, UINT swp_flags,
         data->wayland_surface->hwnd = hwnd;
     }
 
+    if (data->wayland_surface && data->wayland_surface->xdg_toplevel)
+    {
+        WCHAR text[1024];
+        if (!InternalGetWindowText(hwnd, text, ARRAY_SIZE(text))) text[0] = 0;
+        wayland_surface_set_title(data->wayland_surface, text);
+    }
+
     EnterCriticalSection(&win_data_section);
     win_data_context[context_idx(hwnd)] = data;
 
@@ -1377,6 +1384,19 @@ void CDECL WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style)
         }
     }
     release_win_data(data);
+}
+
+/*****************************************************************
+ *		WAYLAND_SetWindowText
+ */
+void CDECL WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text)
+{
+    struct wayland_surface *wsurface = wayland_surface_for_hwnd(hwnd);
+
+    TRACE("hwnd=%p text=%s\n", hwnd, wine_dbgstr_w(text));
+
+    if (wsurface && wsurface->xdg_toplevel)
+        wayland_surface_set_title(wsurface, text);
 }
 
 /***********************************************************************

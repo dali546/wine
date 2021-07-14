@@ -89,6 +89,11 @@ struct wayland_win_data
     BOOL deactivated_after_minimization;
     /* whether this window is visible */
     BOOL visible;
+    /* Save previous state to be able to decide when to recreate wayland surface */
+    HWND           old_parent;
+    RECT           old_window_rect;
+    /* Whether a first wayland surface update is needed */
+    BOOL           wayland_surface_needs_first_update;
 };
 
 static CRITICAL_SECTION win_data_section;
@@ -302,6 +307,7 @@ struct wayland_window_surface
     void                 *bits;
     CRITICAL_SECTION      crit;
     BITMAPINFO            info;   /* variable size, must be last */
+    BOOL                  last_flush_missing_wayland;
 };
 
 static struct wayland_window_surface *get_wayland_window_surface(struct window_surface *surface)
@@ -406,6 +412,16 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
           wine_dbgstr_rect(&surface->header.rect), wine_dbgstr_rect(&surface->bounds));
 
     needs_flush = IntersectRect(&damage_rect, &surface->header.rect, &surface->bounds);
+
+    if (needs_flush && (!surface->wayland_surface || !surface->wayland_buffer_queue))
+    {
+        TRACE("missing wayland surface=%p buffer_queue=%p, returning\n",
+              surface->wayland_surface, surface->wayland_buffer_queue);
+        surface->last_flush_missing_wayland = TRUE;
+        goto done;
+    }
+    surface->last_flush_missing_wayland = FALSE;
+
     reset_bounds(&surface->bounds);
     if (!needs_flush) goto done;
 
@@ -710,13 +726,6 @@ static struct window_surface *create_surface(HWND hwnd, const RECT *rect,
     surface->header.rect  = *rect;
     surface->header.ref   = 1;
     surface->hwnd         = hwnd;
-    surface->wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
-    wayland_surface_for_hwnd_unlock(surface->wayland_surface);
-    surface->wayland_buffer_queue =
-        surface->wayland_surface ?
-        wayland_buffer_queue_create(surface->wayland_surface->wayland, width, height,
-                (src_alpha || alpha != 255) ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888) :
-        NULL;
     surface->alpha        = alpha;
     surface->src_alpha    = src_alpha;
     set_color_key(surface, color_key);
@@ -850,12 +859,9 @@ void CDECL WAYLAND_DestroyWindow(HWND hwnd)
  *
  * Create a data window structure for an existing window.
  */
-static struct wayland_win_data *create_win_data(HWND hwnd, UINT swp_flags,
-                                                const RECT *window_rect,
-                                                const RECT *client_rect)
+static struct wayland_win_data *create_win_data(HWND hwnd)
 {
     struct wayland_win_data *data;
-    DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
     HWND parent;
 
     /* Don't create win_data for desktop or HWND_MESSAGE windows. */
@@ -866,89 +872,28 @@ static struct wayland_win_data *create_win_data(HWND hwnd, UINT swp_flags,
         return NULL;
 
     data->hwnd = hwnd;
-    data->parent = (parent == GetDesktopWindow()) ? 0 : parent;
-    data->window_rect = *window_rect;
-    data->client_rect = *client_rect;
-    data->visible = (style & WS_VISIBLE) == WS_VISIBLE || (swp_flags & SWP_SHOWWINDOW);
-
-    /* Only create wayland surfaces for toplevel windows. Let Wine core handle
-     * the drawing of other windows in their corresponding top level window
-     * surface. */
-    if (!data->parent)
-    {
-        struct wayland *wayland = thread_init_wayland();
-        HWND effective_parent_hwnd = get_effective_parent(hwnd, window_rect);
-        struct wayland_surface *parent_surface = NULL;
-
-        if (effective_parent_hwnd)
-        {
-            parent_surface = wayland_surface_for_hwnd_lock(effective_parent_hwnd);
-            wayland_surface_for_hwnd_unlock(parent_surface);
-        }
-
-        data->effective_parent = effective_parent_hwnd;
-
-        /* Use wayland subsurfaces for owned win32 windows that are transient (i.e., don't have
-         * a titlebar). Otherwise, if the window is visible make it wayland toplevel. Finally,
-         * if the window is not visible create a plain (without a role) surface to avoid
-         * polluting the compositor with empty xdg_toplevels. */
-        if ((style & WS_CAPTION) != WS_CAPTION && parent_surface)
-            data->wayland_surface = wayland_surface_create_subsurface(wayland, parent_surface);
-        else if (data->visible)
-            data->wayland_surface = wayland_surface_create_toplevel(wayland, parent_surface);
-        else
-            data->wayland_surface = wayland_surface_create_plain(wayland);
-
-        data->wayland_surface->hwnd = hwnd;
-    }
-
-    if (data->wayland_surface && data->wayland_surface->xdg_toplevel)
-    {
-        WCHAR text[1024];
-        if (!InternalGetWindowText(hwnd, text, ARRAY_SIZE(text))) text[0] = 0;
-        wayland_surface_set_title(data->wayland_surface, text);
-    }
+    data->wayland_surface_needs_first_update = TRUE;
 
     EnterCriticalSection(&win_data_section);
     win_data_context[context_idx(hwnd)] = data;
 
-    TRACE("hwnd=%p wayland_surface=%p\n", data->hwnd, data->wayland_surface);
+    TRACE("hwnd=%p\n", data->hwnd);
 
     return data;
 }
 
-/***********************************************************************
- *           recreate_win_data
- *
- * Rereate a data window structure for an existing window, maintaining
- * any related GL state.
- */
-static struct wayland_win_data *recreate_win_data(struct wayland_win_data *data,
-                                                  HWND hwnd, UINT swp_flags, const RECT *window_rect,
-                                                  const RECT *client_rect)
+static BOOL win_data_wayland_surface_needs_update(struct wayland_win_data *data)
 {
-    TRACE("hwnd=%p\n", hwnd);
-    wayland_invalidate_vulkan_objects(hwnd);
-    free_win_data(data);
-    data = create_win_data(hwnd, swp_flags, window_rect, client_rect);
-    wayland_update_gl_drawable(hwnd, data->wayland_surface);
-    return data;
-}
-
-static BOOL win_data_needs_recreation(struct wayland_win_data *data,
-                                      UINT swp_flags, const RECT *window_rect)
-{
-    HWND parent = GetAncestor(data->hwnd, GA_PARENT);
-
-    if (parent == GetDesktopWindow()) parent = 0;
+    if (data->wayland_surface_needs_first_update)
+        return TRUE;
 
     /* Change of parentage (either actual or effective) requires recreating the
      * whole win_data to ensure we have a properly owned wayland surface. We
      * check for change of effective parent only if the window moved in any
      * way. */
-    if ((!EqualRect(&data->window_rect, window_rect) &&
-         data->effective_parent != get_effective_parent(data->hwnd, window_rect)) ||
-        data->parent != parent)
+    if ((!EqualRect(&data->window_rect, &data->old_window_rect) &&
+         data->effective_parent != get_effective_parent(data->hwnd, &data->window_rect)) ||
+        data->parent != data->old_parent)
     {
         return TRUE;
     }
@@ -958,8 +903,7 @@ static BOOL win_data_needs_recreation(struct wayland_win_data *data,
      * xdg_toplevels for visible windows. */
     if (data->wayland_surface && !data->wayland_surface->wl_subsurface)
     {
-        BOOL visible = (GetWindowLongW(data->hwnd, GWL_STYLE) & WS_VISIBLE) ||
-                       (swp_flags & SWP_SHOWWINDOW);
+        BOOL visible = data->wayland_surface->xdg_toplevel != NULL;
         if (data->visible != visible)
             return TRUE;
     }
@@ -979,22 +923,23 @@ BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     DWORD flags;
     COLORREF key;
     BYTE alpha;
-    BOOL layered = GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED;
-    TRACE("win %p window %s client %s visible %s style %08x ex %08x flags %08x layered %d after %p\n",
+    BOOL exstyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+    DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
+    HWND parent = GetAncestor(hwnd, GA_PARENT);
+
+    TRACE("win %p window %s client %s visible %s style %08x ex %08x flags %08x after %p\n",
            hwnd, wine_dbgstr_rect(window_rect), wine_dbgstr_rect(client_rect),
-           wine_dbgstr_rect(visible_rect),
-           GetWindowLongW(hwnd, GWL_STYLE),
-           GetWindowLongW(hwnd, GWL_EXSTYLE),
-           swp_flags , layered, insert_after);
+           wine_dbgstr_rect(visible_rect), style, exstyle,
+           swp_flags, insert_after);
 
-    if (!data && !(data = create_win_data(hwnd, swp_flags, window_rect, client_rect))) return TRUE;
+    if (!data && !(data = create_win_data(hwnd))) return TRUE;
 
-    if (win_data_needs_recreation(data, swp_flags, window_rect))
-    {
-        EnterCriticalSection(&win_data_section);
-        data = recreate_win_data(data, hwnd, swp_flags, window_rect, client_rect);
-        LeaveCriticalSection(&win_data_section);
-    }
+    data->old_parent = data->parent;
+    data->parent = (parent == GetDesktopWindow()) ? 0 : parent;
+    data->old_window_rect = data->window_rect;
+    data->window_rect = *window_rect;
+    data->client_rect = *client_rect;
+    data->visible = (style & WS_VISIBLE) == WS_VISIBLE || (swp_flags & SWP_SHOWWINDOW);
 
     *visible_rect = *window_rect;
 
@@ -1003,7 +948,7 @@ BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     *surface = NULL;  /* indicate that we want to draw directly to the window */
 
     /* If we don't want a dedicated surface for this window... */
-    if (!data->wayland_surface) goto done;
+    if (data->parent) goto done;
 
     if (swp_flags & SWP_HIDEWINDOW) goto done;
     surface_rect = *window_rect;
@@ -1024,7 +969,7 @@ BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     if (!(swp_flags & SWP_SHOWWINDOW) && !(GetWindowLongW(hwnd, GWL_STYLE) & WS_VISIBLE)) goto done;
 
     key = alpha = flags = 0;
-    if (!layered || !GetLayeredWindowAttributes(hwnd, &key, &alpha, &flags)) flags = 0;
+    if (!(exstyle & WS_EX_LAYERED) || !GetLayeredWindowAttributes(hwnd, &key, &alpha, &flags)) flags = 0;
     if (!(flags & LWA_ALPHA)) alpha = 255;
     if (!(flags & LWA_COLORKEY)) key = CLR_INVALID;
 
@@ -1036,8 +981,89 @@ done:
     return TRUE;
 }
 
-static void update_wayland_state(struct wayland_win_data *data, DWORD style,
-                                 const RECT *old_window_rect)
+static void win_data_update_window_surface(struct wayland_win_data *data)
+{
+    struct wayland_window_surface *wws;
+
+    data->surface->funcs->lock(data->surface);
+
+    wws = get_wayland_window_surface(data->surface);
+    wws->wayland_surface = data->wayland_surface;
+
+    if (!wws->wayland_buffer_queue && data->wayland_surface)
+    {
+        wws->wayland_buffer_queue =
+            wayland_buffer_queue_create(data->wayland_surface->wayland,
+                    wws->info.bmiHeader.biWidth, -wws->info.bmiHeader.biHeight,
+                    wayland_window_surface_get_preferred_format(wws));
+    }
+
+    data->surface->funcs->unlock(data->surface);
+}
+
+static void win_data_update_wayland_surface(struct wayland_win_data *data)
+{
+    struct wayland *wayland;
+    HWND effective_parent_hwnd;
+    struct wayland_surface *parent_surface;
+    DWORD style;
+
+    TRACE("hwnd=%p\n", data->hwnd);
+
+    data->wayland_surface_needs_first_update = FALSE;
+
+    wayland = thread_init_wayland();
+
+    wayland_invalidate_vulkan_objects(data->hwnd);
+
+    if (data->wayland_surface)
+    {
+        wayland_surface_unref(data->wayland_surface);
+        data->wayland_surface = NULL;
+    }
+
+    /* Only create wayland surfaces for toplevel windows. Let Wine core handle
+     * the drawing of other windows in their corresponding top level window
+     * surface. */
+    if (data->parent) goto out;
+
+    effective_parent_hwnd = get_effective_parent(data->hwnd, &data->window_rect);
+    parent_surface = NULL;
+
+    if (effective_parent_hwnd)
+    {
+        parent_surface = wayland_surface_for_hwnd_lock(effective_parent_hwnd);
+        wayland_surface_for_hwnd_unlock(parent_surface);
+    }
+
+    data->effective_parent = effective_parent_hwnd;
+    style = GetWindowLongW(data->hwnd, GWL_STYLE);
+
+    /* Use wayland subsurfaces for owned win32 windows that are transient (i.e., don't have
+     * a titlebar). Otherwise, if the window is visible make it wayland toplevel. Finally,
+     * if the window is not visible create a plain (without a role) surface to avoid
+     * polluting the compositor with empty xdg_toplevels. */
+    if ((style & WS_CAPTION) != WS_CAPTION && parent_surface)
+        data->wayland_surface = wayland_surface_create_subsurface(wayland, parent_surface);
+    else if (data->visible)
+        data->wayland_surface = wayland_surface_create_toplevel(wayland, parent_surface);
+    else
+        data->wayland_surface = wayland_surface_create_plain(wayland);
+
+    data->wayland_surface->hwnd = data->hwnd;
+
+    if (data->wayland_surface && data->wayland_surface->xdg_toplevel)
+    {
+        WCHAR text[1024];
+        if (!InternalGetWindowText(data->hwnd, text, ARRAY_SIZE(text))) text[0] = 0;
+        wayland_surface_set_title(data->wayland_surface, text);
+    }
+
+out:
+    wayland_update_gl_drawable(data->hwnd, data->wayland_surface);
+}
+
+static void win_data_update_wayland_surface_state(struct wayland_win_data *data)
 {
     RECT offset_rect = {0};
     MONITORINFOEXW mi;
@@ -1048,6 +1074,7 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
     struct wayland_win_data *parent_data;
     enum wayland_configure_flags conf_flags = 0;
     struct wayland_output *output;
+    DWORD style = GetWindowLongW(data->hwnd, GWL_STYLE);
 
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(MonitorFromWindow(data->hwnd, MONITOR_DEFAULTTOPRIMARY), (MONITORINFO *)&mi);
@@ -1227,6 +1254,27 @@ static void update_wayland_state(struct wayland_win_data *data, DWORD style,
     release_win_data(parent_data);
 }
 
+static void update_wayland_state(struct wayland_win_data *data)
+{
+    if (win_data_wayland_surface_needs_update(data))
+        win_data_update_wayland_surface(data);
+
+    if (data->surface)
+        win_data_update_window_surface(data);
+
+    if (data->wayland_surface)
+        win_data_update_wayland_surface_state(data);
+
+    if (data->surface)
+    {
+        struct wayland_window_surface *wws = get_wayland_window_surface(data->surface);
+        /* If the last flush was not performed due to not having a wayland surface or
+         * buffer queue, flush now. */
+        if (wws->last_flush_missing_wayland)
+            data->surface->funcs->flush(data->surface);
+    }
+}
+
 /***********************************************************************
  *           WAYLAND_WindowPosChanged
  */
@@ -1236,20 +1284,13 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
                                     struct window_surface *surface)
 {
     struct wayland_win_data *data;
-    DWORD new_style = GetWindowLongW(hwnd, GWL_STYLE);
-    RECT old_window_rect;
 
     if (!(data = get_win_data(hwnd))) return;
 
     TRACE("hwnd %p window %s client %s visible %s style %08x effective_parent %p after %p flags %08x\n",
           hwnd, wine_dbgstr_rect(window_rect), wine_dbgstr_rect(client_rect),
-          wine_dbgstr_rect(visible_rect), new_style, data->effective_parent,
-          insert_after, swp_flags);
-
-    old_window_rect = data->window_rect;
-
-    data->window_rect = *window_rect;
-    data->client_rect = *client_rect;
+          wine_dbgstr_rect(visible_rect), GetWindowLongW(hwnd, GWL_STYLE),
+          data->effective_parent, insert_after, swp_flags);
 
     if (surface) window_surface_add_ref(surface);
     if (data->surface) window_surface_release(data->surface);
@@ -1257,8 +1298,7 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
 
     /* TODO: Try to handle z-order */
 
-    if (data->wayland_surface)
-        update_wayland_state(data, new_style, &old_window_rect);
+    update_wayland_state(data);
 
     release_win_data(data);
 }
@@ -1575,6 +1615,7 @@ BOOL CDECL WAYLAND_UpdateLayeredWindow(HWND hwnd, const UPDATELAYEREDWINDOWINFO 
         data->surface = create_surface(data->hwnd, &rect, 255, color_key, TRUE);
         if (surface) window_surface_release(surface);
         surface = data->surface;
+        win_data_update_window_surface(data);
     }
     else
     {

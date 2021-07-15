@@ -582,6 +582,27 @@ static void set_color_key(struct wayland_window_surface *surface, COLORREF key)
 }
 
 /***********************************************************************
+ *           wayland_window_surface_preferred_format
+ */
+static int wayland_window_surface_get_preferred_format(struct wayland_window_surface *wws)
+{
+    int format;
+    HRGN window_region = CreateRectRgn(0, 0, 0, 0);
+
+    /* If the surface has whole or src alpha use ARGB buffers. Also use ARGB to
+     * implement window regions (areas out of the region are transparent). */
+    if ((window_region && GetWindowRgn(wws->hwnd, window_region) != ERROR) ||
+        wws->src_alpha || wws->alpha != 255)
+        format = WL_SHM_FORMAT_ARGB8888;
+    else
+        format = WL_SHM_FORMAT_XRGB8888;
+
+    if (window_region) DeleteObject(window_region);
+
+    return format;
+}
+
+/***********************************************************************
  *           update_wayland_buffer_queue
  */
 static void update_wayland_buffer_queue(struct wayland_window_surface *surface)
@@ -589,29 +610,18 @@ static void update_wayland_buffer_queue(struct wayland_window_surface *surface)
     int width;
     int height;
     int format;
-    HRGN window_region;
 
     if (!surface->wayland_buffer_queue) return;
-    if (!(window_region = CreateRectRgn(0, 0, 0, 0))) return;
 
     width = surface->wayland_buffer_queue->width;
     height = surface->wayland_buffer_queue->height;
+    format = wayland_window_surface_get_preferred_format(surface);
 
     wayland_buffer_queue_destroy(surface->wayland_buffer_queue);
-
-    /* If the surface has whole or src alpha use ARGB buffers. Also use ARGB to
-     * implement window regions (areas out of the region are transparent). */
-    if (GetWindowRgn(surface->hwnd, window_region) != ERROR ||
-        surface->src_alpha || surface->alpha != 255)
-        format = WL_SHM_FORMAT_ARGB8888;
-    else
-        format = WL_SHM_FORMAT_XRGB8888;
 
     surface->wayland_buffer_queue =
         wayland_buffer_queue_create(surface->wayland_surface->wayland,
                                     width, height, format);
-
-    DeleteObject(window_region);
 }
 
 /***********************************************************************

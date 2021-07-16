@@ -94,6 +94,8 @@ struct wayland_win_data
     RECT           old_window_rect;
     /* Whether a first wayland surface update is needed */
     BOOL           wayland_surface_needs_first_update;
+    /* Whether we have a pending/unprocessed WM_WAYLAND_STATE_UPDATE message */
+    BOOL           pending_state_update_message;
 };
 
 static CRITICAL_SECTION win_data_section;
@@ -1298,7 +1300,20 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
 
     /* TODO: Try to handle z-order */
 
-    update_wayland_state(data);
+    /* In some cases, notably when the app calls UpdateLayeredWindow, position
+     * and size changes may be emitted from a thread other than the window
+     * thread. Since in the current implementation updating the wayland state
+     * needs to happen in the context of the window thread to avoid racy
+     * interactions, post a message to update the state in the right thread. */
+    if (GetCurrentThreadId() == GetWindowThreadProcessId(hwnd, NULL))
+    {
+        update_wayland_state(data);
+    }
+    else if (!data->pending_state_update_message)
+    {
+        PostMessageW(hwnd, WM_WAYLAND_STATE_UPDATE, 0, 0);
+        data->pending_state_update_message = TRUE;
+    }
 
     release_win_data(data);
 }
@@ -1989,6 +2004,17 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_WAYLAND_CLIPBOARD_WINDOW_CREATE:
         wayland_data_device_ensure_clipboard_window(thread_wayland());
+        break;
+    case WM_WAYLAND_STATE_UPDATE:
+        {
+            struct wayland_win_data *data = get_win_data(hwnd);
+            if (data)
+            {
+                data->pending_state_update_message = FALSE;
+                update_wayland_state(data);
+                release_win_data(data);
+            }
+        }
         break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);

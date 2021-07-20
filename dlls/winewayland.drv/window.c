@@ -1695,6 +1695,9 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     BOOL needs_move_to_origin;
     int origin_x, origin_y;
     UINT swp_flags;
+    BOOL needs_restore = FALSE;
+    BOOL needs_enter_size_move = FALSE;
+    BOOL needs_exit_size_move = FALSE;
 
     if (!(data = get_win_data(hwnd))) return 0;
     if (!data->wayland_surface || !data->wayland_surface->xdg_toplevel)
@@ -1734,8 +1737,7 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
          (wsurface->pending.configure_flags &
           (WAYLAND_CONFIGURE_FLAG_MAXIMIZED|WAYLAND_CONFIGURE_FLAG_FULLSCREEN))))
     {
-        ShowOwnedPopups(hwnd, TRUE);
-        ShowWindow(hwnd, SW_RESTORE);
+        needs_restore = TRUE;
         data->deactivated_after_minimization = FALSE;
         /* If allowed, ignore the restoration size provided by wayland, since
          * it may cause wayland_win_data.restore_rect to be set and mess up our
@@ -1751,7 +1753,6 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
 
     wsurface->pending.processed = TRUE;
 
-    data->handling_wayland_configure_event = TRUE;
     data->wayland_configure_event_flags = wsurface->pending.configure_flags;
 
     width = wsurface->pending.width;
@@ -1763,7 +1764,7 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     if (width == 0)
     {
         int ignore;
-        if (!IsIconic(hwnd))
+        if (!IsIconic(hwnd) || needs_restore)
             width = data->restore_rect.right - data->restore_rect.left;
         if (width == 0)
             width = data->window_rect.right - data->window_rect.left;
@@ -1774,7 +1775,7 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     if (height == 0)
     {
         int ignore;
-        if (!IsIconic(hwnd))
+        if (!IsIconic(hwnd) || needs_restore)
             height = data->restore_rect.bottom - data->restore_rect.top;
         if (height == 0)
             height = data->window_rect.bottom - data->window_rect.top;
@@ -1796,13 +1797,13 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     if ((flags & WAYLAND_CONFIGURE_FLAG_RESIZING) && !data->resizing)
     {
         data->resizing = TRUE;
-        SendMessageW(hwnd, WM_ENTERSIZEMOVE, 0, 0);
+        needs_enter_size_move = TRUE;
     }
 
     if (!(flags & WAYLAND_CONFIGURE_FLAG_RESIZING) && data->resizing)
     {
         data->resizing = FALSE;
-        SendMessageW(hwnd, WM_EXITSIZEMOVE, 0, 0);
+        needs_exit_size_move = TRUE;
     }
 
     /* Parts of the window that are outside the win32 display are not
@@ -1828,6 +1829,24 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     }
 
     release_win_data(data);
+
+    if (needs_restore)
+    {
+        ShowOwnedPopups(hwnd, TRUE);
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+
+    if (needs_enter_size_move)
+        SendMessageW(hwnd, WM_ENTERSIZEMOVE, 0, 0);
+
+    if (needs_exit_size_move)
+        SendMessageW(hwnd, WM_EXITSIZEMOVE, 0, 0);
+
+    if ((data = get_win_data(hwnd)))
+    {
+        data->handling_wayland_configure_event = TRUE;
+        release_win_data(data);
+    }
 
     if (flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED)
         SetWindowLongW(hwnd, GWL_STYLE, GetWindowLongW(hwnd, GWL_STYLE) | WS_MAXIMIZE);

@@ -415,9 +415,11 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
 
     needs_flush = IntersectRect(&damage_rect, &surface->header.rect, &surface->bounds);
 
-    if (needs_flush && (!surface->wayland_surface || !surface->wayland_buffer_queue))
+    if (needs_flush &&
+        (!surface->wayland_surface || !surface->wayland_buffer_queue ||
+         !wayland_surface_is_drawing_allowed(surface->wayland_surface)))
     {
-        TRACE("missing wayland surface=%p buffer_queue=%p, returning\n",
+        TRACE("missing wayland surface=%p buffer_queue=%p or drawing disallowed, returning\n",
               surface->wayland_surface, surface->wayland_buffer_queue);
         surface->last_flush_missing_wayland = TRUE;
         goto done;
@@ -1092,6 +1094,7 @@ static void win_data_update_wayland_surface_state(struct wayland_win_data *data)
 
     if (!(style & WS_VISIBLE))
     {
+        wayland_surface_set_drawing_allowed(data->wayland_surface, TRUE);
         wayland_surface_unmap(data->wayland_surface);
         return;
     }
@@ -1212,6 +1215,7 @@ static void win_data_update_wayland_surface_state(struct wayland_win_data *data)
         {
             TRACE("hwnd=%p window state not compatible with current or "
                   "pending wayland surface configuration\n", data->hwnd);
+            wayland_surface_set_drawing_allowed(data->wayland_surface, FALSE);
             return;
         }
 
@@ -1252,6 +1256,8 @@ static void win_data_update_wayland_surface_state(struct wayland_win_data *data)
     wayland_surface_reconfigure_apply(data->wayland_surface);
 
     wayland_surface_update_pointer_confinement(data->wayland_surface);
+
+    wayland_surface_set_drawing_allowed(data->wayland_surface, TRUE);
 
     release_win_data(parent_data);
 }

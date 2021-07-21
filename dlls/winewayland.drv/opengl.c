@@ -773,13 +773,18 @@ static BOOL WINAPI wayland_wglSwapBuffers(HDC hdc)
     {
         HWND hwnd = WindowFromDC(hdc);
         struct gl_drawable *gl_drawable = get_gl_drawable(hwnd, hdc);
+        BOOL drawing_allowed = TRUE;
         if (gl_drawable)
         {
             if (gl_drawable->wayland_surface)
+            {
                 wayland_surface_ensure_mapped(gl_drawable->wayland_surface);
+                drawing_allowed =
+                    wayland_surface_is_drawing_allowed(gl_drawable->wayland_surface);
+            }
             release_gl_drawable(gl_drawable);
         }
-        p_eglSwapBuffers(display, ctx->surface);
+        if (drawing_allowed) p_eglSwapBuffers(display, ctx->surface);
     }
 
     return TRUE;

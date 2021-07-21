@@ -675,10 +675,13 @@ static VkResult validate_present_info(const VkPresentInfoKHR *present_info)
         struct wine_vk_swapchain *wine_vk_swapchain = wine_vk_swapchain_from_handle(vk_swapchain);
         RECT client;
 
-        TRACE("swapchain[%d] vk=0x%s wine=%p extent=%ux%u wayland_surface=%p\n",
-                i, wine_dbgstr_longlong(vk_swapchain), wine_vk_swapchain,
-                wine_vk_swapchain->extent.width, wine_vk_swapchain->extent.height,
-                wine_vk_swapchain ? wine_vk_swapchain->wayland_surface : NULL);
+        TRACE("swapchain[%d] vk=0x%s wine=%p extent=%ux%u wayland_surface=%p "
+              "drawing_allowed=%d\n",
+               i, wine_dbgstr_longlong(vk_swapchain), wine_vk_swapchain,
+               wine_vk_swapchain->extent.width, wine_vk_swapchain->extent.height,
+               wine_vk_swapchain ? wine_vk_swapchain->wayland_surface : NULL,
+               (wine_vk_swapchain && wine_vk_swapchain->wayland_surface) ?
+                   wayland_surface_is_drawing_allowed(wine_vk_swapchain->wayland_surface) : -1);
 
         if (!wine_vk_swapchain ||
             !__atomic_load_n(&wine_vk_swapchain->valid, __ATOMIC_SEQ_CST) ||
@@ -687,7 +690,9 @@ static VkResult validate_present_info(const VkPresentInfoKHR *present_info)
             res = VK_ERROR_SURFACE_LOST_KHR;
         }
         else if (client.right != wine_vk_swapchain->extent.width ||
-                 client.bottom != wine_vk_swapchain->extent.height)
+                 client.bottom != wine_vk_swapchain->extent.height ||
+                 (wine_vk_swapchain->wayland_surface &&
+                  !wayland_surface_is_drawing_allowed(wine_vk_swapchain->wayland_surface)))
         {
             res = VK_ERROR_OUT_OF_DATE_KHR;
         }

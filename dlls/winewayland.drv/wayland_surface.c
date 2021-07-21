@@ -1091,6 +1091,7 @@ void wayland_surface_ensure_mapped(struct wayland_surface *surface)
     {
         int width = surface->current.width;
         int height = surface->current.height;
+        int wine_width, wine_height;
         struct wayland_shm_buffer *dummy_shm_buffer;
 
         /* Use a large enough width/height, so even when the target
@@ -1099,8 +1100,15 @@ void wayland_surface_ensure_mapped(struct wayland_surface *surface)
         if (width == 0) width = 32;
         if (height == 0) height = 32;
 
+        if (surface->current.configure_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN)
+            wayland_surface_find_wine_fullscreen_fit(surface, width, height,
+                                                     &wine_width, &wine_height);
+        else
+            wayland_surface_coords_to_wine(surface, width, height,
+                                           &wine_width, &wine_height);
+
         dummy_shm_buffer = wayland_shm_buffer_create(surface->wayland,
-                                                     width, height,
+                                                     wine_width, wine_height,
                                                      WL_SHM_FORMAT_ARGB8888);
         wl_buffer_add_listener(dummy_shm_buffer->wl_buffer,
                                &dummy_buffer_listener, dummy_shm_buffer);

@@ -669,7 +669,7 @@ static VkResult validate_present_info(const VkPresentInfoKHR *present_info)
     uint32_t i;
     VkResult res = VK_SUCCESS;
 
-    for (i = 0; i < present_info->swapchainCount && res == VK_SUCCESS; ++i)
+    for (i = 0; i < present_info->swapchainCount; ++i)
     {
         const VkSwapchainKHR vk_swapchain = present_info->pSwapchains[i];
         struct wine_vk_swapchain *wine_vk_swapchain = wine_vk_swapchain_from_handle(vk_swapchain);
@@ -696,10 +696,9 @@ static VkResult validate_present_info(const VkPresentInfoKHR *present_info)
         {
             res = VK_ERROR_OUT_OF_DATE_KHR;
         }
-        else if (wine_vk_swapchain->wayland_surface)
-        {
+
+        if (wine_vk_swapchain->wayland_surface)
             wayland_surface_ensure_mapped(wine_vk_swapchain->wayland_surface);
-        }
     }
 
     return res;
@@ -708,13 +707,11 @@ static VkResult validate_present_info(const VkPresentInfoKHR *present_info)
 static VkResult wayland_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *present_info)
 {
     VkResult res;
+    VkResult validation_res;
 
     TRACE("%p, %p\n", queue, present_info);
 
-    res = validate_present_info(present_info);
-    if (res != VK_SUCCESS)
-        return res;
-
+    validation_res = validate_present_info(present_info);
     res = pvkQueuePresentKHR(queue, present_info);
 
     if (TRACE_ON(fps))
@@ -737,6 +734,9 @@ static VkResult wayland_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
                 start_time = time;
         }
     }
+
+    if (validation_res != VK_SUCCESS)
+        return validation_res;
 
     return res;
 }

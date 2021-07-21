@@ -1579,18 +1579,6 @@ LRESULT CDECL WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam)
         release_win_data(data);
         return 0;
     }
-    else if (command == SC_MAXIMIZE)
-    {
-        xdg_toplevel_set_maximized(data->wayland_surface->xdg_toplevel);
-        release_win_data(data);
-        return 0;
-    }
-    else if (command == SC_RESTORE)
-    {
-        xdg_toplevel_unset_maximized(data->wayland_surface->xdg_toplevel);
-        release_win_data(data);
-        return 0;
-    }
 
 done:
     release_win_data(data);

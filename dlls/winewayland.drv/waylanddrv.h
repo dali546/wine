@@ -231,6 +231,7 @@ struct wayland_surface
     LONG ref;
     struct wl_list output_ref_list;
     struct wayland_output *main_output;
+    BOOL drawing_allowed;
 };
 
 struct wayland_shm_buffer
@@ -374,6 +375,8 @@ void wayland_surface_leave_output(struct wayland_surface *surface,
                                   struct wayland_output *output);
 int wayland_surface_get_buffer_scale(struct wayland_surface *surface);
 void wayland_surface_set_title(struct wayland_surface *surface, LPCWSTR title);
+void wayland_surface_set_drawing_allowed(struct wayland_surface *surface, BOOL allowed);
+BOOL wayland_surface_is_drawing_allowed(struct wayland_surface *surface);
 
 /**********************************************************************
  *          Wayland SHM buffer

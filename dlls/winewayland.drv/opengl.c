@@ -53,6 +53,10 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
+/* Change to 1 to dump front buffer contents to disk when performing front
+ * buffer rendering. */
+#define DEBUG_DUMP_FRONT_BUFFER 0
+
 #define DECL_FUNCPTR(f) __typeof__(f) * p_##f = NULL
 DECL_FUNCPTR(eglBindAPI);
 DECL_FUNCPTR(eglCreateContext);
@@ -86,6 +90,7 @@ struct wgl_context
     BOOL       has_been_current;
     BOOL       sharing;
     int        *attribs;
+    BOOL       is_draw_buffer_front;
 };
 
 struct gl_drawable
@@ -113,6 +118,7 @@ static struct list gl_drawables = LIST_INIT(gl_drawables);
 
 static void (*pglFinish)(void);
 static void (*pglFlush)(void);
+static void (*pglDrawBuffer)(GLenum);
 
 static CRITICAL_SECTION drawable_section;
 static CRITICAL_SECTION_DEBUG critsect_debug =
@@ -151,6 +157,7 @@ static struct gl_drawable *create_gl_drawable(HWND hwnd, HDC hdc, int format)
     gl->pbuffer = p_eglCreatePbufferSurface(display,
                                             pixel_formats[gl->format - 1].config,
                                             attribs);
+
     EnterCriticalSection(&drawable_section);
     list_add_head(&gl_drawables, &gl->entry);
     return gl;
@@ -380,6 +387,7 @@ static struct wgl_context *create_context(HDC hdc, struct wgl_context *share,
     ctx->context = p_eglCreateContext(display, ctx->config,
                                       share ? share->context : EGL_NO_CONTEXT,
                                       ctx->attribs);
+    ctx->is_draw_buffer_front = FALSE;
 
     /* The drawable critical section also guards access to gl_contexts, so it's
      * safe to add the entry here. */
@@ -796,15 +804,83 @@ static void wglFinish(void)
     pglFinish();
 }
 
+static void read_front_buffer_pixels(void *pixels_out, int width, int height)
+{
+    GLenum prev_read_buffer;
+    GLint prev_read_framebuffer;
+    GLint prev_row_length;
+    GLint prev_image_height;
+    GLint prev_skip_rows;
+    GLint prev_skip_pixels;
+    GLint prev_skip_images;
+    GLint prev_alignment;
+
+    /* Store state we might change */
+    egl_funcs.gl.p_glGetIntegerv(GL_READ_BUFFER, (GLint*)&prev_read_buffer);
+    egl_funcs.gl.p_glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_read_framebuffer);
+    egl_funcs.gl.p_glGetIntegerv(GL_PACK_ROW_LENGTH, &prev_row_length);
+    egl_funcs.gl.p_glGetIntegerv(GL_PACK_IMAGE_HEIGHT, &prev_image_height);
+    egl_funcs.gl.p_glGetIntegerv(GL_PACK_SKIP_ROWS, &prev_skip_rows);
+    egl_funcs.gl.p_glGetIntegerv(GL_PACK_SKIP_PIXELS, &prev_skip_pixels);
+    egl_funcs.gl.p_glGetIntegerv(GL_PACK_SKIP_IMAGES, &prev_skip_images);
+    egl_funcs.gl.p_glGetIntegerv(GL_PACK_ALIGNMENT, &prev_alignment);
+
+    /* Set state we need for reading the pixels */
+    egl_funcs.ext.p_glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    egl_funcs.gl.p_glReadBuffer(GL_FRONT);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_IMAGE_HEIGHT, 0);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_SKIP_IMAGES, 0);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_ALIGNMENT, 4);
+
+    egl_funcs.gl.p_glReadPixels(0, 0, width, height, GL_BGRA,  GL_UNSIGNED_BYTE,
+                                pixels_out);
+
+    /* Restore prev state */
+    egl_funcs.ext.p_glBindFramebuffer(GL_READ_FRAMEBUFFER, prev_read_framebuffer);
+    egl_funcs.gl.p_glReadBuffer(prev_read_buffer);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_ROW_LENGTH, prev_row_length);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_IMAGE_HEIGHT, prev_image_height);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_SKIP_ROWS, prev_skip_rows);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_SKIP_PIXELS, prev_skip_pixels);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_SKIP_IMAGES, prev_skip_images);
+    egl_funcs.gl.p_glPixelStorei(GL_PACK_ALIGNMENT, prev_alignment);
+
+    if (DEBUG_DUMP_FRONT_BUFFER)
+    {
+        static int dbgid = 0;
+        dump_pixels("/tmp/winedbg/front-%.3d.pam", dbgid++, pixels_out,
+                    width, height, FALSE, NULL, NULL);
+    }
+}
+
 static void wglFlush(void)
 {
     struct wgl_context *ctx = NtCurrentTeb()->glContext;
 
     if (!ctx) return;
-    TRACE("hwnd %p egl_context %p\n", ctx->hwnd, ctx->context);
     refresh_context(ctx);
     pglFlush();
+
+    /* Mesa Wayland EGL, and Wayland in general, doesn't support front buffer
+     * rendering. Emulate it by manually updating the window front buffer
+     * pixels, to be applied when the window surface contents are flushed. */
+    if (ctx->is_draw_buffer_front)
+        wayland_update_front_buffer(ctx->hwnd, read_front_buffer_pixels);
 }
+
+static void wglDrawBuffer(GLenum mode)
+{
+    struct wgl_context *ctx = NtCurrentTeb()->glContext;
+
+    if (!ctx) return;
+    TRACE("hwnd %p egl_context %p mode 0x%x\n", ctx->hwnd, ctx->context, mode);
+    ctx->is_draw_buffer_front = (mode == GL_FRONT || mode == GL_FRONT_LEFT);
+    pglDrawBuffer(mode);
+}
+
 
 static void register_extension(const char *ext)
 {
@@ -1131,6 +1207,7 @@ static void init_extensions(void)
     do { p##func = egl_funcs.gl.p_##func; egl_funcs.gl.p_##func = w##func; } while(0)
     REDIRECT(glFinish);
     REDIRECT(glFlush);
+    REDIRECT(glDrawBuffer);
 #undef REDIRECT
 }
 

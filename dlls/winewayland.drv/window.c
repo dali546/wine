@@ -310,6 +310,8 @@ struct wayland_window_surface
     CRITICAL_SECTION      crit;
     BITMAPINFO            info;   /* variable size, must be last */
     BOOL                  last_flush_missing_wayland;
+    void                 *front_bits; /* Front buffer pixels, stored bottom to top */
+    BOOL                  front_bits_dirty;
 };
 
 static struct wayland_window_surface *get_wayland_window_surface(struct window_surface *surface)
@@ -404,7 +406,7 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
     RECT damage_rect;
     BOOL needs_flush;
     RGNDATA *buffer_damage;
-    HRGN surface_damage_region;
+    HRGN surface_damage_region = NULL;
     RECT *rgn_rect;
     RECT *rgn_rect_end;
 
@@ -414,6 +416,36 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
           wine_dbgstr_rect(&surface->header.rect), wine_dbgstr_rect(&surface->bounds));
 
     needs_flush = IntersectRect(&damage_rect, &surface->header.rect, &surface->bounds);
+    if (needs_flush)
+    {
+        surface_damage_region = CreateRectRgnIndirect(&damage_rect);
+        if (surface->total_region)
+        {
+            needs_flush = CombineRgn(surface_damage_region, surface_damage_region,
+                                     surface->total_region, RGN_AND);
+        }
+    }
+
+    /* If we have a front buffer we always copy it to the buffer before copying
+     * the window surface contents, so the whole surface is considered damaged.
+     * TODO: Improve damage tracking and try to avoid unnecessary copying. */
+    if (surface->front_bits)
+    {
+        needs_flush |= surface->front_bits_dirty;
+        if (needs_flush)
+        {
+            if (surface_damage_region)
+            {
+                SetRectRgn(surface_damage_region,
+                           surface->header.rect.left, surface->header.rect.top,
+                           surface->header.rect.right, surface->header.rect.bottom);
+            }
+            else
+            {
+                surface_damage_region = CreateRectRgnIndirect(&surface->header.rect);
+            }
+        }
+    }
 
     if (needs_flush &&
         (!surface->wayland_surface || !surface->wayland_buffer_queue ||
@@ -437,8 +469,6 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
 
     assert(surface->wayland_buffer_queue);
 
-    surface_damage_region = CreateRectRgnIndirect(&damage_rect);
-
     if (DEBUG_DUMP_FLUSH_SURFACE_BUFFER)
     {
         static int dbgid = 0;
@@ -451,17 +481,33 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
 
     }
 
-    /* If the window has a region set, only flush damaged parts of the surface
-     * that intersect with it. */
-    if (surface->total_region)
-    {
-        CombineRgn(surface_damage_region, surface_damage_region,
-                   surface->total_region, RGN_AND);
-    }
-
     wayland_buffer_queue_add_damage(surface->wayland_buffer_queue, surface_damage_region);
     buffer = wayland_buffer_queue_acquire_buffer(surface->wayland_buffer_queue);
     buffer_damage = wayland_shm_buffer_get_damage_clipped(buffer, surface->total_region);
+
+    /* Copy the whole front buffer to wayland SHM buffer. */
+    if (surface->front_bits)
+    {
+        int width = min(surface->info.bmiHeader.biWidth, buffer->width);
+        int height = min(-surface->info.bmiHeader.biHeight, buffer->height);
+        int stride = width * 4;
+        unsigned char *src = surface->front_bits;
+        unsigned char *dst = buffer->map_data;
+        int src_stride = surface->info.bmiHeader.biWidth * 4;
+        int dst_stride = buffer->width * 4;
+        int i;
+
+        TRACE("front buffer %p -> %p %dx%d\n", src, dst, width, height);
+
+        /* Front buffer lines are stored bottom to top, so we need to flip
+         * when copying to our buffer. */
+        for (i = 0; i < height; i++)
+        {
+            memcpy(dst + (height - i - 1) * dst_stride,
+                   src + i * src_stride,
+                   stride);
+        }
+    }
 
     rgn_rect = (RECT *)buffer_damage->Buffer;
     rgn_rect_end = rgn_rect + buffer_damage->rdh.nCount;
@@ -535,9 +581,10 @@ static void CDECL wayland_window_surface_flush(struct window_surface *window_sur
     wayland_shm_buffer_clear_damage(buffer);
 
     heap_free(buffer_damage);
-    DeleteObject(surface_damage_region);
+    surface->front_bits_dirty = FALSE;
 
 done:
+    if (surface_damage_region) DeleteObject(surface_damage_region);
     window_surface->funcs->unlock(window_surface);
 }
 
@@ -556,6 +603,7 @@ static void CDECL wayland_window_surface_destroy(struct window_surface *window_s
     if (surface->total_region) DeleteObject(surface->total_region);
     if (surface->wayland_buffer_queue)
         wayland_buffer_queue_destroy(surface->wayland_buffer_queue);
+    heap_free(surface->front_bits);
     heap_free(surface->bits);
     heap_free(surface);
 }
@@ -582,6 +630,55 @@ static BOOL is_wayland_layered_window_surface(struct window_surface *surface)
         get_wayland_window_surface(surface)->wayland_buffer_queue->format ==
             WL_SHM_FORMAT_ARGB8888 &&
         get_wayland_window_surface(surface)->src_alpha;
+}
+
+/***********************************************************************
+ *           wayland_update_front_buffer
+ *
+ * Update the front buffer we keep for windows that require it (i.e.,
+ * use front buffer rendering). The front buffer is populated by calling
+ * the supplied read_pixels function, which should store the pixels in
+ * the supplied pixels_out memory location.
+ *
+ * Note that the stored pixels are expected to be in BGRA8888 form with line
+ * order flipped upside down, i.e., starting with the bottom line (this
+ * is the order used, e.g., by glReadPixels).
+ */
+void wayland_update_front_buffer(HWND hwnd,
+                                 void (*read_pixels)(void *pixels_out,
+                                                     int width, int height))
+{
+    struct wayland_window_surface *wws;
+    struct wayland_win_data *data;
+
+    if (!(data = get_win_data(hwnd))) return;
+
+    wws = get_wayland_window_surface(data->surface);
+    if (!wws) goto out;
+
+    TRACE("hwnd %p front_bits %p %dx%d\n", hwnd, wws->front_bits,
+          wws->info.bmiHeader.biWidth, -wws->info.bmiHeader.biHeight);
+
+    data->surface->funcs->lock(data->surface);
+
+    if (!wws->front_bits)
+        wws->front_bits = heap_alloc(wws->info.bmiHeader.biSizeImage);
+
+    if (wws->front_bits)
+    {
+        (*read_pixels)(wws->front_bits, wws->info.bmiHeader.biWidth,
+                       -wws->info.bmiHeader.biHeight);
+        wws->front_bits_dirty = TRUE;
+    }
+    else
+    {
+        WARN("Failed to allocate memory for front buffer pixels\n");
+    }
+
+    data->surface->funcs->unlock(data->surface);
+
+out:
+    release_win_data(data);
 }
 
 /***********************************************************************
@@ -732,6 +829,8 @@ static struct window_surface *create_surface(HWND hwnd, const RECT *rect,
     surface->hwnd         = hwnd;
     surface->alpha        = alpha;
     surface->src_alpha    = src_alpha;
+    surface->front_bits   = NULL;
+    surface->front_bits_dirty = FALSE;
     set_color_key(surface, color_key);
     set_surface_region(&surface->header, (HRGN)1);
     reset_bounds(&surface->bounds);

@@ -425,6 +425,9 @@ void wayland_pointer_set_relative(struct wayland_pointer *pointer, BOOL relative
 struct opengl_funcs *wayland_get_wgl_driver(UINT version);
 void wayland_update_gl_drawable(HWND hwnd, struct wayland_surface *wayland_surface);
 void wayland_destroy_gl_drawable(HWND hwnd);
+void wayland_update_front_buffer(HWND hwnd,
+                                 void (*read_pixels)(void *pixels_out,
+                                                     int width, int height));
 
 /**********************************************************************
  *          Vulkan support

@@ -1124,7 +1124,6 @@ void wayland_surface_ensure_mapped(struct wayland_surface *surface)
     LeaveCriticalSection(&surface->crit);
 }
 
-
 /**********************************************************************
  *          wayland_surface_ref
  *

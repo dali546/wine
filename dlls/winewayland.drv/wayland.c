@@ -94,8 +94,8 @@ struct default_mode default_modes[] = {
 
 static void wayland_output_add_mode(struct wayland_output *output,
                                     int32_t width, int32_t height,
-                                    int32_t refresh, BOOL current,
-                                    BOOL native)
+                                    int32_t refresh, int bpp,
+                                    BOOL current, BOOL native)
 {
     struct wayland_output_mode *mode;
 
@@ -103,7 +103,7 @@ static void wayland_output_add_mode(struct wayland_output *output,
     wl_list_for_each(mode, &output->mode_list, link)
     {
         if (mode->width == width && mode->height == height &&
-            mode->refresh == refresh)
+            mode->refresh == refresh && mode->bpp == bpp)
         {
             /* Upgrade modes from virtual to native, never the reverse. */
             if (native) mode->native = TRUE;
@@ -121,6 +121,7 @@ static void wayland_output_add_mode(struct wayland_output *output,
     mode->width = width;
     mode->height = height;
     mode->refresh = refresh;
+    mode->bpp = bpp;
     mode->native = native;
 
     if (current)
@@ -130,6 +131,16 @@ static void wayland_output_add_mode(struct wayland_output *output,
     }
 
     wl_list_insert(&output->mode_list, &mode->link);
+}
+
+static void wayland_output_add_mode_all_bpp(struct wayland_output *output,
+                                            int32_t width, int32_t height,
+                                            int32_t refresh, BOOL current,
+                                            BOOL native)
+{
+    wayland_output_add_mode(output, width, height, refresh, 32, current, native);
+    wayland_output_add_mode(output, width, height, refresh, 16, FALSE, FALSE);
+    wayland_output_add_mode(output, width, height, refresh, 8, FALSE, FALSE);
 }
 
 /* The output id is computed using the FNV-1a hash of the name. We start
@@ -227,7 +238,7 @@ static void wayland_output_add_default_modes(struct wayland_output *output)
             continue;
         }
 
-        wayland_output_add_mode(output, width, height, 60000, FALSE, FALSE);
+        wayland_output_add_mode_all_bpp(output, width, height, 60000, FALSE, FALSE);
     }
 }
 
@@ -329,8 +340,8 @@ static void wayland_output_done(struct wayland_output *output)
     if (output->wayland->hidpi_scaling == WAYLAND_HIDPI_SCALING_COMPOSITOR)
     {
         wayland_output_clear_modes(output);
-        wayland_output_add_mode(output, output->logical_w, output->logical_h,
-                                60000, TRUE, TRUE);
+        wayland_output_add_mode_all_bpp(output, output->logical_w, output->logical_h,
+                                        60000, TRUE, TRUE);
     }
 
     wayland_output_add_default_modes(output);
@@ -376,9 +387,9 @@ static void output_handle_mode(void *data, struct wl_output *wl_output,
     if (output->wayland->hidpi_scaling == WAYLAND_HIDPI_SCALING_COMPOSITOR)
         return;
 
-    wayland_output_add_mode(output, width, height, refresh,
-                            (flags & WL_OUTPUT_MODE_CURRENT),
-                            TRUE);
+    wayland_output_add_mode_all_bpp(output, width, height, refresh,
+                                    (flags & WL_OUTPUT_MODE_CURRENT),
+                                    TRUE);
 }
 
 static void output_handle_done(void *data, struct wl_output *wl_output)
@@ -1597,7 +1608,8 @@ void wayland_change_wine_mode(struct wayland *wayland, int output_id, int width,
 
     wl_list_for_each(output_mode, &output->mode_list, link)
     {
-        if (output_mode->width == width && output_mode->height == height)
+        if (output_mode->width == width && output_mode->height == height &&
+            output_mode->bpp == 32)
         {
             output->current_wine_mode = output_mode;
             break;

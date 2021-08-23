@@ -701,7 +701,7 @@ static void populate_devmode(struct wayland_output_mode *output_mode, DEVMODEW *
     mode->u2.dmDisplayFlags = 0;
     mode->u1.s2.dmPosition.x = 0;
     mode->u1.s2.dmPosition.y = 0;
-    mode->dmBitsPerPel = 32;
+    mode->dmBitsPerPel = output_mode->bpp;
     mode->dmPelsWidth = output_mode->width;
     mode->dmPelsHeight = output_mode->height;
     mode->dmDisplayFrequency = output_mode->refresh / 1000;
@@ -815,8 +815,8 @@ done:
     return TRUE;
 }
 
-static struct wayland_output_mode *get_matching_output_mode(struct wayland_output *output,
-                                                            LPDEVMODEW devmode)
+static struct wayland_output_mode *get_matching_output_mode_32bpp(struct wayland_output *output,
+                                                                  LPDEVMODEW devmode)
 {
     struct wayland_output_mode *output_mode;
     DEVMODEW full_mode;
@@ -836,7 +836,8 @@ static struct wayland_output_mode *get_matching_output_mode(struct wayland_outpu
     wl_list_for_each(output_mode, &output->mode_list, link)
     {
         if (full_mode.dmPelsWidth == output_mode->width &&
-            full_mode.dmPelsHeight == output_mode->height)
+            full_mode.dmPelsHeight == output_mode->height &&
+            output_mode->bpp == 32)
         {
             return output_mode;
         }
@@ -855,7 +856,7 @@ static BOOL wayland_restore_all_outputs(struct wayland *wayland)
         DEVMODEW devmode;
 
         if (read_registry_settings(output->wine_name, &devmode))
-            output_mode = get_matching_output_mode(output, &devmode);
+            output_mode = get_matching_output_mode_32bpp(output, &devmode);
         else
             output_mode = output->current_mode;
 
@@ -888,17 +889,21 @@ LONG CDECL WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
 
     if (devname && devmode)
     {
+        DEVMODEW full_mode;
+
         output = wayland_get_output_by_wine_name(wayland, devname);
         if (!output)
             return DISP_CHANGE_BADPARAM;
 
-        output_mode = get_matching_output_mode(output, devmode);
+        output_mode = get_matching_output_mode_32bpp(output, devmode);
         if (!output_mode)
             return DISP_CHANGE_BADMODE;
 
+        populate_devmode(output_mode, &full_mode);
+
         if (flags & CDS_UPDATEREGISTRY)
         {
-            if (!write_registry_settings(devname, devmode))
+            if (!write_registry_settings(devname, &full_mode))
             {
                 ERR("Failed to write %s display settings to registry.\n", wine_dbgstr_w(devname));
                 return DISP_CHANGE_NOTUPDATED;

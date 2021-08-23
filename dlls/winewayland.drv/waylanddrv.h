@@ -156,6 +156,7 @@ struct wayland_output_mode
     int32_t width;
     int32_t height;
     int32_t refresh;
+    int bpp;
     BOOL native;
 };
 

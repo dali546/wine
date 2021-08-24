@@ -819,12 +819,27 @@ static struct wayland_output_mode *get_matching_output_mode(struct wayland_outpu
                                                             LPDEVMODEW devmode)
 {
     struct wayland_output_mode *output_mode;
+    DEVMODEW full_mode;
+
+    if (output->current_wine_mode)
+        populate_devmode(output->current_wine_mode, &full_mode);
+    else
+        populate_devmode(output->current_mode, &full_mode);
+
+    if (devmode->dmFields & DM_PELSWIDTH)
+        full_mode.dmPelsWidth = devmode->dmPelsWidth;
+    if (devmode->dmFields & DM_PELSHEIGHT)
+        full_mode.dmPelsHeight = devmode->dmPelsHeight;
+    if (devmode->dmFields & DM_BITSPERPEL)
+        full_mode.dmBitsPerPel = devmode->dmBitsPerPel;
 
     wl_list_for_each(output_mode, &output->mode_list, link)
     {
-        if (devmode->dmPelsWidth == output_mode->width &&
-            devmode->dmPelsHeight == output_mode->height)
+        if (full_mode.dmPelsWidth == output_mode->width &&
+            full_mode.dmPelsHeight == output_mode->height)
+        {
             return output_mode;
+        }
     }
 
     return NULL;

@@ -601,8 +601,6 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     surface->crit.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection(&surface->crit);
 
-    heap_free(surface);
-
     /* Destroying the surface can lead to events that we need to handle
      * immediately to get the latest state, so force a round trip, but only if
      * we are in the same thread that handles the window (otherwise we will
@@ -613,6 +611,8 @@ void wayland_surface_destroy(struct wayland_surface *surface)
         wl_display_roundtrip_queue(surface->wayland->wl_display,
                                    surface->wayland->wl_event_queue);
     }
+
+    heap_free(surface);
 }
 
 static struct wayland_surface *wayland_surface_create_glvk_common(struct wayland_surface *surface)

@@ -163,4 +163,7 @@ void dump_pixels(const char *fpattern, int dbgid, unsigned int *pixels,
 
     fflush(fp);
     fclose(fp);
+
+    heap_free(damage_data);
+    heap_free(win_region_data);
 }

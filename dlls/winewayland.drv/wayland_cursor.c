@@ -141,8 +141,7 @@ static struct wayland_shm_buffer *create_color_cursor_buffer(struct wayland *way
 failed:
     if (shm_buffer)
         wayland_shm_buffer_destroy(shm_buffer);
-    if (mask_bits)
-        heap_free(mask_bits);
+    heap_free(mask_bits);
     return NULL;
 }
 

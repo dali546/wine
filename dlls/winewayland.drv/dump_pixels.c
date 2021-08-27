@@ -45,8 +45,7 @@ static RGNDATA *get_region_data(HRGN region)
     return data;
 
 err:
-    if (data)
-        heap_free(data);
+    heap_free(data);
     return NULL;
 }
 

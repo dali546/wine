@@ -209,8 +209,7 @@ static char *decode_uri(const char *uri, size_t uri_length)
     return decoded;
 
 err:
-    if (decoded)
-        heap_free(decoded);
+    heap_free(decoded);
     return NULL;
 }
 

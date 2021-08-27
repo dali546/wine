@@ -355,11 +355,8 @@ static EGLint *egl_attribs_steal_finished_data(struct egl_attribs *attribs)
 
 static void egl_attribs_deinit(struct egl_attribs *attribs)
 {
-    if (attribs->data)
-    {
-        heap_free(attribs->data);
-        attribs->data = NULL;
-    }
+    heap_free(attribs->data);
+    attribs->data = NULL;
     attribs->count = 0;
 }
 
@@ -611,8 +608,7 @@ static BOOL WINAPI wayland_wglDeleteContext(struct wgl_context *ctx)
     list_remove(&ctx->entry);
     LeaveCriticalSection(&drawable_section);
     p_eglDestroyContext(display, ctx->context);
-    if (ctx->attribs)
-        heap_free(ctx->attribs);
+    heap_free(ctx->attribs);
     return HeapFree(GetProcessHeap(), 0, ctx);
 }
 

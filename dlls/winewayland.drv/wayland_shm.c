@@ -243,7 +243,6 @@ RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_bu
 err:
     if (damage_region && damage_region != shm_buffer->damage_region)
         DeleteObject(damage_region);
-    if (data)
-        heap_free(data);
+    heap_free(data);
     return NULL;
 }

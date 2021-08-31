@@ -26,8 +26,17 @@
 #endif
 
 #include <stdarg.h>
+#include <wayland-client.h>
 
 #include "windef.h"
 #include "winbase.h"
+
+extern struct wl_display *process_wl_display;
+
+/**********************************************************************
+ *          Wayland initialisation
+ */
+
+BOOL wayland_process_init(void);
 
 #endif /* __WINE_WAYLANDDRV_H */

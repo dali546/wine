@@ -1,7 +1,7 @@
 /*
- * WAYLANDDRV initialization code
+ * Wayland core handling
  *
- * Copyright 2020 Alexandre Frantzis for Collabora Ltd
+ * Copyright (c) 2020 Alexandros Frantzis for Collabora Ltd
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -24,21 +24,18 @@
 
 #include "config.h"
 
-#include "ntstatus.h"
-#define WIN32_NO_STATUS
-
 #include "waylanddrv.h"
 
-static NTSTATUS waylanddrv_unix_init(void *arg)
-{
-    if (!wayland_process_init()) return STATUS_UNSUCCESSFUL;
+struct wl_display *process_wl_display = NULL;
 
-    return 0;
+/**********************************************************************
+ *          wayland_process_init
+ *
+ *  Initialise the per process wayland objects.
+ *
+ */
+BOOL wayland_process_init(void)
+{
+    process_wl_display = wl_display_connect(NULL);
+    return process_wl_display != NULL;
 }
-
-const unixlib_entry_t __wine_unix_call_funcs[] =
-{
-    waylanddrv_unix_init,
-};
-
-C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == waylanddrv_unix_func_count);

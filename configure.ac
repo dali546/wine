@@ -1283,7 +1283,14 @@ else
                      [enable_winex11_drv])
 fi
 
-WINE_NOTICE_WITH(wayland, [false],
+if test "x$with_wayland" = "xyes"
+then
+    WINE_PACKAGE_FLAGS(WAYLAND_CLIENT,[wayland-client],,,,
+        [AC_CHECK_HEADERS([wayland-client.h])
+         AC_CHECK_LIB(wayland-client,wl_display_connect,[:],
+                      [WAYLAND_CLIENT_LIBS=""],[$WAYLAND_CLIENT_LIBS])])
+fi
+WINE_NOTICE_WITH(wayland, [test -z "$WAYLAND_CLIENT_LIBS"],
                  [Wayland ${notice_platform}development files not found, the Wayland driver won't be supported.],
                  [enable_winewayland_drv])
 

@@ -80,6 +80,7 @@ static void CDECL WAYLAND_ThreadDetach(void)
 
 static const struct user_driver_funcs waylanddrv_funcs =
 {
+    .pCreateWindow = WAYLAND_CreateWindow,
     .pThreadDetach = WAYLAND_ThreadDetach,
 };
 

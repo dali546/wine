@@ -29,6 +29,8 @@
  */
 static BOOL process_attach(void)
 {
+    if (!wayland_process_init()) return FALSE;
+
     return TRUE;
 }
 

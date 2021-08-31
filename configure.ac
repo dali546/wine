@@ -61,6 +61,7 @@ AC_ARG_WITH(unwind,    AS_HELP_STRING([--without-unwind],[do not use the libunwi
 AC_ARG_WITH(usb,       AS_HELP_STRING([--without-usb],[do not use the libusb library]))
 AC_ARG_WITH(v4l2,      AS_HELP_STRING([--without-v4l2],[do not use v4l2 (video capture)]))
 AC_ARG_WITH(vulkan,    AS_HELP_STRING([--without-vulkan],[do not use Vulkan]))
+AC_ARG_WITH(wayland,   AS_HELP_STRING([--without-wayland],[do not build the Wayland driver]))
 AC_ARG_WITH(xcomposite,AS_HELP_STRING([--without-xcomposite],[do not use the Xcomposite extension]),
             [if test "x$withval" = "xno"; then ac_cv_header_X11_extensions_Xcomposite_h=no; fi])
 AC_ARG_WITH(xcursor,   AS_HELP_STRING([--without-xcursor],[do not use the Xcursor extension]),
@@ -129,7 +130,7 @@ case $host in
       host_cpu="i386"
       notice_platform="32-bit "
       TARGETFLAGS="$TARGETFLAGS -m32"
-      PKG_CONFIG_LIBDIR=${PKG_CONFIG_LIBDIR:-/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib32/pkgconfig:/usr/lib/pkgconfig}
+      PKG_CONFIG_LIBDIR=${PKG_CONFIG_LIBDIR:-/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib32/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig}
       export PKG_CONFIG_LIBDIR
       with_unwind=${with_unwind:-no}
     else
@@ -1334,6 +1335,45 @@ else
                      [X ${notice_platform}development files not found, the X11 driver won't be supported.],
                      [enable_winex11_drv])
 fi
+
+if test "x$with_wayland" != "xno"
+then
+    WINE_PACKAGE_FLAGS(WAYLAND_CLIENT,[wayland-client],,,,
+        [AC_CHECK_HEADERS([wayland-client.h])
+         AC_CHECK_LIB(wayland-client,wl_display_connect,[:],
+                      [WAYLAND_CLIENT_LIBS=""],[$WAYLAND_CLIENT_LIBS])])
+    WINE_PACKAGE_FLAGS(WAYLAND_PROTOCOLS, [wayland-protocols],,,,
+         [AC_SUBST(WAYLAND_PROTOCOLS_DATADIR,
+                   `$PKG_CONFIG --atleast-version=1.14 wayland-protocols && $PKG_CONFIG --variable=pkgdatadir wayland-protocols`)])
+    AC_PATH_PROG(WAYLAND_SCANNER,wayland-scanner,
+                 [`$PKG_CONFIG --variable=wayland_scanner wayland-scanner`])
+    WINE_PACKAGE_FLAGS(WAYLAND_CURSOR,[wayland-cursor],,,,
+        [AC_CHECK_HEADERS([wayland-cursor.h])
+         AC_CHECK_LIB(wayland-cursor,wl_cursor_theme_load,[:],
+                      [WAYLAND_CURSOR_LIBS=""],[$WAYLAND_CURSOR_LIBS])])
+    WINE_PACKAGE_FLAGS(XKBCOMMON,[xkbcommon],,,,
+        [AC_CHECK_HEADERS([xkbcommon/xkbcommon.h])
+         AC_CHECK_LIB(xkbcommon,xkb_context_new,[:],[XKBCOMMON_LIBS=""],[$XKBCOMMON_LIBS])])
+    WINE_PACKAGE_FLAGS(GBM,[gbm],,,,
+        [AC_CHECK_HEADERS([gbm.h])
+         AC_CHECK_LIB(gbm,gbm_create_device,[:],[GBM_LIBS=""],[$GBM_LIBS])
+         WINE_CHECK_LIB_FUNCS(gbm_surface_create_with_modifiers2, [$GBM_LIBS])])
+    WINE_PACKAGE_FLAGS(DRM,[libdrm],,,,
+        [AC_CHECK_HEADERS([drm.h])
+         AC_CHECK_LIB(drm,drmPrimeHandleToFD,[:],[DRM_LIBS=""],[$DRM_LIBS])])
+    WINE_CHECK_SONAME(EGL,eglGetProcAddress)
+    WINE_CHECK_SONAME(GL,glFlush)
+    WINE_CHECK_SONAME(GLESv2,glFlush)
+fi
+WINE_NOTICE_WITH(wayland, [test -z "$WAYLAND_CLIENT_LIBS" ||
+                           test -z "$WAYLAND_PROTOCOLS_DATADIR" ||
+                           test -z "$WAYLAND_SCANNER" ||
+                           test -z "$WAYLAND_CURSOR_LIBS" ||
+                           test -z "$XKBCOMMON_LIBS" ||
+                           test -z "$GBM_LIBS" ||
+                           test -z "$DRM_LIBS"],
+                 [Wayland ${notice_platform}development files not found or not new enough, the Wayland driver won't be supported.],
+                 [enable_winewayland_drv])
 
 dnl **** Check for OpenCL ****
 if test "$ac_cv_header_CL_cl_h" = "yes"
@@ -3138,6 +3178,7 @@ WINE_CONFIG_MAKEFILE(dlls/wineps16.drv16,enable_win16)
 WINE_CONFIG_MAKEFILE(dlls/winepulse.drv)
 WINE_CONFIG_MAKEFILE(dlls/wineusb.sys)
 WINE_CONFIG_MAKEFILE(dlls/winevulkan)
+WINE_CONFIG_MAKEFILE(dlls/winewayland.drv)
 WINE_CONFIG_MAKEFILE(dlls/winex11.drv)
 WINE_CONFIG_MAKEFILE(dlls/winexinput.sys)
 WINE_CONFIG_MAKEFILE(dlls/wing.dll16,enable_win16)

@@ -37,6 +37,7 @@ RUN export DEBIAN_FRONTEND=noninteractive; \
                        libusb-1.0-0-dev:amd64 libusb-1.0-0-dev:i386 \
                        libv4l-dev:amd64 libv4l-dev:i386 \
                        libvulkan-dev:amd64 libvulkan-dev:i386 \
+                       libwayland-dev:amd64 libwayland-dev:i386 \
                        libx11-dev:amd64 libx11-dev:i386 \
                        libxcomposite-dev:amd64 libxcomposite-dev:i386 \
                        libxcursor-dev:amd64 libxcursor-dev:i386 \
@@ -50,6 +51,7 @@ RUN export DEBIAN_FRONTEND=noninteractive; \
                        ocl-icd-opencl-dev:amd64 ocl-icd-opencl-dev:i386 \
                        samba-dev:amd64 \
                        unixodbc-dev:amd64 unixodbc-dev:i386 \
+                       wayland-protocols \
                        x11proto-dev && \
     apt-get install -y ccache netbase curl ca-certificates xserver-xorg-video-dummy xserver-xorg xfonts-base xinit fvwm \
                        winbind fonts-liberation2 fonts-noto-core fonts-noto-cjk pulseaudio libasound2-plugins:amd64 libasound2-plugins:i386 \

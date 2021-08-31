@@ -29,6 +29,7 @@
 #include "wine/heap.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
+WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
 DWORD thread_data_tls_index = TLS_OUT_OF_INDEXES;
 
@@ -47,6 +48,14 @@ struct wayland_thread_data *wayland_init_thread_data(void)
         ExitProcess(1);
     }
 
+    if (!wayland_init(&data->wayland))
+    {
+        ERR_(winediag)("waylanddrv: Can't open wayland display. Please ensure "
+                       "that your wayland server is running and that "
+                       "$WAYLAND_DISPLAY is set correctly.\n");
+        ExitProcess(1);
+    }
+
     TlsSetValue(thread_data_tls_index, data);
 
     return data;
@@ -61,6 +70,7 @@ static void CDECL WAYLAND_ThreadDetach(void)
 
     if (data)
     {
+        wayland_deinit(&data->wayland);
         heap_free(data);
         /* clear data in case we get re-entered from user32 before the thread is truly dead */
         TlsSetValue(thread_data_tls_index, NULL);

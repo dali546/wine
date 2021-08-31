@@ -25,6 +25,7 @@
 # error You must include config.h to use this header
 #endif
 
+#include <pthread.h>
 #include <stdarg.h>
 #include <wayland-client.h>
 
@@ -41,11 +42,28 @@
 extern struct wl_display *process_wl_display DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          Definitions for wayland types
+ */
+
+struct wayland
+{
+    struct wl_list thread_link;
+    BOOL initialized;
+    DWORD process_id;
+    DWORD thread_id;
+    struct wl_display *wl_display;
+    struct wl_event_queue *wl_event_queue;
+    struct wl_registry *wl_registry;
+    struct wl_compositor *wl_compositor;
+};
+
+/**********************************************************************
  *          Wayland thread data
  */
 
 struct wayland_thread_data
 {
+    struct wayland wayland;
 };
 
 extern struct wayland_thread_data *wayland_init_thread_data(void) DECLSPEC_HIDDEN;
@@ -60,6 +78,8 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
  */
 
 BOOL wayland_process_init(void) DECLSPEC_HIDDEN;
+BOOL wayland_init(struct wayland *wayland) DECLSPEC_HIDDEN;
+void wayland_deinit(struct wayland *wayland) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          USER driver functions

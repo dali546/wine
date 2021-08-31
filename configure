@@ -702,6 +702,8 @@ XSLT_CFLAGS
 XML2_LIBS
 XML2_CFLAGS
 PCAP_LIBS
+WAYLAND_CLIENT_LIBS
+WAYLAND_CLIENT_CFLAGS
 X_EXTRA_LIBS
 X_LIBS
 X_PRE_LIBS
@@ -1887,6 +1889,8 @@ OBJC
 OBJCFLAGS
 OBJCPP
 XMKMF
+WAYLAND_CLIENT_CFLAGS
+WAYLAND_CLIENT_LIBS
 XML2_CFLAGS
 XML2_LIBS
 XSLT_CFLAGS
@@ -2672,6 +2676,10 @@ Some influential environment variables:
   OBJCFLAGS   Objective C compiler flags
   OBJCPP      Objective C preprocessor
   XMKMF       Path to xmkmf, Makefile generator for X Window System
+  WAYLAND_CLIENT_CFLAGS
+              C compiler flags for wayland-client, overriding pkg-config
+  WAYLAND_CLIENT_LIBS
+              Linker flags for wayland-client, overriding pkg-config
   XML2_CFLAGS C compiler flags for libxml-2.0, overriding pkg-config
   XML2_LIBS   Linker flags for libxml-2.0, overriding pkg-config
   XSLT_CFLAGS C compiler flags for libxslt, overriding pkg-config
@@ -12756,7 +12764,83 @@ enable_winex11_drv=${enable_winex11_drv:-no}
 fi
 fi
 
-if false; then :
+if test "x$with_wayland" = "xyes"
+then
+    if ${WAYLAND_CLIENT_CFLAGS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  WAYLAND_CLIENT_CFLAGS=`$PKG_CONFIG --cflags wayland-client 2>/dev/null`
+fi
+fi
+
+if ${WAYLAND_CLIENT_LIBS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  WAYLAND_CLIENT_LIBS=`$PKG_CONFIG --libs wayland-client 2>/dev/null`
+fi
+fi
+
+
+$as_echo "$as_me:${as_lineno-$LINENO}: wayland-client cflags: $WAYLAND_CLIENT_CFLAGS" >&5
+$as_echo "$as_me:${as_lineno-$LINENO}: wayland-client libs: $WAYLAND_CLIENT_LIBS" >&5
+ac_save_CPPFLAGS=$CPPFLAGS
+CPPFLAGS="$CPPFLAGS $WAYLAND_CLIENT_CFLAGS"
+for ac_header in wayland-client.h
+do :
+  ac_fn_c_check_header_mongrel "$LINENO" "wayland-client.h" "ac_cv_header_wayland_client_h" "$ac_includes_default"
+if test "x$ac_cv_header_wayland_client_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_WAYLAND_CLIENT_H 1
+_ACEOF
+
+fi
+
+done
+
+         { $as_echo "$as_me:${as_lineno-$LINENO}: checking for wl_display_connect in -lwayland-client" >&5
+$as_echo_n "checking for wl_display_connect in -lwayland-client... " >&6; }
+if ${ac_cv_lib_wayland_client_wl_display_connect+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lwayland-client $WAYLAND_CLIENT_LIBS $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char wl_display_connect ();
+int
+main ()
+{
+return wl_display_connect ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_wayland_client_wl_display_connect=yes
+else
+  ac_cv_lib_wayland_client_wl_display_connect=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_wayland_client_wl_display_connect" >&5
+$as_echo "$ac_cv_lib_wayland_client_wl_display_connect" >&6; }
+if test "x$ac_cv_lib_wayland_client_wl_display_connect" = xyes; then :
+  :
+else
+  WAYLAND_CLIENT_LIBS=""
+fi
+
+CPPFLAGS=$ac_save_CPPFLAGS
+
+fi
+if test -z "$WAYLAND_CLIENT_LIBS"; then :
   case "x$with_wayland" in
   x)   as_fn_append wine_notices "|Wayland ${notice_platform}development files not found, the Wayland driver won't be supported." ;;
   xno) ;;
@@ -19965,6 +20049,8 @@ X_CFLAGS = $X_CFLAGS
 X_PRE_LIBS = $X_PRE_LIBS
 X_LIBS = $X_LIBS
 X_EXTRA_LIBS = $X_EXTRA_LIBS
+WAYLAND_CLIENT_CFLAGS = $WAYLAND_CLIENT_CFLAGS
+WAYLAND_CLIENT_LIBS = $WAYLAND_CLIENT_LIBS
 PCAP_LIBS = $PCAP_LIBS
 XML2_CFLAGS = $XML2_CFLAGS
 XML2_LIBS = $XML2_LIBS

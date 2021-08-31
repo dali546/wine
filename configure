@@ -897,6 +897,7 @@ with_xrender
 with_xshape
 with_xshm
 with_xxf86vm
+with_wayland
 with_wine_tools
 with_wine64
 enable_largefile
@@ -1692,6 +1693,7 @@ enable_winepulse_drv
 enable_wineqtdecoder
 enable_wineusb_sys
 enable_winevulkan
+enable_winewayland_drv
 enable_winex11_drv
 enable_winexinput_sys
 enable_wing32
@@ -2686,6 +2688,7 @@ Optional Packages:
   --without-xshape        do not use the Xshape extension
   --without-xshm          do not use XShm (shared memory extension)
   --without-xxf86vm       do not use XFree video mode extension
+  --with-wayland          build with wayland support
   --with-wine-tools=DIR   use Wine tools from directory DIR
   --with-wine64=DIR       use the 64-bit Wine in DIR for a Wow64 build
   --with-x                use the X Window System
@@ -4279,6 +4282,12 @@ fi
 # Check whether --with-xxf86vm was given.
 if test "${with_xxf86vm+set}" = set; then :
   withval=$with_xxf86vm; if test "x$withval" = "xno"; then ac_cv_header_X11_extensions_xf86vmode_h=no; ac_cv_header_X11_extensions_xf86vmproto_h=no; fi
+fi
+
+
+# Check whether --with-wayland was given.
+if test "${with_wayland+set}" = set; then :
+  withval=$with_wayland;
 fi
 
 
@@ -12777,6 +12786,16 @@ enable_winex11_drv=${enable_winex11_drv:-no}
 fi
 fi
 
+if false; then :
+  case "x$with_wayland" in
+  x)   as_fn_append wine_notices "|Wayland ${notice_platform}development files not found, the Wayland driver won't be supported." ;;
+  xno) ;;
+  *)   as_fn_error $? "Wayland ${notice_platform}development files not found, the Wayland driver won't be supported.
+This is an error since --with-wayland was requested." "$LINENO" 5 ;;
+esac
+enable_winewayland_drv=${enable_winewayland_drv:-no}
+fi
+
 if test "$ac_cv_header_CL_cl_h" = "yes"
 then
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for clGetPlatformInfo in -lOpenCL" >&5
@@ -19603,6 +19622,7 @@ wine_fn_config_makefile dlls/winepulse.drv enable_winepulse_drv
 wine_fn_config_makefile dlls/wineqtdecoder enable_wineqtdecoder
 wine_fn_config_makefile dlls/wineusb.sys enable_wineusb_sys
 wine_fn_config_makefile dlls/winevulkan enable_winevulkan
+wine_fn_config_makefile dlls/winewayland.drv enable_winewayland_drv
 wine_fn_config_makefile dlls/winex11.drv enable_winex11_drv
 wine_fn_config_makefile dlls/winexinput.sys enable_winexinput_sys
 wine_fn_config_makefile dlls/wing.dll16 enable_win16

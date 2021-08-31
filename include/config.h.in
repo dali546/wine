@@ -39,6 +39,9 @@
 /* Define to 1 if you have the `dlinfo' function. */
 #undef HAVE_DLINFO
 
+/* Define to 1 if you have the <drm.h> header file. */
+#undef HAVE_DRM_H
+
 /* Define to 1 if you have the <EGL/egl.h> header file. */
 #undef HAVE_EGL_EGL_H
 
@@ -77,6 +80,13 @@
 
 /* Define to 1 if you have the <gcrypt.h> header file. */
 #undef HAVE_GCRYPT_H
+
+/* Define to 1 if you have the <gbm.h> header file. */
+#undef HAVE_GBM_H
+
+/* Define to 1 if you have the `gbm_surface_create_with_modifiers2' function.
+   */
+#undef HAVE_GBM_SURFACE_CREATE_WITH_MODIFIERS2
 
 /* Define to 1 if you have the `getaddrinfo' function. */
 #undef HAVE_GETADDRINFO
@@ -681,6 +691,12 @@
 /* Define to 1 if you have the <vosk_api.h> header file. */
 #undef HAVE_VOSK_API_H
 
+/* Define to 1 if you have the <wayland-client.h> header file. */
+#undef HAVE_WAYLAND_CLIENT_H
+
+/* Define to 1 if you have the <wayland-cursor.h> header file. */
+#undef HAVE_WAYLAND_CURSOR_H
+
 /* Define to 1 if you have the <X11/extensions/shape.h> header file. */
 #undef HAVE_X11_EXTENSIONS_SHAPE_H
 
@@ -731,6 +747,9 @@
 
 /* Define to 1 if `callback' is a member of `XICCallback'. */
 #undef HAVE_XICCALLBACK_CALLBACK
+
+/* Define to 1 if you have the <xkbcommon/xkbcommon.h> header file. */
+#undef HAVE_XKBCOMMON_XKBCOMMON_H
 
 /* Define if Xrender has the XRenderCreateLinearGradient function */
 #undef HAVE_XRENDERCREATELINEARGRADIENT

@@ -30,6 +30,7 @@
 #include <stdlib.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
+WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
 /***********************************************************************
  *           Initialize per thread data
@@ -43,6 +44,14 @@ struct wayland_thread_data *wayland_init_thread_data(void)
     if (!(data = calloc(1, sizeof(*data))))
     {
         ERR("could not create data\n");
+        NtTerminateProcess(0, 1);
+    }
+
+    if (!wayland_init(&data->wayland))
+    {
+        ERR_(winediag)("waylanddrv: Can't open wayland display. Please ensure "
+                       "that your wayland server is running and that "
+                       "$WAYLAND_DISPLAY is set correctly.\n");
         NtTerminateProcess(0, 1);
     }
 
@@ -60,6 +69,7 @@ static void WAYLAND_ThreadDetach(void)
 
     if (data)
     {
+        wayland_deinit(&data->wayland);
         free(data);
         /* clear data in case we get re-entered from user32 before the thread is truly dead */
         NtUserGetThreadInfo()->driver_data = NULL;

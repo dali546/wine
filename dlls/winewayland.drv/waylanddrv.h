@@ -27,6 +27,7 @@
 
 #include <stdarg.h>
 #include <wayland-client.h>
+#include "xdg-output-unstable-v1-client-protocol.h"
 
 #include "windef.h"
 #include "winbase.h"
@@ -46,6 +47,35 @@ struct wayland
     struct wl_event_queue *wl_event_queue;
     struct wl_registry *wl_registry;
     struct wl_compositor *wl_compositor;
+    struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
+    uint32_t next_fallback_output_id;
+    struct wl_list output_list;
+};
+
+struct wayland_output_mode
+{
+    struct wl_list link;
+    int32_t width;
+    int32_t height;
+    int32_t refresh;
+    int bpp;
+    BOOL native;
+};
+
+struct wayland_output
+{
+    struct wl_list link;
+    struct wayland *wayland;
+    struct wl_output *wl_output;
+    struct zxdg_output_v1 *zxdg_output_v1;
+    struct wl_list mode_list;
+    struct wayland_output_mode *current_mode;
+    int logical_x, logical_y;  /* logical position */
+    int logical_w, logical_h;  /* logical size */
+    int x, y;  /* position in native pixel coordinate space */
+    int scale; /* wayland output scale factor for hidpi */
+    char *name;
+    uint32_t global_id;
 };
 
 /**********************************************************************
@@ -78,6 +108,14 @@ void wayland_deinit(struct wayland *wayland);
 BOOL wayland_is_process(struct wayland *wayland);
 struct wayland *wayland_process_acquire(void);
 void wayland_process_release(void);
+
+/**********************************************************************
+ *          Wayland output
+ */
+
+BOOL wayland_output_create(struct wayland *wayland, uint32_t id, uint32_t version);
+void wayland_output_destroy(struct wayland_output *output);
+void wayland_output_use_xdg_extension(struct wayland_output *output);
 
 /**********************************************************************
  *          USER driver functions

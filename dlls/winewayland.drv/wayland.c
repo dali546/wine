@@ -52,6 +52,27 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
 
     TRACE("interface=%s version=%d\n id=%u\n", interface, version, id);
 
+    if (strcmp(interface, "wl_output") == 0)
+    {
+        if (!wayland_output_create(wayland, id, version))
+            ERR("Failed to create wayland_output for global id=%u\n", id);
+    }
+    else if (strcmp(interface, "zxdg_output_manager_v1") == 0)
+    {
+        struct wayland_output *output;
+
+        wayland->zxdg_output_manager_v1 =
+            wl_registry_bind(registry, id, &zxdg_output_manager_v1_interface,
+                             version < 3 ? version : 3);
+
+        /* Add zxdg_output_v1 to existing outputs. */
+        wl_list_for_each(output, &wayland->output_list, link)
+            wayland_output_use_xdg_extension(output);
+    }
+
+    /* The per-process wayland instance only handles output related globals. */
+    if (wayland_is_process(wayland)) return;
+
     if (strcmp(interface, "wl_compositor") == 0)
     {
         wayland->wl_compositor =
@@ -62,7 +83,20 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
                                           uint32_t id)
 {
+    struct wayland *wayland = data;
+    struct wayland_output *output, *tmp;
+
     TRACE("id=%d\n", id);
+
+    wl_list_for_each_safe(output, tmp, &wayland->output_list, link)
+    {
+        if (output->global_id == id)
+        {
+            TRACE("removing output->name=%s\n", output->name);
+            wayland_output_destroy(output);
+            return;
+        }
+    }
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -102,6 +136,8 @@ BOOL wayland_init(struct wayland *wayland)
     }
     wl_proxy_set_queue((struct wl_proxy *) wayland->wl_registry, wayland->wl_event_queue);
 
+    wl_list_init(&wayland->output_list);
+
     /* Populate registry */
     wl_registry_add_listener(wayland->wl_registry, &registry_listener, wayland);
 
@@ -124,7 +160,15 @@ BOOL wayland_init(struct wayland *wayland)
  */
 void wayland_deinit(struct wayland *wayland)
 {
+    struct wayland_output *output, *output_tmp;
+
     TRACE("%p\n", wayland);
+
+    wl_list_for_each_safe(output, output_tmp, &wayland->output_list, link)
+        wayland_output_destroy(output);
+
+    if (wayland->zxdg_output_manager_v1)
+        zxdg_output_manager_v1_destroy(wayland->zxdg_output_manager_v1);
 
     if (wayland->wl_compositor)
         wl_compositor_destroy(wayland->wl_compositor);

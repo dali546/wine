@@ -22,7 +22,111 @@
 
 #include "waylanddrv.h"
 
+#include "wine/debug.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
+
 struct wl_display *process_wl_display = NULL;
+
+/**********************************************************************
+ *          Registry handling
+ */
+
+static void registry_handle_global(void *data, struct wl_registry *registry,
+                                   uint32_t id, const char *interface,
+                                   uint32_t version)
+{
+    struct wayland *wayland = data;
+
+    TRACE("interface=%s version=%d\n id=%u\n", interface, version, id);
+
+    if (strcmp(interface, "wl_compositor") == 0)
+    {
+        wayland->wl_compositor =
+            wl_registry_bind(registry, id, &wl_compositor_interface, 4);
+    }
+}
+
+static void registry_handle_global_remove(void *data, struct wl_registry *registry,
+                                          uint32_t id)
+{
+    TRACE("id=%d\n", id);
+}
+
+static const struct wl_registry_listener registry_listener = {
+    registry_handle_global,
+    registry_handle_global_remove
+};
+
+/**********************************************************************
+ *          wayland_init
+ *
+ *  Initialise a wayland instance.
+ */
+BOOL wayland_init(struct wayland *wayland)
+{
+    TRACE("wayland=%p wl_display=%p\n", wayland, process_wl_display);
+
+    wayland->process_id = GetCurrentProcessId();
+    wayland->thread_id = GetCurrentThreadId();
+    wayland->wl_display = process_wl_display;
+
+    if (!wayland->wl_display)
+    {
+        ERR("Failed to connect to wayland compositor\n");
+        return FALSE;
+    }
+
+    if (!(wayland->wl_event_queue = wl_display_create_queue(wayland->wl_display)))
+    {
+        ERR("Failed to create event queue\n");
+        return FALSE;
+    }
+
+    if (!(wayland->wl_registry = wl_display_get_registry(wayland->wl_display)))
+    {
+        ERR("Failed to get to wayland registry\n");
+        return FALSE;
+    }
+    wl_proxy_set_queue((struct wl_proxy *) wayland->wl_registry, wayland->wl_event_queue);
+
+    /* Populate registry */
+    wl_registry_add_listener(wayland->wl_registry, &registry_listener, wayland);
+
+    /* We need three roundtrips. One to get and bind globals, one to handle all
+     * initial events produced from registering the globals and one more to
+     * handle potential third-order registrations. */
+    wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
+    wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
+    wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
+
+    wayland->initialized = TRUE;
+
+    return TRUE;
+}
+
+/**********************************************************************
+ *          wayland_deinit
+ *
+ *  Deinitialise a wayland instance, releasing all associated resources.
+ */
+void wayland_deinit(struct wayland *wayland)
+{
+    TRACE("%p\n", wayland);
+
+    if (wayland->wl_compositor)
+        wl_compositor_destroy(wayland->wl_compositor);
+
+    if (wayland->wl_registry)
+        wl_registry_destroy(wayland->wl_registry);
+
+    if (wayland->wl_event_queue)
+        wl_event_queue_destroy(wayland->wl_event_queue);
+
+    wl_display_flush(wayland->wl_display);
+
+    memset(wayland, 0, sizeof(*wayland));
+}
 
 /**********************************************************************
  *          wayland_process_init
@@ -35,4 +139,3 @@ BOOL wayland_process_init(void)
     process_wl_display = wl_display_connect(NULL);
     return process_wl_display != NULL;
 }
-

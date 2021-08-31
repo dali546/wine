@@ -1,4 +1,6 @@
 MODULE    = winewayland.drv
+EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS)
+EXTRALIBS = $(WAYLAND_CLIENT_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRACFLAGS = -std=c11 -Wno-declaration-after-statement
 CPPFLAGS = -std=c11 -Wno-declaration-after-statement
@@ -7,6 +9,7 @@ EXTRACROSSCFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRADLLFLAGS = -mcygwin
 
 C_SRCS = \
+	wayland.c \
 	waylanddrv_main.c \
 
 RC_SRCS = version.rc

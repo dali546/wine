@@ -34,7 +34,11 @@ static NTSTATUS CDECL waylanddrv_unix_call(enum waylanddrv_unix_func func, void 
 static NTSTATUS waylanddrv_unix_init(void *arg)
 {
     struct waylanddrv_unix_init_params *params = arg;
+
+    if (!wayland_process_init()) return STATUS_UNSUCCESSFUL;
+
     params->unix_call = waylanddrv_unix_call;
+
     return 0;
 }
 

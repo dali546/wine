@@ -29,11 +29,60 @@
 
 #include "waylanddrv.h"
 
+#include "wine/debug.h"
+#include "wine/gdi_driver.h"
+
+#include <stdlib.h>
+
+WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
+
 static NTSTATUS CDECL waylanddrv_unix_call(enum waylanddrv_unix_func func, void *params);
+
+/***********************************************************************
+ *           Initialize per thread data
+ */
+struct wayland_thread_data *wayland_init_thread_data(void)
+{
+    struct wayland_thread_data *data = wayland_thread_data();
+
+    if (data) return data;
+
+    if (!(data = calloc(1, sizeof(*data))))
+    {
+        ERR("could not create data\n");
+        NtTerminateProcess(0, 1);
+    }
+
+    NtUserGetThreadInfo()->driver_data = data;
+
+    return data;
+}
+
+/***********************************************************************
+ *           ThreadDetach (WAYLAND.@)
+ */
+static void WAYLAND_ThreadDetach(void)
+{
+    struct wayland_thread_data *data = wayland_thread_data();
+
+    if (data)
+    {
+        free(data);
+        /* clear data in case we get re-entered from user32 before the thread is truly dead */
+        NtUserGetThreadInfo()->driver_data = NULL;
+    }
+}
+
+static const struct user_driver_funcs waylanddrv_funcs =
+{
+    .pThreadDetach = WAYLAND_ThreadDetach,
+};
 
 static NTSTATUS waylanddrv_unix_init(void *arg)
 {
     struct waylanddrv_unix_init_params *params = arg;
+
+    __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
 
     if (!wayland_process_init()) return STATUS_UNSUCCESSFUL;
 

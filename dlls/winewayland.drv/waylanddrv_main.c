@@ -24,12 +24,64 @@
 
 #include "waylanddrv.h"
 
+#include "wine/debug.h"
+#include "wine/gdi_driver.h"
+#include "wine/heap.h"
+
+WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
+
+DWORD thread_data_tls_index = TLS_OUT_OF_INDEXES;
+
+/***********************************************************************
+ *           Initialize per thread data
+ */
+struct wayland_thread_data *wayland_init_thread_data(void)
+{
+    struct wayland_thread_data *data = wayland_thread_data();
+
+    if (data) return data;
+
+    if (!(data = heap_alloc_zero(sizeof(*data))))
+    {
+        ERR("could not create data\n");
+        ExitProcess(1);
+    }
+
+    TlsSetValue(thread_data_tls_index, data);
+
+    return data;
+}
+
+/***********************************************************************
+ *           ThreadDetach (WAYLAND.@)
+ */
+static void CDECL WAYLAND_ThreadDetach(void)
+{
+    struct wayland_thread_data *data = wayland_thread_data();
+
+    if (data)
+    {
+        heap_free(data);
+        /* clear data in case we get re-entered from user32 before the thread is truly dead */
+        TlsSetValue(thread_data_tls_index, NULL);
+    }
+}
+
+static const struct user_driver_funcs waylanddrv_funcs =
+{
+    .pThreadDetach = WAYLAND_ThreadDetach,
+};
+
 /***********************************************************************
  *           WAYLANDDRV process initialisation routine
  */
 static BOOL process_attach(void)
 {
+    if ((thread_data_tls_index = TlsAlloc()) == TLS_OUT_OF_INDEXES) return FALSE;
+
     if (!wayland_process_init()) return FALSE;
+
+    __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
 
     return TRUE;
 }

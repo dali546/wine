@@ -12,5 +12,6 @@ EXTRADLLFLAGS = -mcygwin
 C_SRCS = \
 	wayland.c \
 	waylanddrv_main.c \
+	window.c \
 
 RC_SRCS = version.rc

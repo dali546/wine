@@ -6,7 +6,11 @@ UNIX_LIBS = -lwin32u $(WAYLAND_CLIENT_LIBS) $(PTHREAD_LIBS)
 C_SRCS = \
 	dllmain.c \
 	wayland.c \
+	wayland_output.c \
 	waylanddrv_main.c \
 	window.c \
+
+WAYLAND_PROTOCOL_SRCS = \
+	$(WAYLAND_PROTOCOLS_DATADIR)/unstable/xdg-output/xdg-output-unstable-v1.xml \
 
 RC_SRCS = version.rc

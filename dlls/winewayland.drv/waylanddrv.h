@@ -76,4 +76,10 @@ BOOL wayland_process_init(void);
 BOOL wayland_init(struct wayland *wayland);
 void wayland_deinit(struct wayland *wayland);
 
+/**********************************************************************
+ *          USER driver functions
+ */
+
+extern BOOL CDECL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
+
 #endif /* __WINE_WAYLANDDRV_H */

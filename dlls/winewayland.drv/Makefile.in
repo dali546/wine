@@ -1,5 +1,6 @@
 EXTRADEFS = -DWINE_NO_LONG_TYPES
 MODULE = winewayland.drv
+IMPORTS = user32
 EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS)
 EXTRALIBS = $(WAYLAND_CLIENT_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement

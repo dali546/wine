@@ -1,9 +1,7 @@
 /*
- * WAYLANDDRV initialization code
+ * Wayland core handling
  *
- * Copyright 1998 Patrik Stridvall
- * Copyright 2000 Alexandre Julliard
- * Copyright 2020 Alexandre Frantzis for Collabora Ltd
+ * Copyright (c) 2020 Alexandros Frantzis for Collabora Ltd
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -24,30 +22,17 @@
 
 #include "waylanddrv.h"
 
-/***********************************************************************
- *           WAYLANDDRV process initialisation routine
- */
-static BOOL process_attach(void)
-{
-    if (!wayland_process_init()) return FALSE;
+struct wl_display *process_wl_display = NULL;
 
-    return TRUE;
+/**********************************************************************
+ *          wayland_process_init
+ *
+ *  Initialise the per process wayland objects.
+ *
+ */
+BOOL wayland_process_init(void)
+{
+    process_wl_display = wl_display_connect(NULL);
+    return process_wl_display != NULL;
 }
 
-/***********************************************************************
- *           WAYLANDDRV initialisation routine
- */
-BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID reserved)
-{
-    BOOL ret = TRUE;
-
-    switch(reason)
-    {
-    case DLL_PROCESS_ATTACH:
-        DisableThreadLibraryCalls(hinst);
-        ret = process_attach();
-        break;
-    }
-
-    return ret;
-}

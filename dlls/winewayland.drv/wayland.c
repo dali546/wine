@@ -79,6 +79,7 @@ static void registry_handle_global_remove(void *data, struct wl_registry *regist
         {
             TRACE("removing output->name=%s\n", output->name);
             wayland_output_destroy(output);
+            wayland_init_display_devices(wayland);
             return;
         }
     }

@@ -75,6 +75,7 @@ struct wayland_output
     int x, y;  /* position in native pixel coordinate space */
     int scale; /* wayland output scale factor for hidpi */
     char *name;
+    WCHAR wine_name[128];
     uint32_t global_id;
 };
 
@@ -98,6 +99,11 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
     return data;
 }
 
+static inline struct wayland *thread_init_wayland(void)
+{
+    return &wayland_init_thread_data()->wayland;
+}
+
 /**********************************************************************
  *          Wayland initialisation
  */
@@ -114,5 +120,7 @@ void wayland_init_display_devices(struct wayland *wayland);
 BOOL wayland_output_create(struct wayland *wayland, uint32_t id, uint32_t version);
 void wayland_output_destroy(struct wayland_output *output);
 void wayland_output_use_xdg_extension(struct wayland_output *output);
+struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
+                                                       LPCWSTR wine_name);
 
 #endif /* __WINE_WAYLANDDRV_H */

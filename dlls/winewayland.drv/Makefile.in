@@ -8,6 +8,7 @@ C_SRCS = \
 	dllmain.c \
 	gdi.c \
 	wayland.c \
+	wayland_buffer_queue.c \
 	wayland_native_buffer.c \
 	wayland_output.c \
 	wayland_shm.c \

@@ -25,7 +25,6 @@
 #include "waylanddrv.h"
 
 #include "wine/debug.h"
-#include "wine/gdi_driver.h"
 
 #include <stdlib.h>
 
@@ -79,10 +78,12 @@ static void WAYLAND_ThreadDetach(void)
 static const struct user_driver_funcs waylanddrv_funcs =
 {
     .pCreateWindow = WAYLAND_CreateWindow,
+    .pDestroyWindow = WAYLAND_DestroyWindow,
     .pEnumDisplaySettingsEx = WAYLAND_EnumDisplaySettingsEx,
     .pThreadDetach = WAYLAND_ThreadDetach,
     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
     .pWindowMessage = WAYLAND_WindowMessage,
+    .pWindowPosChanging = WAYLAND_WindowPosChanging,
 };
 
 /***********************************************************************

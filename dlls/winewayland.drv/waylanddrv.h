@@ -168,6 +168,12 @@ struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
                                                        LPCWSTR wine_name);
 
 /**********************************************************************
+ *          Wayland event dispatch
+ */
+
+int wayland_dispatch_queue(struct wl_event_queue *queue, int timeout_ms);
+
+/**********************************************************************
  *          USER driver functions
  */
 

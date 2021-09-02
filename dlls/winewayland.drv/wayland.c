@@ -115,6 +115,12 @@ BOOL wayland_init(struct wayland *wayland)
         return FALSE;
     }
 
+    if (!(wayland->buffer_wl_event_queue = wl_display_create_queue(wayland->wl_display)))
+    {
+        ERR("Failed to create buffer event queue\n");
+        return FALSE;
+    }
+
     if (!(wayland->wl_registry = wl_display_get_registry(wayland->wl_display)))
     {
         ERR("Failed to get to wayland registry\n");
@@ -165,6 +171,12 @@ void wayland_deinit(struct wayland *wayland)
     if (wayland->wl_event_queue)
         wl_event_queue_destroy(wayland->wl_event_queue);
 
+    if (wayland->buffer_wl_event_queue)
+    {
+        wl_event_queue_destroy(wayland->buffer_wl_event_queue);
+        wayland->buffer_wl_event_queue = NULL;
+    }
+
     wl_display_flush(wayland->wl_display);
 
     memset(wayland, 0, sizeof(*wayland));
@@ -180,4 +192,21 @@ BOOL wayland_process_init(void)
 {
     process_wl_display = wl_display_connect(NULL);
     return process_wl_display != NULL;
+}
+
+/**********************************************************************
+ *          wayland_dispatch_buffer
+ *
+ * Dispatch buffer related events for the specified wayland instance.
+ *
+ * Returns the number of events dispatched.
+ */
+int wayland_dispatch_buffer(struct wayland *wayland)
+{
+    TRACE("wayland=%p buffer_queue=%p\n", wayland, wayland->buffer_wl_event_queue);
+
+    wl_display_flush(wayland->wl_display);
+
+    return wl_display_dispatch_queue_pending(wayland->wl_display,
+                                             wayland->buffer_wl_event_queue);
 }

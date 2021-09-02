@@ -198,6 +198,7 @@ size_t ascii_to_unicode_z(WCHAR *dst, size_t dst_max_chars,
  */
 
 BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
+BOOL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags) DECLSPEC_HIDDEN;
 void WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                   BOOL force, void *param) DECLSPEC_HIDDEN;
 LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;

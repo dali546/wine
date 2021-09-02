@@ -16,6 +16,7 @@ C_SRCS = \
 	wayland_mutex.c \
 	wayland_output.c \
 	waylanddrv_main.c \
+	wayland_buffer_queue.c \
 	wayland_shm.c \
 	window.c \
 

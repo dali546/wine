@@ -60,6 +60,7 @@ struct wayland
     struct wl_event_queue *buffer_wl_event_queue;
     struct wl_registry *wl_registry;
     struct wl_compositor *wl_compositor;
+    struct wl_shm *wl_shm;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
     struct wl_list output_list;
@@ -90,6 +91,18 @@ struct wayland_output
     char *name;
     WCHAR wine_name[128];
     uint32_t global_id;
+};
+
+struct wayland_shm_buffer
+{
+    struct wl_list link;
+    struct wl_buffer *wl_buffer;
+    int width, height, stride;
+    enum wl_shm_format format;
+    void *map_data;
+    size_t map_size;
+    BOOL busy;
+    HRGN damage_region;
 };
 
 /**********************************************************************
@@ -141,6 +154,18 @@ struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
 
 int wayland_dispatch_buffer(struct wayland *wayland);
 
+/**********************************************************************
+ *          Wayland SHM buffer
+ */
+
+struct wayland_shm_buffer *wayland_shm_buffer_create(struct wayland *wayland,
+                                                     int width, int height,
+                                                     enum wl_shm_format format);
+void wayland_shm_buffer_destroy(struct wayland_shm_buffer *shm_buffer);
+void wayland_shm_buffer_clear_damage(struct wayland_shm_buffer *shm_buffer);
+void wayland_shm_buffer_add_damage(struct wayland_shm_buffer *shm_buffer, HRGN damage);
+RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_buffer,
+                                               HRGN clip);
 /**********************************************************************
  *          USER driver functions
  */

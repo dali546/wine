@@ -51,6 +51,7 @@ RUN export DEBIAN_FRONTEND=noninteractive; \
                        ocl-icd-opencl-dev:amd64 ocl-icd-opencl-dev:i386 \
                        samba-dev:amd64 \
                        unixodbc-dev:amd64 unixodbc-dev:i386 \
+                       wayland-protocols \
                        x11proto-dev && \
     apt-get install -y ccache netbase curl ca-certificates xserver-xorg-video-dummy xserver-xorg xfonts-base xinit fvwm \
                        winbind fonts-liberation2 fonts-noto-core fonts-noto-cjk pulseaudio libasound2-plugins:amd64 libasound2-plugins:i386 \

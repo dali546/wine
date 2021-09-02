@@ -221,6 +221,62 @@ static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, D
     return TRUE;
 }
 
+static BOOL wayland_get_devmode(struct wayland *wayland, LPCWSTR name, DWORD n, DEVMODEW *mode)
+{
+    struct wayland_output *output;
+    struct wayland_output_mode *output_mode;
+    DWORD i = 0;
+
+    output = wayland_output_get_by_wine_name(wayland, name);
+    if (!output)
+        return FALSE;
+
+    wl_list_for_each(output_mode, &output->mode_list, link)
+    {
+        if (i == n)
+        {
+            populate_devmode(output_mode, mode);
+            return TRUE;
+        }
+        i++;
+    }
+
+    return FALSE;
+}
+
+/***********************************************************************
+ *		EnumDisplaySettingsEx  (WAYLAND.@)
+ *
+ */
+BOOL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags)
+{
+    struct wayland *wayland = wayland_process_acquire();
+    BOOL ret;
+
+    TRACE("(%s,%d,%p,0x%08x) wayland=%p\n", debugstr_w(name), n, devmode, flags, wayland);
+
+    /* We don't handle n == ENUM_REGISTRY_SETTINGS here, it is handled by win32u. */
+
+    /* We don't handle n == ENUM_CURRENT_SETTINGS here, it is handled by win32u through
+     * WAYLAND_GetCurrentDisplaySettings. */
+
+    ret = wayland_get_devmode(wayland, name, n, devmode);
+
+    wayland_process_release();
+
+    if (ret)
+    {
+        TRACE("=> %dx%d\n", devmode->dmPelsWidth, devmode->dmPelsHeight);
+    }
+    else
+    {
+        WARN("Modes index out of range\n");
+        RtlSetLastWin32Error(ERROR_NO_MORE_FILES);
+    }
+
+    return ret;
+}
+
 /***********************************************************************
  *             GetCurrentDisplaySettings  (WAYLAND.@)
  *

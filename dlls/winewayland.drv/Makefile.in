@@ -9,6 +9,7 @@ CPPFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRACROSSCFLAGS = -std=c11 -Wno-declaration-after-statement
 
 C_SRCS = \
+	display.c \
 	dllmain.c \
 	wayland.c \
 	wayland_mutex.c \

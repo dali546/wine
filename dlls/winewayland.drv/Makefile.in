@@ -1,5 +1,5 @@
 MODULE    = winewayland.drv
-IMPORTS   = user32 win32u
+IMPORTS   = advapi32 user32 win32u
 EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS)
 EXTRALIBS = $(WAYLAND_CLIENT_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement

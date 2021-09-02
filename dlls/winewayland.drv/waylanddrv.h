@@ -45,6 +45,7 @@ struct wayland
     DWORD thread_id;
     struct wl_display *wl_display;
     struct wl_event_queue *wl_event_queue;
+    struct wl_event_queue *buffer_wl_event_queue;
     struct wl_registry *wl_registry;
     struct wl_compositor *wl_compositor;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
@@ -122,5 +123,11 @@ void wayland_output_destroy(struct wayland_output *output);
 void wayland_output_use_xdg_extension(struct wayland_output *output);
 struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
                                                        LPCWSTR wine_name);
+
+/**********************************************************************
+ *          Wayland event dispatch
+ */
+
+int wayland_dispatch_buffer(struct wayland *wayland);
 
 #endif /* __WINE_WAYLANDDRV_H */

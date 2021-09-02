@@ -23,6 +23,9 @@
 #pragma makedep unix
 #endif
 
+#define NONAMELESSUNION
+#define NONAMELESSSTRUCT
+
 #include "config.h"
 
 #include "waylanddrv.h"
@@ -172,4 +175,96 @@ BOOL WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manage
     wayland_process_release();
 
     return TRUE;
+}
+
+static void populate_devmode(struct wayland_output_mode *output_mode, DEVMODEW *mode)
+{
+    mode->dmFields = DM_DISPLAYORIENTATION | DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT |
+                     DM_DISPLAYFLAGS | DM_DISPLAYFREQUENCY | DM_POSITION;
+    mode->u1.s2.dmDisplayOrientation = DMDO_DEFAULT;
+    mode->u2.dmDisplayFlags = 0;
+    mode->u1.s2.dmPosition.x = 0;
+    mode->u1.s2.dmPosition.y = 0;
+    mode->dmBitsPerPel = output_mode->bpp;
+    mode->dmPelsWidth = output_mode->width;
+    mode->dmPelsHeight = output_mode->height;
+    mode->dmDisplayFrequency = output_mode->refresh / 1000;
+}
+
+static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, DEVMODEW *mode)
+{
+    struct wayland_output *output;
+
+    output = wayland_output_get_by_wine_name(wayland, name);
+    if (!output)
+        return FALSE;
+
+    if (!output->current_mode)
+        return FALSE;
+
+    populate_devmode(output->current_mode, mode);
+
+    return TRUE;
+}
+
+static BOOL wayland_get_devmode(struct wayland *wayland, LPCWSTR name, DWORD n, DEVMODEW *mode)
+{
+    struct wayland_output *output;
+    struct wayland_output_mode *output_mode;
+    DWORD i = 0;
+
+    output = wayland_output_get_by_wine_name(wayland, name);
+    if (!output)
+        return FALSE;
+
+    wl_list_for_each(output_mode, &output->mode_list, link)
+    {
+        if (i == n)
+        {
+            populate_devmode(output_mode, mode);
+            return TRUE;
+        }
+        i++;
+    }
+
+    return FALSE;
+}
+
+/***********************************************************************
+ *		EnumDisplaySettingsEx  (WAYLAND.@)
+ *
+ */
+BOOL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags)
+{
+    struct wayland *wayland = wayland_process_acquire();
+
+    TRACE("(%s,%d,%p,0x%08x) wayland=%p\n", debugstr_w(name), n, devmode, flags, wayland);
+
+    /* We don't handle n == ENUM_REGISTRY_SETTINGS here, it is handled by win32u. */
+
+    if (n == ENUM_CURRENT_SETTINGS)
+    {
+        if (!wayland_get_current_devmode(wayland, name, devmode))
+        {
+            ERR("Failed to get %s current display settings.\n", wine_dbgstr_w(name));
+            goto err;
+        }
+        goto done;
+    }
+
+    if (!wayland_get_devmode(wayland, name, n, devmode))
+    {
+        WARN("Modes index out of range\n");
+        SetLastError(ERROR_NO_MORE_FILES);
+        goto err;
+    }
+
+done:
+    wayland_process_release();
+    TRACE("=> %dx%d\n", devmode->dmPelsWidth, devmode->dmPelsHeight);
+    return TRUE;
+
+err:
+    wayland_process_release();
+    return FALSE;
 }

@@ -85,6 +85,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
 {
     .pCreateWindow = WAYLAND_CreateWindow,
     .pThreadDetach = WAYLAND_ThreadDetach,
+    .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
 };
 
 static NTSTATUS waylanddrv_unix_init(void *arg)

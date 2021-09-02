@@ -82,6 +82,16 @@ struct wayland_output
     uint32_t global_id;
 };
 
+struct wayland_buffer_queue
+{
+    struct wayland *wayland;
+    struct wl_list buffer_list;
+    int width;
+    int height;
+    enum wl_shm_format format;
+    HRGN damage_region;
+};
+
 struct wayland_shm_buffer
 {
     struct wl_list link;
@@ -143,6 +153,17 @@ struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
  */
 
 int wayland_dispatch_buffer(struct wayland *wayland);
+
+/**********************************************************************
+ *          Wayland buffer queue
+ */
+
+struct wayland_buffer_queue *wayland_buffer_queue_create(struct wayland *wayland,
+                                                         int width, int heigh,
+                                                         enum wl_shm_format format);
+void wayland_buffer_queue_destroy(struct wayland_buffer_queue *queue);
+void wayland_buffer_queue_add_damage(struct wayland_buffer_queue *queue, HRGN damage);
+struct wayland_shm_buffer *wayland_buffer_queue_acquire_buffer(struct wayland_buffer_queue *queue);
 
 /**********************************************************************
  *          Wayland SHM buffer

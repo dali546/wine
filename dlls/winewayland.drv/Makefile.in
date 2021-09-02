@@ -1,5 +1,5 @@
 MODULE    = winewayland.drv
-IMPORTS   = advapi32 user32 win32u
+IMPORTS   = advapi32 gdi32 user32 win32u
 EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS)
 EXTRALIBS = $(WAYLAND_CLIENT_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement
@@ -14,6 +14,7 @@ C_SRCS = \
 	wayland.c \
 	wayland_output.c \
 	waylanddrv_main.c \
+	wayland_shm.c \
 	window.c \
 
 WAYLAND_PROTOCOL_SRCS = \

@@ -105,6 +105,7 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
 BOOL wayland_process_init(void);
 BOOL wayland_init(struct wayland *wayland);
 void wayland_deinit(struct wayland *wayland);
+void wayland_init_display_devices(struct wayland *wayland);
 
 /**********************************************************************
  *          Wayland output

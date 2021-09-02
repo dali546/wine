@@ -261,6 +261,8 @@ static void wayland_output_done(struct wayland_output *output)
               o->logical_x, output->logical_y, o->logical_w, o->logical_h,
               o->x, o->y, o->current_mode->width, o->current_mode->height);
     }
+
+    wayland_init_display_devices(output->wayland);
 }
 
 static void output_handle_geometry(void *data, struct wl_output *wl_output,

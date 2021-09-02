@@ -10,6 +10,7 @@ C_SRCS = \
 	wayland.c \
 	wayland_native_buffer.c \
 	wayland_output.c \
+	wayland_shm.c \
 	wayland_shmfd.c \
 	waylanddrv_main.c \
 	window.c \

@@ -30,7 +30,6 @@
 #include "waylanddrv.h"
 
 #include "wine/debug.h"
-#include "wine/gdi_driver.h"
 
 #include <stdlib.h>
 
@@ -84,10 +83,12 @@ static void WAYLAND_ThreadDetach(void)
 static const struct user_driver_funcs waylanddrv_funcs =
 {
     .pCreateWindow = WAYLAND_CreateWindow,
+    .pDestroyWindow = WAYLAND_DestroyWindow,
     .pGetCurrentDisplaySettings = WAYLAND_GetCurrentDisplaySettings,
     .pThreadDetach = WAYLAND_ThreadDetach,
     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
     .pWindowMessage = WAYLAND_WindowMessage,
+    .pWindowPosChanging = WAYLAND_WindowPosChanging,
 };
 
 static NTSTATUS waylanddrv_unix_init(void *arg)

@@ -31,6 +31,7 @@
 
 #include "windef.h"
 #include "winbase.h"
+#include "wingdi.h"
 
 extern struct wl_display *process_wl_display;
 
@@ -136,6 +137,7 @@ struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
  */
 
 extern BOOL CDECL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
+extern BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags) DECLSPEC_HIDDEN;
 extern LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_WAYLANDDRV_H */

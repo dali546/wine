@@ -177,9 +177,13 @@ struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
  */
 
 extern BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
+extern void WAYLAND_DestroyWindow(HWND hwnd) DECLSPEC_HIDDEN;
 extern BOOL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags) DECLSPEC_HIDDEN;
 extern void WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                          BOOL force, void *param) DECLSPEC_HIDDEN;
 extern LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;
+extern BOOL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flags,
+                                      const RECT *window_rect, const RECT *client_rect,
+                                      RECT *visible_rect, struct window_surface **surface) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_WAYLANDDRV_H */

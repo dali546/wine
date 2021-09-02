@@ -75,6 +75,7 @@ struct wayland
     struct wl_event_queue *wl_event_queue;
     struct wl_registry *wl_registry;
     struct wl_compositor *wl_compositor;
+    struct wl_shm *wl_shm;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
     struct wl_list output_list;
@@ -116,6 +117,18 @@ struct wayland_native_buffer
     uint32_t width, height;
     uint32_t format;
     uint64_t modifier;
+};
+
+struct wayland_shm_buffer
+{
+    struct wl_list link;
+    struct wl_buffer *wl_buffer;
+    int width, height, stride;
+    enum wl_shm_format format;
+    void *map_data;
+    size_t map_size;
+    BOOL busy;
+    HRGN damage_region;
 };
 
 /**********************************************************************
@@ -190,7 +203,24 @@ int wayland_dispatch_queue(struct wl_event_queue *queue, int timeout_ms) DECLSPE
  *          Wayland native buffer
  */
 
+BOOL wayland_native_buffer_init_shm(struct wayland_native_buffer *native,
+                                    int width, int height,
+                                    enum wl_shm_format format) DECLSPEC_HIDDEN;
 void wayland_native_buffer_deinit(struct wayland_native_buffer *native) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          Wayland SHM buffer
+ */
+
+struct wayland_shm_buffer *wayland_shm_buffer_create(struct wayland *wayland,
+                                                     int width, int height,
+                                                     enum wl_shm_format format) DECLSPEC_HIDDEN;
+void wayland_shm_buffer_destroy(struct wayland_shm_buffer *shm_buffer) DECLSPEC_HIDDEN;
+struct wl_buffer *wayland_shm_buffer_steal_wl_buffer_and_destroy(struct wayland_shm_buffer *shm_buffer) DECLSPEC_HIDDEN;
+void wayland_shm_buffer_clear_damage(struct wayland_shm_buffer *shm_buffer) DECLSPEC_HIDDEN;
+void wayland_shm_buffer_add_damage(struct wayland_shm_buffer *shm_buffer, HRGN damage) DECLSPEC_HIDDEN;
+RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_buffer,
+                                               HRGN clip) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Misc. helpers

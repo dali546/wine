@@ -129,6 +129,17 @@ struct wayland_shm_buffer
     HRGN damage_region;
 };
 
+struct wayland_buffer_queue
+{
+    struct wayland *wayland;
+    struct wl_event_queue *wl_event_queue;
+    struct wl_list buffer_list;
+    int width;
+    int height;
+    enum wl_shm_format format;
+    HRGN damage_region;
+};
+
 /**********************************************************************
  *          Wayland thread data
  */
@@ -224,6 +235,17 @@ void wayland_shm_buffer_clear_damage(struct wayland_shm_buffer *shm_buffer);
 void wayland_shm_buffer_add_damage(struct wayland_shm_buffer *shm_buffer, HRGN damage);
 RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_buffer,
                                                HRGN clip);
+
+/**********************************************************************
+ *          Wayland buffer queue
+ */
+
+struct wayland_buffer_queue *wayland_buffer_queue_create(struct wayland *wayland,
+                                                         int width, int heigh,
+                                                         enum wl_shm_format format);
+void wayland_buffer_queue_destroy(struct wayland_buffer_queue *queue);
+void wayland_buffer_queue_add_damage(struct wayland_buffer_queue *queue, HRGN damage);
+struct wayland_shm_buffer *wayland_buffer_queue_acquire_buffer(struct wayland_buffer_queue *queue);
 
 /**********************************************************************
  *          Misc. helpers

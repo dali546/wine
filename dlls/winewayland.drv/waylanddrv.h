@@ -98,6 +98,7 @@ struct wayland
     uint32_t next_fallback_output_id;
     struct wl_list output_list;
     struct wl_list detached_shm_buffer_list;
+    DWORD last_dispatch_mask;
     int event_notification_pipe[2];
 };
 
@@ -384,6 +385,9 @@ LRESULT WAYLAND_DesktopWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DEC
 void WAYLAND_DestroyWindow(HWND hwnd) DECLSPEC_HIDDEN;
 BOOL WAYLAND_GetCurrentDisplaySettings(LPCWSTR name, BOOL is_primary,
                                        LPDEVMODEW devmode) DECLSPEC_HIDDEN;
+NTSTATUS WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
+                                             const LARGE_INTEGER *timeout,
+                                             DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
 BOOL WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                   BOOL force, void *param) DECLSPEC_HIDDEN;
 LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;

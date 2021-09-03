@@ -96,6 +96,7 @@ struct wayland
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
     struct wl_list output_list;
+    DWORD last_dispatch_mask;
     int event_notification_pipe[2];
 };
 
@@ -349,6 +350,8 @@ int wayland_shmfd_create(const char *name, int size);
 extern BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
 extern void WAYLAND_DestroyWindow(HWND hwnd) DECLSPEC_HIDDEN;
 extern BOOL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags) DECLSPEC_HIDDEN;
+extern DWORD WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
+                                                 DWORD timeout, DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
 extern void WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                          BOOL force, void *param) DECLSPEC_HIDDEN;
 extern LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;

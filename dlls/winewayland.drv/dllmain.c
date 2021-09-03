@@ -34,7 +34,10 @@ static DWORD WINAPI wayland_read_events_thread(void *arg)
 
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
 {
-    struct waylanddrv_unix_init_params init_params;
+    struct waylanddrv_unix_init_params init_params =
+    {
+        .pNtWaitForMultipleObjects = NtWaitForMultipleObjects,
+    };
     DWORD tid;
 
     if (reason != DLL_PROCESS_ATTACH) return TRUE;

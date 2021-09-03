@@ -45,6 +45,12 @@ struct wayland_win_data
     RECT           window_rect;
     /* client area relative to parent */
     RECT           client_rect;
+    /* wayland surface (if any) representing this window on the wayland side */
+    struct wayland_surface *wayland_surface;
+    /* whether this window is visible */
+    BOOL visible;
+    /* Whether a first wayland surface update is needed */
+    BOOL           wayland_surface_needs_first_update;
 };
 
 static CRITICAL_SECTION win_data_section;
@@ -71,6 +77,7 @@ static void wayland_win_data_destroy(struct wayland_win_data *data)
     TRACE("hwnd=%p\n", data->hwnd);
     win_data_context[context_idx(data->hwnd)] = NULL;
 
+    if (data->wayland_surface) wayland_surface_unref(data->wayland_surface);
     heap_free(data);
 
     LeaveCriticalSection(&win_data_section);
@@ -123,6 +130,7 @@ static struct wayland_win_data *wayland_win_data_create(HWND hwnd)
         return NULL;
 
     data->hwnd = hwnd;
+    data->wayland_surface_needs_first_update = TRUE;
 
     EnterCriticalSection(&win_data_section);
     win_data_context[context_idx(hwnd)] = data;
@@ -130,6 +138,107 @@ static struct wayland_win_data *wayland_win_data_create(HWND hwnd)
     TRACE("hwnd=%p\n", data->hwnd);
 
     return data;
+}
+
+/***********************************************************************
+ *           wayland_surface_for_hwnd_lock
+ *
+ *  Gets the wayland surface for HWND while locking the private window data.
+ */
+static struct wayland_surface *wayland_surface_for_hwnd_lock(HWND hwnd)
+{
+    struct wayland_win_data *data = wayland_win_data_get(hwnd);
+
+    if (data && data->wayland_surface)
+        return data->wayland_surface;
+
+    wayland_win_data_release(data);
+
+    return NULL;
+}
+
+/***********************************************************************
+ *           wayland_surface_for_hwnd_unlock
+ */
+static void wayland_surface_for_hwnd_unlock(struct wayland_surface *surface)
+{
+    if (surface) LeaveCriticalSection(&win_data_section);
+}
+
+static BOOL wayland_win_data_wayland_surface_needs_update(struct wayland_win_data *data)
+{
+    if (data->wayland_surface_needs_first_update)
+        return TRUE;
+
+    /* If this is currently or potentially a toplevel surface, and its
+     * visibility state has changed, recreate win_data so that we only have
+     * xdg_toplevels for visible windows. */
+    if (data->wayland_surface && !data->wayland_surface->wl_subsurface)
+    {
+        BOOL visible = data->wayland_surface->xdg_toplevel != NULL;
+        if (data->visible != visible)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static void wayland_win_data_update_wayland_surface(struct wayland_win_data *data)
+{
+    struct wayland *wayland;
+    HWND effective_parent_hwnd;
+    struct wayland_surface *parent_surface;
+    DWORD style;
+
+    TRACE("hwnd=%p\n", data->hwnd);
+
+    data->wayland_surface_needs_first_update = FALSE;
+
+    wayland = thread_init_wayland();
+
+    if (data->wayland_surface)
+    {
+        wayland_surface_unref(data->wayland_surface);
+        data->wayland_surface = NULL;
+    }
+
+    /* Only create wayland surfaces for toplevel windows. Let Wine core handle
+     * the drawing of other windows in their corresponding top level window
+     * surface. */
+    if (data->parent) return;
+
+    /* GWLP_HWNDPARENT gets the owner for any kind of toplevel windows,
+     * and the parent for child windows. */
+    effective_parent_hwnd = (HWND)GetWindowLongPtrW(data->hwnd, GWLP_HWNDPARENT);
+    parent_surface = NULL;
+
+    if (effective_parent_hwnd)
+    {
+        parent_surface = wayland_surface_for_hwnd_lock(effective_parent_hwnd);
+        wayland_surface_for_hwnd_unlock(parent_surface);
+    }
+
+    style = GetWindowLongW(data->hwnd, GWL_STYLE);
+
+    /* Use wayland subsurfaces for owned win32 windows that are transient (i.e., don't have
+     * a titlebar). Otherwise, if the window is visible make it wayland toplevel. Finally,
+     * if the window is not visible create a plain (without a role) surface to avoid
+     * polluting the compositor with empty xdg_toplevels. */
+    if ((style & WS_CAPTION) != WS_CAPTION && parent_surface)
+        data->wayland_surface = wayland_surface_create_subsurface(wayland, parent_surface);
+    else if (data->visible)
+        data->wayland_surface = wayland_surface_create_toplevel(wayland, parent_surface);
+    else
+        data->wayland_surface = wayland_surface_create_plain(wayland);
+
+    if (data->wayland_surface)
+        data->wayland_surface->hwnd = data->hwnd;
+}
+
+static void update_wayland_state(struct wayland_win_data *data)
+{
+    if (wayland_win_data_wayland_surface_needs_update(data))
+        wayland_win_data_update_wayland_surface(data);
 }
 
 /**********************************************************************
@@ -183,7 +292,30 @@ BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     data->parent = (parent == GetDesktopWindow()) ? 0 : parent;
     data->window_rect = *window_rect;
     data->client_rect = *client_rect;
+    data->visible = (style & WS_VISIBLE) == WS_VISIBLE || (swp_flags & SWP_SHOWWINDOW);
 
     wayland_win_data_release(data);
     return TRUE;
+}
+
+/***********************************************************************
+ *           WAYLAND_WindowPosChanged
+ */
+void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags,
+                                    const RECT *window_rect, const RECT *client_rect,
+                                    const RECT *visible_rect, const RECT *valid_rects,
+                                    struct window_surface *surface)
+{
+    struct wayland_win_data *data;
+
+    if (!(data = wayland_win_data_get(hwnd))) return;
+
+    TRACE("hwnd %p window %s client %s visible %s style %08x after %p flags %08x\n",
+          hwnd, wine_dbgstr_rect(window_rect), wine_dbgstr_rect(client_rect),
+          wine_dbgstr_rect(visible_rect), GetWindowLongW(hwnd, GWL_STYLE),
+          insert_after, swp_flags);
+
+    update_wayland_state(data);
+
+    wayland_win_data_release(data);
 }

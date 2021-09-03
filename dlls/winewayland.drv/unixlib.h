@@ -31,6 +31,7 @@ enum waylanddrv_unix_func
 
 struct waylanddrv_unix_init_params
 {
+    NTSTATUS (WINAPI *pNtWaitForMultipleObjects)(ULONG,const HANDLE*,BOOLEAN,BOOLEAN,const LARGE_INTEGER*);
     NTSTATUS (CDECL *unix_call)(enum waylanddrv_unix_func func, void *params);
 };
 

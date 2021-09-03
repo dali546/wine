@@ -25,11 +25,51 @@
 #include "waylanddrv.h"
 
 #include "wine/debug.h"
+#include "wine/server.h"
 
 #include <stdlib.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 WINE_DECLARE_DEBUG_CHANNEL(winediag);
+
+static DWORD WINAPI wayland_read_thread(void *arg)
+{
+    while (wayland_read_events_and_dispatch_process()) continue;
+    /* This thread terminates only if an unrecoverable error occured during
+     * event reading. */
+    NtTerminateProcess(0, 1);
+    return 0;
+}
+
+static void set_queue_fd(struct wayland *wayland)
+{
+    HANDLE handle;
+    int wfd;
+    int ret;
+
+    wfd = wayland->event_notification_pipe[0];
+
+    if (wine_server_fd_to_handle(wfd, GENERIC_READ | SYNCHRONIZE, 0, &handle))
+    {
+        ERR("Can't allocate handle for wayland fd\n");
+        NtTerminateProcess(0, 1);
+    }
+
+    SERVER_START_REQ(set_queue_fd)
+    {
+        req->handle = wine_server_obj_handle(handle);
+        ret = wine_server_call(req);
+    }
+    SERVER_END_REQ;
+
+    if (ret)
+    {
+        ERR("Can't store handle for wayland fd %x\n", ret);
+        NtTerminateProcess(0, 1);
+    }
+
+    NtClose(handle);
+}
 
 /***********************************************************************
  *           Initialize per thread data
@@ -54,6 +94,7 @@ struct wayland_thread_data *wayland_init_thread_data(void)
         NtTerminateProcess(0, 1);
     }
 
+    set_queue_fd(&data->wayland);
     NtUserGetThreadInfo()->driver_data = data;
 
     return data;
@@ -92,9 +133,14 @@ static const struct user_driver_funcs waylanddrv_funcs =
  */
 static BOOL process_attach(void)
 {
+    DWORD id;
+
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
 
     if (!wayland_process_init()) return FALSE;
+
+    /* Read wayland events from a dedicated thread. */
+    CreateThread(NULL, 0, wayland_read_thread, NULL, 0, &id);
 
     return TRUE;
 }

@@ -83,6 +83,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
     .pEnumDisplaySettingsEx = WAYLAND_EnumDisplaySettingsEx,
     .pThreadDetach = WAYLAND_ThreadDetach,
     .pWindowMessage = WAYLAND_WindowMessage,
+    .pWindowPosChanged = WAYLAND_WindowPosChanged,
     .pWindowPosChanging = WAYLAND_WindowPosChanging,
 };
 

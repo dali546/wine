@@ -170,6 +170,11 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
     return data;
 }
 
+static inline struct wayland *thread_init_wayland(void)
+{
+    return &wayland_init_thread_data()->wayland;
+}
+
 /**********************************************************************
  *          Wayland initialisation
  */
@@ -257,6 +262,10 @@ extern BOOL CDECL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
 extern void CDECL WAYLAND_DestroyWindow(HWND hwnd) DECLSPEC_HIDDEN;
 extern BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags) DECLSPEC_HIDDEN;
 extern LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;
+extern void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags,
+                                           const RECT *window_rect, const RECT *client_rect,
+                                           const RECT *visible_rect, const RECT *valid_rects,
+                                           struct window_surface *surface) DECLSPEC_HIDDEN;
 extern BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flags,
                                             const RECT *window_rect, const RECT *client_rect,
                                             RECT *visible_rect, struct window_surface **surface) DECLSPEC_HIDDEN;

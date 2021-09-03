@@ -25,6 +25,11 @@
 #include "wine/debug.h"
 #include "wine/heap.h"
 
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <unistd.h>
+
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
 struct wl_display *process_wl_display = NULL;
@@ -39,6 +44,17 @@ static CRITICAL_SECTION_DEBUG process_wayland_critsect_debug =
 };
 CRITICAL_SECTION process_wayland_section = { &process_wayland_critsect_debug,
                                              -1, 0, 0, 0, 0 };
+
+static CRITICAL_SECTION thread_wayland_section;
+static CRITICAL_SECTION_DEBUG critsect_debug =
+{
+    0, 0, &thread_wayland_section,
+    { &critsect_debug.ProcessLocksList, &critsect_debug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": thread_wayland_section") }
+};
+static CRITICAL_SECTION thread_wayland_section = { &critsect_debug, -1, 0, 0, 0, 0 };
+
+static struct wl_list thread_wayland_list = {&thread_wayland_list, &thread_wayland_list};
 
 /**********************************************************************
  *          xdg_wm_base handling
@@ -141,7 +157,13 @@ static const struct wl_registry_listener registry_listener = {
  */
 BOOL wayland_init(struct wayland *wayland)
 {
+    int flags;
+
     TRACE("wayland=%p wl_display=%p\n", wayland, process_wl_display);
+
+    wl_list_init(&wayland->thread_link);
+    wayland->event_notification_pipe[0] = -1;
+    wayland->event_notification_pipe[1] = -1;
 
     wayland->process_id = GetCurrentProcessId();
     wayland->thread_id = GetCurrentThreadId();
@@ -184,6 +206,24 @@ BOOL wayland_init(struct wayland *wayland)
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
 
+    if (!wayland_is_process(wayland))
+    {
+        /* Thread wayland instances have notification pipes to inform them when
+         * there might be new events in their queues. The read part of the pipe
+         * is also used as the wine server queue fd. */
+        if (pipe2(wayland->event_notification_pipe, O_CLOEXEC) == -1)
+            return FALSE;
+        /* Make just the read end non-blocking */
+        if ((flags = fcntl(wayland->event_notification_pipe[0], F_GETFL)) == -1)
+            return FALSE;
+        if (fcntl(wayland->event_notification_pipe[0], F_SETFL, flags | O_NONBLOCK) == -1)
+            return FALSE;
+        /* Keep a list of all thread wayland instances, so we can notify them. */
+        EnterCriticalSection(&thread_wayland_section);
+        wl_list_insert(&thread_wayland_list, &wayland->thread_link);
+        LeaveCriticalSection(&thread_wayland_section);
+    }
+
     wayland->initialized = TRUE;
 
     return TRUE;
@@ -199,6 +239,15 @@ void wayland_deinit(struct wayland *wayland)
     struct wayland_output *output, *output_tmp;
 
     TRACE("%p\n", wayland);
+
+    EnterCriticalSection(&thread_wayland_section);
+    wl_list_remove(&wayland->thread_link);
+    LeaveCriticalSection(&thread_wayland_section);
+
+    if (wayland->event_notification_pipe[0] >= 0)
+        close(wayland->event_notification_pipe[0]);
+    if (wayland->event_notification_pipe[1] >= 0)
+        close(wayland->event_notification_pipe[1]);
 
     wl_list_for_each_safe(output, output_tmp, &wayland->output_list, link)
         wayland_output_destroy(output);
@@ -300,4 +349,88 @@ int wayland_dispatch_buffer(struct wayland *wayland)
 
     return wl_display_dispatch_queue_pending(wayland->wl_display,
                                              wayland->buffer_wl_event_queue);
+}
+
+static void wayland_notify_threads(void)
+{
+    struct wayland *w;
+    int ret;
+
+    EnterCriticalSection(&thread_wayland_section);
+
+    wl_list_for_each(w, &thread_wayland_list, thread_link)
+    {
+        while ((ret = write(w->event_notification_pipe[1], "a", 1)) != 1)
+        {
+            if (ret == -1 && errno != EINTR)
+            {
+                ERR("failed to write to notification pipe: %s\n", strerror(errno));
+                break;
+            }
+        }
+    }
+
+    LeaveCriticalSection(&thread_wayland_section);
+}
+
+/**********************************************************************
+ *          wayland_read_events
+ *
+ * Read wayland events from the compositor, place them in their proper
+ * event queues and notify threads about the possibility of new events.
+ *
+ * Returns whether the operation succeeded.
+ */
+BOOL wayland_read_events(void)
+{
+    struct pollfd pfd = {0};
+    int ret;
+
+    pfd.fd = wl_display_get_fd(process_wl_display);
+    pfd.events = POLLIN;
+
+    TRACE("waiting for events...\n");
+
+    /* In order to read events we need to prepare the read on some
+     * queue. We can safely use the default queue, since it's
+     * otherwise unused (all struct wayland instances dispatch to
+     * their own queues). */
+    while (wl_display_prepare_read(process_wl_display) != 0)
+    {
+        if (wl_display_dispatch_pending(process_wl_display) == -1)
+        {
+            TRACE("... failed wl_display_dispatch_pending errno=%d\n", errno);
+            return FALSE;
+        }
+    }
+
+    wl_display_flush(process_wl_display);
+
+    while ((ret = poll(&pfd, 1, -1)) == -1 && errno == EINTR) continue;
+
+    if (ret == -1 || !(pfd.revents & POLLIN))
+    {
+        TRACE("... failed poll errno=%d revents=0x%x\n",
+              ret == -1 ? errno : 0, pfd.revents);
+        wl_display_cancel_read(process_wl_display);
+        return FALSE;
+    }
+
+    if (wl_display_read_events(process_wl_display) == -1)
+    {
+        TRACE("... failed wl_display_read_events errno=%d\n", errno);
+        return FALSE;
+    }
+
+    if (wl_display_dispatch_pending(process_wl_display) == -1)
+    {
+        TRACE("... failed wl_display_dispatch_pending errno=%d\n", errno);
+        return FALSE;
+    }
+
+    wayland_notify_threads();
+
+    TRACE("... done\n");
+
+    return TRUE;
 }

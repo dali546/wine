@@ -26,6 +26,8 @@
 #include "wine/debug.h"
 #include "wine/heap.h"
 
+#include "winuser.h"
+
 #include <errno.h>
 #include <poll.h>
 #include <unistd.h>
@@ -278,6 +280,44 @@ BOOL wayland_process_init(void)
 }
 
 /**********************************************************************
+ *          wayland_dispatch_non_buffer
+ *
+ * Dispatch all non-buffer events for the specified wayland instance.
+ *
+ * Returns the number of events dispatched.
+ */
+int wayland_dispatch_non_buffer(struct wayland *wayland)
+{
+    char buf[64];
+
+    TRACE("wayland=%p queue=%p\n", wayland, wayland->wl_event_queue);
+
+    wl_display_flush(wayland->wl_display);
+
+    /* Consume notifications */
+    while (TRUE)
+    {
+        int ret = read(wayland->event_notification_pipe[0], buf, sizeof(buf));
+        if (ret > 0) continue;
+        if (ret == -1)
+        {
+            if (errno == EINTR) continue;
+            if (errno == EAGAIN) break; /* no data to read */
+            ERR("failed to read from notification pipe: %s\n", strerror(errno));
+            break;
+        }
+        if (ret == 0)
+        {
+            ERR("failed to read from notification pipe: pipe is closed\n");
+            break;
+        }
+    }
+
+    return wl_display_dispatch_queue_pending(wayland->wl_display,
+                                             wayland->wl_event_queue);
+}
+
+/**********************************************************************
  *          wayland_dispatch_buffer
  *
  * Dispatch buffer related events for the specified wayland instance.
@@ -376,4 +416,48 @@ BOOL wayland_read_events(void)
     TRACE("... done\n");
 
     return TRUE;
+}
+
+static BOOL process_wayland_events(DWORD mask)
+{
+    struct wayland *wayland = thread_wayland();
+    int dispatched;
+
+    if (!wayland)
+        return FALSE;
+
+    wayland->last_dispatch_mask = 0;
+
+    dispatched = wayland_dispatch_non_buffer(wayland);
+    if (dispatched)
+        wayland->last_dispatch_mask |= QS_SENDMESSAGE;
+
+    TRACE("dispatched=%d mask=%s%s%s%s%s%s%s\n",
+          dispatched,
+          (wayland->last_dispatch_mask & QS_KEY) ? "QS_KEY|" : "",
+          (wayland->last_dispatch_mask & QS_MOUSEMOVE) ? "QS_MOUSEMOVE|" : "",
+          (wayland->last_dispatch_mask & QS_MOUSEBUTTON) ? "QS_MOUSEBUTTON|" : "",
+          (wayland->last_dispatch_mask & QS_INPUT) ? "QS_INPUT|" : "",
+          (wayland->last_dispatch_mask & QS_PAINT) ? "QS_PAINT|" : "",
+          (wayland->last_dispatch_mask & QS_POSTMESSAGE) ? "QS_POSTMESSAGE|" : "",
+          (wayland->last_dispatch_mask & QS_SENDMESSAGE) ? "QS_SENDMESSAGE|" : "");
+
+    return wayland->last_dispatch_mask & mask;
+}
+
+/***********************************************************************
+ *           WAYLAND_MsgWaitForMultipleObjectsEx
+ */
+DWORD CDECL WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
+                                                DWORD timeout, DWORD mask, DWORD flags)
+{
+    DWORD ret;
+
+    if (process_wayland_events(mask))
+        return count - 1;
+
+    ret = WaitForMultipleObjectsEx(count, handles, flags & MWMO_WAITALL,
+                                   timeout, flags & MWMO_ALERTABLE);
+
+    return ret;
 }

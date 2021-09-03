@@ -23,9 +23,19 @@
 static unixlib_handle_t waylanddrv_handle;
 NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *params);
 
+static DWORD WINAPI wayland_read_events_thread(void *arg)
+{
+    WAYLANDDRV_UNIX_CALL(read_events, NULL);
+    /* This thread terminates only if an unrecoverable error occured during
+     * event reading. */
+    TerminateProcess(GetCurrentProcess(), 1);
+    return 0;
+}
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
 {
     struct waylanddrv_unix_init_params init_params;
+    DWORD tid;
 
     if (reason != DLL_PROCESS_ATTACH) return TRUE;
 
@@ -38,6 +48,9 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
         return FALSE;
 
     waylanddrv_unix_call = init_params.unix_call;
+
+    /* Read wayland events from a dedicated thread. */
+    CreateThread(NULL, 0, wayland_read_events_thread, NULL, 0, &tid);
 
     return TRUE;
 }

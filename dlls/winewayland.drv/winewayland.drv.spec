@@ -6,3 +6,4 @@
 @ cdecl ThreadDetach() WAYLAND_ThreadDetach
 @ cdecl WindowMessage(long long long long) WAYLAND_WindowMessage
 @ cdecl WindowPosChanging(long long long ptr ptr ptr ptr) WAYLAND_WindowPosChanging
+@ cdecl WindowPosChanged(long long long ptr ptr ptr ptr ptr) WAYLAND_WindowPosChanged

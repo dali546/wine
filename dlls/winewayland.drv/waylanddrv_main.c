@@ -37,6 +37,14 @@
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
+/* We use use pointer to call NtWaitForMultipleObjects to make it go through
+ * syscall dispatcher. We need that because win32u bypasses syscall thunks and
+ * if we called NtWaitForMultipleObjects directly, it wouldn't be able to handle
+ * user APCs. This will be removed as soon as we may use syscall interface
+ * for NtUserMsgWaitForMultipleObjectsEx. */
+NTSTATUS (WINAPI *pNtWaitForMultipleObjects)(ULONG, const HANDLE *, BOOLEAN,
+                                             BOOLEAN, const LARGE_INTEGER*);
+
 static NTSTATUS CDECL waylanddrv_unix_call(enum waylanddrv_unix_func func, void *params);
 
 static void *wayland_read_thread(void *arg)
@@ -128,6 +136,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
     .pCreateWindow = WAYLAND_CreateWindow,
     .pDestroyWindow = WAYLAND_DestroyWindow,
     .pEnumDisplaySettingsEx = WAYLAND_EnumDisplaySettingsEx,
+    .pMsgWaitForMultipleObjectsEx = WAYLAND_MsgWaitForMultipleObjectsEx,
     .pThreadDetach = WAYLAND_ThreadDetach,
     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
     .pWindowMessage = WAYLAND_WindowMessage,
@@ -139,6 +148,8 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
 {
     struct waylanddrv_unix_init_params *params = arg;
     pthread_t thread;
+
+    pNtWaitForMultipleObjects = params->pNtWaitForMultipleObjects;
 
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
 

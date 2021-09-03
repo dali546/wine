@@ -25,7 +25,10 @@ NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *par
 
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
 {
-    struct waylanddrv_unix_init_params init_params;
+    struct waylanddrv_unix_init_params init_params =
+    {
+        .pNtWaitForMultipleObjects = NtWaitForMultipleObjects,
+    };
 
     if (reason != DLL_PROCESS_ATTACH) return TRUE;
 

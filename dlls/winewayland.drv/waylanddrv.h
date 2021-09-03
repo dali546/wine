@@ -168,6 +168,11 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
     return data;
 }
 
+static inline struct wayland *thread_init_wayland(void)
+{
+    return &wayland_init_thread_data()->wayland;
+}
+
 /**********************************************************************
  *          Wayland initialisation
  */

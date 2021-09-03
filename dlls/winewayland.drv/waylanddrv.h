@@ -68,6 +68,7 @@ struct wayland
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
     struct wl_list output_list;
+    DWORD last_dispatch_mask;
     int event_notification_pipe[2];
     struct wl_list thread_link;
 };
@@ -168,6 +169,13 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
 static inline struct wayland *thread_init_wayland(void)
 {
     return &wayland_init_thread_data()->wayland;
+}
+
+static inline struct wayland *thread_wayland(void)
+{
+    struct wayland_thread_data *data = wayland_thread_data();
+    if (!data) return NULL;
+    return &data->wayland;
 }
 
 /**********************************************************************

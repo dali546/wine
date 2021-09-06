@@ -1,7 +1,7 @@
 MODULE    = winewayland.drv
 IMPORTS   = advapi32 gdi32 rpcrt4 setupapi user32
-EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS)
-EXTRALIBS = $(WAYLAND_CLIENT_LIBS)
+EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS) $(XKBCOMMON_CFLAGS)
+EXTRALIBS = $(WAYLAND_CLIENT_LIBS) $(XKBCOMMON_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRACFLAGS = -std=c11 -Wno-declaration-after-statement
 CPPFLAGS = -std=c11 -Wno-declaration-after-statement
@@ -16,6 +16,7 @@ C_SRCS = \
 	waylanddrv_main.c \
 	wayland_buffer_queue.c \
 	wayland_cursor.c \
+	wayland_keyboard.c \
 	wayland_pointer.c \
 	wayland_shm.c \
 	wayland_surface.c \

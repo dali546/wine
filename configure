@@ -702,6 +702,8 @@ XSLT_CFLAGS
 XML2_LIBS
 XML2_CFLAGS
 PCAP_LIBS
+XKBCOMMON_LIBS
+XKBCOMMON_CFLAGS
 WAYLAND_SCANNER
 WAYLAND_PROTOCOLS_DATADIR
 WAYLAND_PROTOCOLS_LIBS
@@ -1897,6 +1899,8 @@ WAYLAND_CLIENT_CFLAGS
 WAYLAND_CLIENT_LIBS
 WAYLAND_PROTOCOLS_CFLAGS
 WAYLAND_PROTOCOLS_LIBS
+XKBCOMMON_CFLAGS
+XKBCOMMON_LIBS
 XML2_CFLAGS
 XML2_LIBS
 XSLT_CFLAGS
@@ -2690,6 +2694,10 @@ Some influential environment variables:
               C compiler flags for wayland-protocols, overriding pkg-config
   WAYLAND_PROTOCOLS_LIBS
               Linker flags for wayland-protocols, overriding pkg-config
+  XKBCOMMON_CFLAGS
+              C compiler flags for xkbcommon, overriding pkg-config
+  XKBCOMMON_LIBS
+              Linker flags for xkbcommon, overriding pkg-config
   XML2_CFLAGS C compiler flags for libxml-2.0, overriding pkg-config
   XML2_LIBS   Linker flags for libxml-2.0, overriding pkg-config
   XSLT_CFLAGS C compiler flags for libxslt, overriding pkg-config
@@ -12911,10 +12919,84 @@ $as_echo "no" >&6; }
 fi
 
 
+    if ${XKBCOMMON_CFLAGS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  XKBCOMMON_CFLAGS=`$PKG_CONFIG --cflags xkbcommon 2>/dev/null`
+fi
+fi
+
+if ${XKBCOMMON_LIBS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  XKBCOMMON_LIBS=`$PKG_CONFIG --libs xkbcommon 2>/dev/null`
+fi
+fi
+
+
+$as_echo "$as_me:${as_lineno-$LINENO}: xkbcommon cflags: $XKBCOMMON_CFLAGS" >&5
+$as_echo "$as_me:${as_lineno-$LINENO}: xkbcommon libs: $XKBCOMMON_LIBS" >&5
+ac_save_CPPFLAGS=$CPPFLAGS
+CPPFLAGS="$CPPFLAGS $XKBCOMMON_CFLAGS"
+for ac_header in xkbcommon/xkbcommon.h
+do :
+  ac_fn_c_check_header_mongrel "$LINENO" "xkbcommon/xkbcommon.h" "ac_cv_header_xkbcommon_xkbcommon_h" "$ac_includes_default"
+if test "x$ac_cv_header_xkbcommon_xkbcommon_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_XKBCOMMON_XKBCOMMON_H 1
+_ACEOF
+
+fi
+
+done
+
+         { $as_echo "$as_me:${as_lineno-$LINENO}: checking for xkb_context_new in -lxkbcommon" >&5
+$as_echo_n "checking for xkb_context_new in -lxkbcommon... " >&6; }
+if ${ac_cv_lib_xkbcommon_xkb_context_new+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lxkbcommon $XKBCOMMON_LIBS $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char xkb_context_new ();
+int
+main ()
+{
+return xkb_context_new ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_xkbcommon_xkb_context_new=yes
+else
+  ac_cv_lib_xkbcommon_xkb_context_new=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_xkbcommon_xkb_context_new" >&5
+$as_echo "$ac_cv_lib_xkbcommon_xkb_context_new" >&6; }
+if test "x$ac_cv_lib_xkbcommon_xkb_context_new" = xyes; then :
+  :
+else
+  XKBCOMMON_LIBS=""
+fi
+
+CPPFLAGS=$ac_save_CPPFLAGS
+
 fi
 if test -z "$WAYLAND_CLIENT_LIBS" ||
                            test -z "$WAYLAND_PROTOCOLS_DATADIR" ||
-                           test -z "$WAYLAND_SCANNER"; then :
+                           test -z "$WAYLAND_SCANNER" ||
+                           test -z "$XKBCOMMON_LIBS"; then :
   case "x$with_wayland" in
   x)   as_fn_append wine_notices "|Wayland ${notice_platform}development files not found or not new enough, the Wayland driver won't be supported." ;;
   xno) ;;
@@ -20128,6 +20210,8 @@ WAYLAND_CLIENT_LIBS = $WAYLAND_CLIENT_LIBS
 WAYLAND_PROTOCOLS_CFLAGS = $WAYLAND_PROTOCOLS_CFLAGS
 WAYLAND_PROTOCOLS_LIBS = $WAYLAND_PROTOCOLS_LIBS
 WAYLAND_PROTOCOLS_DATADIR = $WAYLAND_PROTOCOLS_DATADIR
+XKBCOMMON_CFLAGS = $XKBCOMMON_CFLAGS
+XKBCOMMON_LIBS = $XKBCOMMON_LIBS
 PCAP_LIBS = $PCAP_LIBS
 XML2_CFLAGS = $XML2_CFLAGS
 XML2_LIBS = $XML2_LIBS

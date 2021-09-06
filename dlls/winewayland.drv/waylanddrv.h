@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -66,6 +67,7 @@ struct wayland_keyboard
     uint32_t enter_serial;
     struct xkb_context *xkb_context;
     struct xkb_state *xkb_state;
+    struct xkb_compose_state *xkb_compose_state;
     UINT xkb_keycode_to_vkey[256];
     WORD xkb_keycode_to_scancode[256];
 };

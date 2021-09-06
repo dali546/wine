@@ -473,6 +473,7 @@ static inline BOOL intersect_rect(RECT *dst, const RECT *src1, const RECT *src2)
 BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
 void WAYLAND_DestroyWindow(HWND hwnd) DECLSPEC_HIDDEN;
 BOOL WAYLAND_GetCurrentDisplaySettings(LPCWSTR name, LPDEVMODEW devmode) DECLSPEC_HIDDEN;
+INT WAYLAND_GetKeyNameText(LONG lparam, LPWSTR buffer, INT size) DECLSPEC_HIDDEN;
 NTSTATUS WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
                                              const LARGE_INTEGER *timeout,
                                              DWORD mask, DWORD flags) DECLSPEC_HIDDEN;

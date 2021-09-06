@@ -4,6 +4,7 @@
 @ cdecl DestroyWindow(long) WAYLAND_DestroyWindow
 @ cdecl EnumDisplaySettingsEx(ptr long ptr long) WAYLAND_EnumDisplaySettingsEx
 @ cdecl GetKeyNameText(long ptr long) WAYLAND_GetKeyNameText
+@ cdecl MapVirtualKeyEx(long long long) WAYLAND_MapVirtualKeyEx
 @ cdecl MsgWaitForMultipleObjectsEx(long ptr long long long) WAYLAND_MsgWaitForMultipleObjectsEx
 @ cdecl SetCursor(long) WAYLAND_SetCursor
 @ cdecl ThreadDetach() WAYLAND_ThreadDetach

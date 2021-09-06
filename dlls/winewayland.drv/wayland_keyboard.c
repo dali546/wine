@@ -177,6 +177,11 @@ static xkb_keycode_t vkey_to_xkb_keycode(struct wayland_keyboard *keyboard, UINT
     return 0;
 }
 
+static WORD vkey_to_scancode(struct wayland_keyboard *keyboard, UINT vkey)
+{
+    return _xkb_keycode_to_scancode(keyboard, vkey_to_xkb_keycode(keyboard, vkey));
+}
+
 static UINT scancode_to_vkey(struct wayland_keyboard *keyboard, DWORD scan)
 {
     return _xkb_keycode_to_vkey(keyboard, scancode_to_xkb_keycode(keyboard, scan));
@@ -271,6 +276,28 @@ static WCHAR dead_xkb_keysym_to_wchar(xkb_keysym_t xkb_keysym)
     }
 }
 
+static WCHAR _xkb_keysyms_to_wchar(const xkb_keysym_t *syms, int nsyms)
+{
+    char utf8[64];
+    int utf8_len;
+    WCHAR wchars[8];
+    WCHAR normalized[8];
+    int nchars;
+
+    utf8_len = _xkb_keysyms_to_utf8(syms, nsyms, utf8, sizeof(utf8));
+
+    nchars = MultiByteToWideChar(CP_UTF8, 0, utf8, utf8_len, wchars,
+                                 ARRAY_SIZE(wchars));
+    if (nchars == 0)
+        return 0;
+
+    if (NormalizeString(NormalizationC, wchars, nchars, normalized,
+                        ARRAY_SIZE(normalized)) != 1)
+        return 0;
+
+    return normalized[0];
+}
+
 /* Get the vkey corresponding to an xkb keycode, potentially translating it to
  * take into account the current keyboard state. */
 static UINT translate_xkb_keycode_to_vkey(struct wayland_keyboard *keyboard,
@@ -309,6 +336,48 @@ static UINT translate_xkb_keycode_to_vkey(struct wayland_keyboard *keyboard,
     }
 
     return vkey;
+}
+
+static UINT map_vkey_to_wchar_with_deadchar_bit(struct wayland_keyboard *keyboard, UINT vkey)
+{
+    WCHAR wchar;
+    xkb_keycode_t xkb_keycode;
+    struct xkb_keymap *xkb_keymap;
+    xkb_layout_index_t layout;
+    const xkb_keysym_t *syms;
+    int nsyms;
+
+    if (!keyboard->xkb_state) return 0;
+
+    layout = _xkb_state_get_active_layout(keyboard->xkb_state);
+    if (layout == XKB_LAYOUT_INVALID)
+    {
+        TRACE_(key)("no active layout, returning wchar 0\n");
+        return 0;
+    }
+
+    xkb_keymap = xkb_state_get_keymap(keyboard->xkb_state);
+    xkb_keycode = vkey_to_xkb_keycode(keyboard, vkey);
+
+    nsyms = xkb_keymap_key_get_syms_by_level(xkb_keymap, xkb_keycode,
+                                             layout, 0, &syms);
+    if (nsyms > 0)
+    {
+        /* Set the high bit to 1 if this is dead char. */
+        if ((wchar = dead_xkb_keysym_to_wchar(syms[0])))
+            wchar |= 0x80000000;
+        else
+            wchar = _xkb_keysyms_to_wchar(syms, nsyms);
+    }
+    else
+    {
+        wchar = 0;
+    }
+
+    TRACE_(key)("vkey=0x%x xkb_keycode=%d nsyms=%d xkb_keysym[0]=0x%x => wchar=0x%x\n",
+                vkey, xkb_keycode, nsyms, nsyms ? syms[0] : 0, wchar);
+
+    return wchar;
 }
 
 static void wayland_keyboard_emit(struct wayland_keyboard *keyboard, uint32_t key,
@@ -687,4 +756,70 @@ INT CDECL WAYLAND_GetKeyNameText(LONG lparam, LPWSTR buffer, INT size)
 
     TRACE_(key)("lparam 0x%08x -> %s\n", lparam, debugstr_w(buffer));
     return len;
+}
+
+/***********************************************************************
+ *           WAYLAND_MapVirtualKeyEx
+ */
+UINT CDECL WAYLAND_MapVirtualKeyEx(UINT code, UINT maptype, HKL hkl)
+{
+    struct wayland *wayland = thread_init_wayland();
+    UINT ret = 0;
+
+    TRACE_(key)("code=0x%x, maptype=%d, hkl %p\n", code, maptype, hkl);
+
+    switch (maptype)
+    {
+    case MAPVK_VK_TO_VSC_EX:
+    case MAPVK_VK_TO_VSC:
+        /* vkey to scancode */
+        switch (code)
+        {
+        case VK_SHIFT:
+            code = VK_LSHIFT;
+            break;
+        case VK_CONTROL:
+            code = VK_LCONTROL;
+            break;
+        case VK_MENU:
+            code = VK_LMENU;
+            break;
+        }
+
+        ret = vkey_to_scancode(&wayland->keyboard, code);
+
+        /* set scan code prefix */
+        if (maptype == MAPVK_VK_TO_VSC_EX &&
+            (code == VK_RCONTROL || code == VK_RMENU))
+            ret |= 0xe000;
+        break;
+    case MAPVK_VSC_TO_VK:
+    case MAPVK_VSC_TO_VK_EX:
+        /* scancode to vkey */
+        ret = scancode_to_vkey(&wayland->keyboard, code);
+        if (maptype == MAPVK_VSC_TO_VK)
+        {
+            switch (ret)
+            {
+            case VK_LSHIFT:
+            case VK_RSHIFT:
+                ret = VK_SHIFT; break;
+            case VK_LCONTROL:
+            case VK_RCONTROL:
+                ret = VK_CONTROL; break;
+            case VK_LMENU:
+            case VK_RMENU:
+                ret = VK_MENU; break;
+            }
+        }
+        break;
+    case MAPVK_VK_TO_CHAR:
+        ret = map_vkey_to_wchar_with_deadchar_bit(&wayland->keyboard, code);
+        break;
+    default:
+        FIXME("Unknown maptype %d\n", maptype);
+        break;
+    }
+    TRACE_(key)("returning 0x%04x\n", ret);
+    return ret;
 }

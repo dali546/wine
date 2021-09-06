@@ -29,6 +29,7 @@
 #include <stdarg.h>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
+#include <xkbcommon/xkbcommon.h>
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -56,6 +57,7 @@ enum wayland_window_message
 {
     WM_WAYLAND_MONITOR_CHANGE = 0x80001000,
     WM_WAYLAND_SET_CURSOR,
+    WM_WAYLAND_QUERY_SURFACE_MAPPED,
 };
 
 enum wayland_surface_role
@@ -86,6 +88,18 @@ struct wayland_mutex
     UINT owner_tid;
     int lock_count;
     const char *name;
+};
+
+struct wayland_keyboard
+{
+    struct wl_keyboard *wl_keyboard;
+    struct wayland_surface *focused_surface;
+    int repeat_interval_ms;
+    int repeat_delay_ms;
+    uint32_t last_pressed_key;
+    uint32_t enter_serial;
+    struct xkb_context *xkb_context;
+    struct xkb_state *xkb_state;
 };
 
 struct wayland_cursor
@@ -128,6 +142,7 @@ struct wayland
     struct wl_list output_list;
     struct wl_list detached_shm_buffer_list;
     struct wl_list callback_list;
+    struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
     DWORD last_dispatch_mask;
     BOOL processing_events;
@@ -375,6 +390,14 @@ void wayland_window_surface_update_wayland_surface(struct window_surface *surfac
 void wayland_clear_window_surface_last_flushed(HWND hwnd) DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          Wayland Keyboard
+ */
+
+void wayland_keyboard_init(struct wayland_keyboard *keyboard, struct wayland *wayland,
+                           struct wl_keyboard *wl_keyboard) DECLSPEC_HIDDEN;
+void wayland_keyboard_deinit(struct wayland_keyboard *keyboard) DECLSPEC_HIDDEN;
+
+/**********************************************************************
  *          Wayland Pointer/Cursor
  */
 
@@ -404,6 +427,16 @@ RGNDATA *get_region_data(HRGN region) DECLSPEC_HIDDEN;
 static inline LRESULT send_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     return NtUserMessageCall(hwnd, msg, wparam, lparam, NULL, NtUserSendDriverMessage, FALSE);
+}
+
+static inline LRESULT send_message_timeout(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam,
+                                           UINT flags, UINT timeout, PDWORD_PTR res_ptr)
+{
+    struct send_message_timeout_params params = { .flags = flags, .timeout = timeout };
+    LRESULT res = NtUserMessageCall(hwnd, msg, wparam, lparam, &params,
+                                    NtUserSendMessageTimeout, FALSE);
+    if (res_ptr) *res_ptr = res;
+    return params.result;
 }
 
 static inline BOOL intersect_rect(RECT *dst, const RECT *src1, const RECT *src2)

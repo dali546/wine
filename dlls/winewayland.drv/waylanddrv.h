@@ -30,6 +30,7 @@
 #include <wayland-client.h>
 #include <wayland-cursor.h>
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -98,6 +99,7 @@ struct wayland_keyboard
     uint32_t enter_serial;
     struct xkb_context *xkb_context;
     struct xkb_state *xkb_state;
+    struct xkb_compose_state *xkb_compose_state;
     UINT xkb_keycode_to_vkey[256];
     WORD xkb_keycode_to_scancode[256];
 };
@@ -431,6 +433,8 @@ extern BOOL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devm
 extern DWORD WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
                                                  DWORD timeout, DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
 extern void WAYLAND_SetCursor(HCURSOR hcursor) DECLSPEC_HIDDEN;
+extern INT WAYLAND_ToUnicodeEx(UINT virt, UINT scan, const BYTE *state,
+                               LPWSTR buf, int nchars, UINT flags, HKL hkl) DECLSPEC_HIDDEN;
 extern void WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                          BOOL force, void *param) DECLSPEC_HIDDEN;
 extern LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;

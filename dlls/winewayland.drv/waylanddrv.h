@@ -100,6 +100,8 @@ struct wayland_keyboard
     uint32_t enter_serial;
     struct xkb_context *xkb_context;
     struct xkb_state *xkb_state;
+    UINT xkb_keycode_to_vkey[256];
+    WORD xkb_keycode_to_scancode[256];
 };
 
 struct wayland_cursor
@@ -395,6 +397,7 @@ void wayland_window_surface_update_wayland_surface(struct window_surface *surfac
 void wayland_keyboard_init(struct wayland_keyboard *keyboard, struct wayland *wayland,
                            struct wl_keyboard *wl_keyboard) DECLSPEC_HIDDEN;
 void wayland_keyboard_deinit(struct wayland_keyboard *keyboard) DECLSPEC_HIDDEN;
+void wayland_keyboard_update_layout(struct wayland_keyboard *keyboard) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Wayland Pointer/Cursor

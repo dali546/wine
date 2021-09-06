@@ -430,6 +430,7 @@ BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
 void WAYLAND_DestroyWindow(HWND hwnd) DECLSPEC_HIDDEN;
 BOOL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags) DECLSPEC_HIDDEN;
 INT WAYLAND_GetKeyNameText(LONG lparam, LPWSTR buffer, INT size) DECLSPEC_HIDDEN;
+UINT WAYLAND_MapVirtualKeyEx(UINT code, UINT maptype, HKL hkl) DECLSPEC_HIDDEN;
 DWORD WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
                                           DWORD timeout, DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
 void WAYLAND_SetCursor(HCURSOR hcursor) DECLSPEC_HIDDEN;

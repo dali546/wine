@@ -41,8 +41,10 @@
 #include "wine/debug.h"
 
 #include "ntuser.h"
+#include "ime.h"
 
 #include <linux/input.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #include "wayland_keyboard_layout.h"
@@ -50,18 +52,228 @@
 WINE_DEFAULT_DEBUG_CHANNEL(keyboard);
 WINE_DECLARE_DEBUG_CHANNEL(key);
 
+static xkb_layout_index_t _xkb_state_get_active_layout(struct xkb_state *xkb_state)
+{
+    struct xkb_keymap *xkb_keymap = xkb_state_get_keymap(xkb_state);
+    xkb_layout_index_t num_layouts = xkb_keymap_num_layouts(xkb_keymap);
+    xkb_layout_index_t layout;
+
+    for (layout = 0; layout < num_layouts; layout++)
+    {
+        if (xkb_state_layout_index_is_active(xkb_state, layout,
+                                             XKB_STATE_LAYOUT_LOCKED))
+            return layout;
+    }
+
+    return XKB_LAYOUT_INVALID;
+}
+
+/**********************************************************************
+ *          _xkb_keysyms_to_utf8
+ *
+ * Get the null-terminated UTF-8 string representation of a sequence of
+ * keysyms. Returns the length of the UTF-8 string written, *not* including
+ * the null byte. If no bytes were produced or in case of error returns 0
+ * and produces a properly null-terminated empty string if possible.
+ */
+static int _xkb_keysyms_to_utf8(const xkb_keysym_t *syms, int nsyms, char *utf8,
+                                int utf8_size)
+{
+    int i;
+    int utf8_len = 0;
+
+    if (utf8_size == 0) return 0;
+
+    for (i = 0; i < nsyms; i++)
+    {
+        int nwritten = xkb_keysym_to_utf8(syms[i], utf8 + utf8_len,
+                                          utf8_size - utf8_len);
+        if (nwritten <= 0)
+        {
+            utf8_len = 0;
+            break;
+        }
+
+        /* nwritten includes the terminating null byte */
+        utf8_len += nwritten - 1;
+    }
+
+    utf8[utf8_len] = '\0';
+
+    return utf8_len;
+}
+
+static int score_symbols(const xkb_keysym_t sym[MAIN_KEY_SYMBOLS_LEN],
+                         const xkb_keysym_t ref[MAIN_KEY_SYMBOLS_LEN])
+{
+    int score = 0, i;
+
+    for (i = 0; i < MAIN_KEY_SYMBOLS_LEN && ref[i]; i++)
+    {
+        if (ref[i] != sym[i]) return 0;
+        score++;
+    }
+
+    return score;
+}
+
+static void _xkb_keymap_populate_symbols_for_keycode(
+    struct xkb_keymap *xkb_keymap,
+    xkb_layout_index_t layout,
+    xkb_keysym_t symbols_for_keycode[256][MAIN_KEY_SYMBOLS_LEN])
+{
+    xkb_keycode_t xkb_keycode, min_xkb_keycode, max_xkb_keycode;
+
+    min_xkb_keycode = xkb_keymap_min_keycode(xkb_keymap);
+    max_xkb_keycode = xkb_keymap_max_keycode(xkb_keymap);
+    if (max_xkb_keycode > 255) max_xkb_keycode = 255;
+
+    for (xkb_keycode = min_xkb_keycode; xkb_keycode <= max_xkb_keycode; xkb_keycode++)
+    {
+        xkb_level_index_t num_levels =
+            xkb_keymap_num_levels_for_key(xkb_keymap, xkb_keycode, layout);
+        xkb_level_index_t level;
+
+        if (num_levels > MAIN_KEY_SYMBOLS_LEN) num_levels = MAIN_KEY_SYMBOLS_LEN;
+
+        for (level = 0; level < num_levels; level++)
+        {
+            const xkb_keysym_t *syms;
+            int nsyms = xkb_keymap_key_get_syms_by_level(xkb_keymap, xkb_keycode,
+                                                         layout, level, &syms);
+            if (nsyms)
+                symbols_for_keycode[xkb_keycode][level] = syms[0];
+        }
+    }
+}
+
+/* Populate the xkb_keycode_to_vkey[] and xkb_keycode_to_scan[] arrays based on
+ * the specified main_key layout (see wayland_keyboard_layout.h) and the
+ * xkb_keycode to xkb_keysym_t mappings which have been created from the
+ * currently active Wayland keymap. */
+static void populate_xkb_keycode_maps(struct wayland_keyboard *keyboard, int main_key_layout,
+                                      const xkb_keysym_t symbols_for_keycode[256][MAIN_KEY_SYMBOLS_LEN])
+{
+    xkb_keycode_t xkb_keycode;
+    char key_used[MAIN_KEY_LEN] = { 0 };
+    const xkb_keysym_t (*lsymbols)[MAIN_KEY_SYMBOLS_LEN] =
+        (*main_key_tab[main_key_layout].symbols);
+    const WORD *lvkey = (*main_key_tab[main_key_layout].vkey);
+    const WORD *lscan = (*main_key_tab[main_key_layout].scan);
+
+    for (xkb_keycode = 0; xkb_keycode < 256; xkb_keycode++)
+    {
+        int max_key = -1;
+        int max_score = 0;
+        xkb_keysym_t xkb_keysym = symbols_for_keycode[xkb_keycode][0];
+        UINT vkey = 0;
+        WORD scan = 0;
+
+        if ((xkb_keysym >> 8) == 0xFF)
+        {
+            vkey = xkb_keysym_0xff00_to_vkey[xkb_keysym & 0xff];
+            scan = xkb_keysym_0xff00_to_scan[xkb_keysym & 0xff];
+        }
+        else if ((xkb_keysym >> 8) == 0x1008FF)
+        {
+            vkey = xkb_keysym_xfree86_to_vkey[xkb_keysym & 0xff];
+            scan = xkb_keysym_xfree86_to_scan[xkb_keysym & 0xff];
+        }
+        else if (xkb_keysym == 0x20)
+        {
+            vkey = VK_SPACE;
+            scan = 0x39;
+        }
+        else
+        {
+            int key;
+
+            for (key = 0; key < MAIN_KEY_LEN; key++)
+            {
+                int score = score_symbols(symbols_for_keycode[xkb_keycode],
+                                          lsymbols[key]);
+                /* Consider this key if it has a better score, or the same
+                 * score as a previous match that is already in use (in order
+                 * to prefer unused keys). */
+                if (score > max_score ||
+                    (max_key >= 0 && score == max_score && key_used[max_key]))
+                {
+                    max_key = key;
+                    max_score = score;
+                }
+            }
+
+            if (max_key >= 0)
+            {
+                vkey = lvkey[max_key];
+                scan = lscan[max_key];
+                key_used[max_key] = 1;
+            }
+        }
+
+        keyboard->xkb_keycode_to_vkey[xkb_keycode] = vkey;
+        keyboard->xkb_keycode_to_scancode[xkb_keycode] = scan;
+
+        if (TRACE_ON(key))
+        {
+            char utf8[64];
+            _xkb_keysyms_to_utf8(symbols_for_keycode[xkb_keycode],
+                                 MAIN_KEY_SYMBOLS_LEN, utf8, sizeof(utf8));
+            TRACE_(key)("Mapped xkb_keycode=%d syms={0x%x,0x%x} utf8='%s' => "
+                        "vkey=0x%x scan=0x%x\n",
+                        xkb_keycode,
+                        symbols_for_keycode[xkb_keycode][0],
+                        symbols_for_keycode[xkb_keycode][1],
+                        utf8, vkey, scan);
+        }
+    }
+}
+
+/***********************************************************************
+ *           wayland_keyboard_update_layout
+ *
+ * Updates the internal weston_keyboard layout information (xkb keycode
+ * mappings etc) based on the current XKB layout.
+ */
+static void wayland_keyboard_update_layout(struct wayland_keyboard *keyboard)
+{
+    xkb_layout_index_t layout;
+    struct xkb_state *xkb_state = keyboard->xkb_state;
+    struct xkb_keymap *xkb_keymap;
+    xkb_keysym_t symbols_for_keycode[256][MAIN_KEY_SYMBOLS_LEN] = { 0 };
+
+    if (!xkb_state)
+    {
+        TRACE("no xkb state, returning\n");
+        return;
+    }
+
+    layout = _xkb_state_get_active_layout(xkb_state);
+    if (layout == XKB_LAYOUT_INVALID)
+    {
+        TRACE("no active layout, returning\n");
+        return;
+    }
+
+    xkb_keymap = xkb_state_get_keymap(xkb_state);
+
+    _xkb_keymap_populate_symbols_for_keycode(xkb_keymap, layout, symbols_for_keycode);
+
+    populate_xkb_keycode_maps(keyboard, 0, symbols_for_keycode);
+}
+
 static DWORD _xkb_keycode_to_scancode(struct wayland_keyboard *keyboard,
                                       xkb_keycode_t xkb_keycode)
 {
-    /* Use linux input keycode as scan code for now. */
-    return xkb_keycode - 8;
+    return xkb_keycode < ARRAY_SIZE(keyboard->xkb_keycode_to_scancode) ?
+           keyboard->xkb_keycode_to_scancode[xkb_keycode] : 0;
 }
 
 static UINT _xkb_keycode_to_vkey(struct wayland_keyboard *keyboard,
                                  xkb_keycode_t xkb_keycode)
 {
-    return xkb_keycode < ARRAY_SIZE(xkb_keycode_to_vkey_us) ?
-           xkb_keycode_to_vkey_us[xkb_keycode] : 0;
+    return xkb_keycode < ARRAY_SIZE(keyboard->xkb_keycode_to_vkey) ?
+           keyboard->xkb_keycode_to_vkey[xkb_keycode] : 0;
 }
 
 /* xkb keycodes are offset by 8 from linux input keycodes. */
@@ -164,6 +376,40 @@ static BOOL wayland_keyboard_emit(struct wayland_keyboard *keyboard, uint32_t ke
 static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
                                    uint32_t format, int fd, uint32_t size)
 {
+    struct wayland *wayland = data;
+    struct xkb_keymap *xkb_keymap = NULL;
+    struct xkb_state *xkb_state = NULL;
+    char *keymap_str;
+
+    TRACE("format=%d fd=%d size=%d\n", format, fd, size);
+
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 ||
+        !wayland->keyboard.xkb_context)
+        goto out;
+
+    keymap_str = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (keymap_str == MAP_FAILED)
+        goto out;
+
+    xkb_keymap = xkb_keymap_new_from_string(wayland->keyboard.xkb_context,
+                                            keymap_str,
+                                            XKB_KEYMAP_FORMAT_TEXT_V1,
+                                            0);
+    munmap(keymap_str, size);
+    if (!xkb_keymap)
+        goto out;
+
+    xkb_state = xkb_state_new(xkb_keymap);
+    xkb_keymap_unref(xkb_keymap);
+    if (!xkb_state)
+        goto out;
+
+    xkb_state_unref(wayland->keyboard.xkb_state);
+    wayland->keyboard.xkb_state = xkb_state;
+
+    wayland_keyboard_update_layout(&wayland->keyboard);
+
+out:
     close(fd);
 }
 
@@ -352,14 +598,20 @@ static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
                                       uint32_t group)
 {
     struct wayland *wayland = data;
+    uint32_t last_group;
 
     TRACE("depressed=0x%x latched=0x%x locked=0x%x group=%d\n",
           mods_depressed, mods_latched, mods_locked, group);
 
     if (!wayland->keyboard.xkb_state) return;
 
+    last_group = _xkb_state_get_active_layout(wayland->keyboard.xkb_state);
+
     xkb_state_update_mask(wayland->keyboard.xkb_state,
                           mods_depressed, mods_latched, mods_locked, 0, 0, group);
+
+    if (group != last_group)
+        wayland_keyboard_update_layout(&wayland->keyboard);
 
     /* TODO: Sync wine modifier state with XKB modifier state. */
 }

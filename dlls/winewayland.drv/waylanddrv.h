@@ -100,6 +100,8 @@ struct wayland_keyboard
     uint32_t enter_serial;
     struct xkb_context *xkb_context;
     struct xkb_state *xkb_state;
+    UINT xkb_keycode_to_vkey[256];
+    WORD xkb_keycode_to_scancode[256];
 };
 
 struct wayland_cursor

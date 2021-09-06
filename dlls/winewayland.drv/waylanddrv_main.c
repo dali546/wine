@@ -129,6 +129,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
     .pMsgWaitForMultipleObjectsEx = WAYLAND_MsgWaitForMultipleObjectsEx,
     .pSetCursor = WAYLAND_SetCursor,
     .pToUnicodeEx = WAYLAND_ToUnicodeEx,
+    .pVkKeyScanEx = WAYLAND_VkKeyScanEx,
     .pThreadDetach = WAYLAND_ThreadDetach,
     .pWindowMessage = WAYLAND_WindowMessage,
     .pWindowPosChanged = WAYLAND_WindowPosChanged,

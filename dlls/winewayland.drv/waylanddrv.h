@@ -368,6 +368,7 @@ extern DWORD CDECL WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE
 extern void CDECL WAYLAND_SetCursor(HCURSOR hcursor) DECLSPEC_HIDDEN;
 extern INT CDECL WAYLAND_ToUnicodeEx(UINT virt, UINT scan, const BYTE *state,
                                      LPWSTR buf, int nchars, UINT flags, HKL hkl) DECLSPEC_HIDDEN;
+extern SHORT CDECL WAYLAND_VkKeyScanEx(WCHAR ch, HKL hkl) DECLSPEC_HIDDEN;
 extern LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;
 extern void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags,
                                            const RECT *window_rect, const RECT *client_rect,

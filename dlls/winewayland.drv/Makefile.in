@@ -17,11 +17,13 @@ C_SRCS = \
 	wayland_buffer_queue.c \
 	wayland_cursor.c \
 	wayland_keyboard.c \
+	wayland_keyboard_layout.c \
 	wayland_pointer.c \
 	wayland_shm.c \
 	wayland_surface.c \
 	window.c \
 	window_surface.c \
+	xkb_util.c \
 
 WAYLAND_PROTOCOL_SRCS = \
 	$(WAYLAND_PROTOCOLS_DATADIR)/stable/xdg-shell/xdg-shell.xml \

@@ -120,6 +120,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
     .pDesktopWindowProc = WAYLAND_DesktopWindowProc,
     .pDestroyWindow = WAYLAND_DestroyWindow,
     .pGetCurrentDisplaySettings = WAYLAND_GetCurrentDisplaySettings,
+    .pGetKeyNameText = WAYLAND_GetKeyNameText,
     .pMsgWaitForMultipleObjectsEx = WAYLAND_MsgWaitForMultipleObjectsEx,
     .pSetCursor = WAYLAND_SetCursor,
     .pToUnicodeEx = WAYLAND_ToUnicodeEx,

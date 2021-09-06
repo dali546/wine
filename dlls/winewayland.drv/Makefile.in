@@ -2,9 +2,9 @@ EXTRADEFS = -DWINE_NO_LONG_TYPES
 MODULE = winewayland.drv
 UNIXLIB = winewayland.so
 IMPORTS = user32
-EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_CURSOR_CFLAGS)
+EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_CURSOR_CFLAGS) $(XKBCOMMON_CFLAGS)
 EXTRALIBS = -lwin32u -lm $(WAYLAND_CLIENT_LIBS) $(WAYLAND_CURSOR_LIBS) \
-             $(PTHREAD_LIBS)
+             $(XKBCOMMON_LIBS) $(PTHREAD_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRACFLAGS = -std=c11 -Wno-declaration-after-statement
 CPPFLAGS = -std=c11 -Wno-declaration-after-statement
@@ -19,6 +19,7 @@ C_SRCS = \
 	wayland.c \
 	wayland_buffer_queue.c \
 	wayland_cursor.c \
+	wayland_keyboard.c \
 	wayland_mutex.c \
 	wayland_native_buffer.c \
 	wayland_output.c \

@@ -27,6 +27,7 @@
 
 #include <stdarg.h>
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -46,6 +47,7 @@ enum wayland_window_message
 {
     WM_WAYLAND_BROADCAST_DISPLAY_CHANGE = 0x80001000,
     WM_WAYLAND_SET_CURSOR = 0x80001001,
+    WM_WAYLAND_QUERY_SURFACE_MAPPED = 0x80001002,
 };
 
 enum wayland_configure_flags
@@ -62,6 +64,18 @@ enum wayland_configure_flags
 
 struct wayland_surface;
 struct wayland_shm_buffer;
+
+struct wayland_keyboard
+{
+    struct wl_keyboard *wl_keyboard;
+    struct wayland_surface *focused_surface;
+    int repeat_interval_ms;
+    int repeat_delay_ms;
+    uint32_t pressed_key;
+    uint32_t enter_serial;
+    struct xkb_context *xkb_context;
+    struct xkb_state *xkb_state;
+};
 
 struct wayland_cursor
 {
@@ -98,6 +112,7 @@ struct wayland
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
     struct wl_list output_list;
+    struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
     DWORD last_dispatch_mask;
     int event_notification_pipe[2];
@@ -307,6 +322,14 @@ void wayland_window_surface_update_wayland_surface(struct window_surface *surfac
                                                    struct wayland_surface *wayland_surface);
 
 /**********************************************************************
+ *          Wayland Keyboard
+ */
+
+void wayland_keyboard_init(struct wayland_keyboard *keyboard, struct wayland *wayland,
+                           struct wl_keyboard *wl_keyboard);
+void wayland_keyboard_deinit(struct wayland_keyboard *keyboard);
+
+/**********************************************************************
  *          Wayland Pointer/Cursor
  */
 
@@ -319,6 +342,12 @@ void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
 BOOL wayland_init_set_cursor(void);
 HCURSOR wayland_invalidate_set_cursor(void);
 void wayland_set_cursor_if_current_invalid(HCURSOR hcursor);
+
+/**********************************************************************
+ *          XKB helpers
+ */
+xkb_layout_index_t _xkb_state_get_active_layout(struct xkb_state *xkb_state);
+int _xkb_keysyms_to_utf8(const xkb_keysym_t *syms, int nsyms, char *utf8, int utf8_size);
 
 /**********************************************************************
  *          USER driver functions

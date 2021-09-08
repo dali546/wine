@@ -146,6 +146,7 @@ struct wayland
     struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
     DWORD last_dispatch_mask;
+    DWORD last_event_type;
     int event_notification_pipe[2];
 };
 
@@ -432,6 +433,17 @@ int _xkb_keysyms_to_utf8(const xkb_keysym_t *syms, int nsyms, char *utf8, int ut
  */
 
 int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          USER32 helpers
+ */
+
+static inline HWND get_focus(void)
+{
+    GUITHREADINFO info;
+    info.cbSize = sizeof(info);
+    return NtUserGetGUIThreadInfo(GetCurrentThreadId(), &info) ? info.hwndFocus : 0;
+}
 
 /**********************************************************************
  *          USER driver functions

@@ -169,6 +169,7 @@ struct wayland_surface
     struct wayland_surface_configure current;
     BOOL mapped;
     LONG ref;
+    BOOL drawing_allowed;
 };
 
 struct wayland_buffer_queue
@@ -297,6 +298,8 @@ void wayland_surface_coords_to_wine(struct wayland_surface *surface,
                                     int *wine_x, int *wine_y);
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
+void wayland_surface_set_drawing_allowed(struct wayland_surface *surface, BOOL allowed);
+BOOL wayland_surface_is_drawing_allowed(struct wayland_surface *surface);
 
 /**********************************************************************
  *          Wayland SHM buffer

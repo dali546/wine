@@ -492,6 +492,7 @@ static BOOL wayland_win_data_update_wayland_xdg_state(struct wayland_win_data *d
     {
         TRACE("hwnd=%p window state not compatible with current or "
               "pending wayland surface configuration\n", data->hwnd);
+        wayland_surface_set_drawing_allowed(data->wayland_surface, FALSE);
         return FALSE;
     }
 
@@ -540,6 +541,8 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
                                 width, height);
 
     wayland_surface_reconfigure_apply(data->wayland_surface);
+
+    wayland_surface_set_drawing_allowed(data->wayland_surface, TRUE);
 }
 
 static void update_wayland_state(struct wayland_win_data *data)

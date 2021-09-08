@@ -508,6 +508,7 @@ static BOOL wayland_win_data_update_wayland_xdg_state(struct wayland_win_data *d
     {
         TRACE("hwnd=%p window state not compatible with current or "
               "pending wayland surface configuration\n", data->hwnd);
+        wsurface->drawing_allowed = FALSE;
         return FALSE;
     }
 
@@ -642,6 +643,8 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
     }
 
     wayland_surface_reconfigure_apply(wsurface);
+
+    wsurface->drawing_allowed = TRUE;
 
     LeaveCriticalSection(&wsurface->crit);
 }

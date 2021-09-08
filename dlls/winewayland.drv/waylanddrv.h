@@ -173,6 +173,7 @@ struct wayland_surface
     struct wayland_surface_configure current;
     BOOL mapped;
     LONG ref;
+    BOOL drawing_allowed;
 };
 
 struct wayland_buffer_queue

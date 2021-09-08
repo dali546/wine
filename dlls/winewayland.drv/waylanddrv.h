@@ -47,6 +47,7 @@ enum wayland_window_message
     WM_WAYLAND_BROADCAST_DISPLAY_CHANGE = 0x80001000,
     WM_WAYLAND_SET_CURSOR = 0x80001001,
     WM_WAYLAND_QUERY_SURFACE_MAPPED = 0x80001002,
+    WM_WAYLAND_CONFIGURE = 0x80001003,
 };
 
 enum wayland_configure_flags
@@ -155,6 +156,7 @@ struct wayland_surface_configure
     int height;
     enum wayland_configure_flags configure_flags;
     uint32_t serial;
+    BOOL processed;
 };
 
 struct wayland_surface

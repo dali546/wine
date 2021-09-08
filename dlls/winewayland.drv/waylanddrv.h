@@ -395,6 +395,8 @@ void wayland_window_surface_flush(struct window_surface *window_surface);
 BOOL wayland_window_surface_needs_flush(struct window_surface *surface);
 void wayland_window_surface_update_wayland_surface(struct window_surface *surface,
                                                    struct wayland_surface *wayland_surface);
+void wayland_window_surface_set_window_region(struct window_surface *window_surface,
+                                              HRGN win_region);
 
 /**********************************************************************
  *          Wayland Keyboard
@@ -445,6 +447,7 @@ extern UINT WAYLAND_MapVirtualKeyEx(UINT code, UINT maptype, HKL hkl) DECLSPEC_H
 extern DWORD WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
                                                  DWORD timeout, DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
 extern void WAYLAND_SetCursor(HCURSOR hcursor) DECLSPEC_HIDDEN;
+extern void WAYLAND_SetWindowRgn(HWND hwnd, HRGN hrgn, BOOL redraw) DECLSPEC_HIDDEN;
 extern UINT WAYLAND_ShowWindow(HWND hwnd, INT cmd, RECT *rect, UINT swp) DECLSPEC_HIDDEN;
 extern LRESULT WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam) DECLSPEC_HIDDEN;
 extern INT WAYLAND_ToUnicodeEx(UINT virt, UINT scan, const BYTE *state,

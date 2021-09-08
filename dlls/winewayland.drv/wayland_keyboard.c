@@ -533,6 +533,7 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
     TRACE("key=%d state=%#x focused_hwnd=%p\n", key, state, focused_hwnd);
 
     wayland->last_dispatch_mask |= QS_KEY | QS_HOTKEY;
+    wayland->last_event_type = INPUT_KEYBOARD;
 
     wayland_keyboard_emit(&wayland->keyboard, key, state, focused_hwnd);
 

@@ -146,6 +146,7 @@ struct wayland
     struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
     DWORD last_dispatch_mask;
+    DWORD last_event_type;
     int event_notification_pipe[2];
 };
 
@@ -438,6 +439,17 @@ size_t unicode_to_ascii_maybe_z(char *dst, size_t dst_max_chars,
 size_t ascii_to_unicode_z(WCHAR *dst, size_t dst_max_chars,
                           const char *src, size_t src_max_chars) DECLSPEC_HIDDEN;
 int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          USER32 helpers
+ */
+
+static inline HWND get_focus(void)
+{
+    GUITHREADINFO info;
+    info.cbSize = sizeof(info);
+    return NtUserGetGUIThreadInfo(GetCurrentThreadId(), &info) ? info.hwndFocus : 0;
+}
 
 /**********************************************************************
  *          USER driver functions

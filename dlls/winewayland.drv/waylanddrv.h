@@ -332,6 +332,8 @@ void CDECL wayland_window_surface_flush(struct window_surface *window_surface);
 BOOL wayland_window_surface_needs_flush(struct window_surface *surface);
 void wayland_window_surface_update_wayland_surface(struct window_surface *surface,
                                                    struct wayland_surface *wayland_surface);
+void wayland_window_surface_set_window_region(struct window_surface *window_surface,
+                                              HRGN win_region);
 
 /**********************************************************************
  *          Wayland Keyboard

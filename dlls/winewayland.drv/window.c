@@ -64,6 +64,8 @@ struct wayland_win_data
     BOOL           handling_wayland_configure_event;
     /* the configure flags for the configure event we are handling */
     enum wayland_configure_flags wayland_configure_event_flags;
+    /* whether this window has been deactivated by wayland after minimization */
+    BOOL deactivated_after_minimization;
     /* whether this window is visible */
     BOOL visible;
     /* Save previous state to be able to decide when to recreate wayland surface */
@@ -666,6 +668,32 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
     wayland_win_data_release(data);
 }
 
+/***********************************************************************
+ *           WAYLAND_ShowWindow
+ */
+UINT CDECL WAYLAND_ShowWindow(HWND hwnd, INT cmd, RECT *rect, UINT swp)
+{
+    struct wayland_surface *wsurface;
+
+    TRACE("hwnd=%p cmd=%d\n", hwnd, cmd);
+
+    if (IsRectEmpty(rect)) return swp;
+    if (!IsIconic(hwnd)) return swp;
+    /* always hide icons off-screen */
+    if (rect->left != -32000 || rect->top != -32000)
+    {
+        OffsetRect(rect, -32000 - rect->left, -32000 - rect->top);
+        swp &= ~(SWP_NOMOVE | SWP_NOCLIENTMOVE);
+    }
+
+    if ((wsurface = wayland_surface_for_hwnd_lock(hwnd)) && wsurface->xdg_toplevel)
+        xdg_toplevel_set_minimized(wsurface->xdg_toplevel);
+
+    wayland_surface_for_hwnd_unlock(wsurface);
+
+    return swp;
+}
+
 static LRESULT handle_wm_wayland_configure(HWND hwnd)
 {
     struct wayland_win_data *data;
@@ -675,6 +703,7 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     BOOL needs_move_to_origin;
     int origin_x, origin_y;
     UINT swp_flags;
+    BOOL needs_restore = FALSE;
     BOOL needs_enter_size_move = FALSE;
     BOOL needs_exit_size_move = FALSE;
 
@@ -700,6 +729,36 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
         return 0;
     }
 
+    if (IsIconic(hwnd) &&
+        !(wsurface->pending.configure_flags & WAYLAND_CONFIGURE_FLAG_ACTIVATED))
+    {
+        data->deactivated_after_minimization = TRUE;
+    }
+
+    /* Restore a minimized window if it is activated. We only do this after we
+     * have seen a deactivation event for the surface or if the flags indicate
+     * an explicit non-minimized state, to ensure we don't restore prematurely,
+     * e.g., while minimization is still in progress. */
+    if (IsIconic(hwnd) &&
+        (wsurface->pending.configure_flags & WAYLAND_CONFIGURE_FLAG_ACTIVATED) &&
+        (data->deactivated_after_minimization ||
+         (wsurface->pending.configure_flags &
+          (WAYLAND_CONFIGURE_FLAG_MAXIMIZED|WAYLAND_CONFIGURE_FLAG_FULLSCREEN))))
+    {
+        needs_restore = TRUE;
+        data->deactivated_after_minimization = FALSE;
+        /* If allowed, ignore the restoration size provided by wayland, since
+         * it may cause wayland_win_data.restore_rect to be set and mess up our
+         * own tracking.
+         */
+        if (!(wsurface->pending.configure_flags &
+              (WAYLAND_CONFIGURE_FLAG_MAXIMIZED|WAYLAND_CONFIGURE_FLAG_FULLSCREEN)))
+        {
+            wsurface->pending.width = 0;
+            wsurface->pending.height = 0;
+        }
+    }
+
     wsurface->pending.processed = TRUE;
 
     data->wayland_configure_event_flags = wsurface->pending.configure_flags;
@@ -713,7 +772,8 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     if (width == 0)
     {
         int ignore;
-        width = data->restore_rect.right - data->restore_rect.left;
+        if (!IsIconic(hwnd) || needs_restore)
+            width = data->restore_rect.right - data->restore_rect.left;
         if (width == 0)
             width = data->window_rect.right - data->window_rect.left;
         wayland_surface_coords_rounded_from_wine(wsurface, width, 0,
@@ -723,7 +783,8 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
     if (height == 0)
     {
         int ignore;
-        height = data->restore_rect.bottom - data->restore_rect.top;
+        if (!IsIconic(hwnd) || needs_restore)
+            height = data->restore_rect.bottom - data->restore_rect.top;
         if (height == 0)
             height = data->window_rect.bottom - data->window_rect.top;
         wayland_surface_coords_rounded_from_wine(wsurface, 0, height,
@@ -763,6 +824,12 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
           origin_x, origin_y);
 
     wayland_win_data_release(data);
+
+    if (needs_restore)
+    {
+        ShowOwnedPopups(hwnd, TRUE);
+        ShowWindow(hwnd, SW_RESTORE);
+    }
 
     if (needs_enter_size_move)
         SendMessageW(hwnd, WM_ENTERSIZEMOVE, 0, 0);

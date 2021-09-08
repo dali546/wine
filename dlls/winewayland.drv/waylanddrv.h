@@ -189,6 +189,7 @@ struct wayland_surface
     BOOL mapped;
     LONG ref;
     enum wayland_surface_role role;
+    BOOL drawing_allowed;
 };
 
 struct wayland_buffer_queue

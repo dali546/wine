@@ -116,6 +116,7 @@ struct wayland
     struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
     DWORD last_dispatch_mask;
+    uint32_t last_button_serial;
     DWORD last_event_type;
     int event_notification_pipe[2];
     struct wl_list thread_link;

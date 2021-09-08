@@ -44,6 +44,8 @@ struct wayland_window_surface
     struct wayland_surface *wayland_surface; /* Not owned by us */
     struct wayland_buffer_queue *wayland_buffer_queue;
     RECT                  bounds;
+    HRGN                  region; /* region set through window_surface funcs */
+    HRGN                  total_region; /* Total region (surface->region AND window_region) */
     void                 *bits;
     CRITICAL_SECTION      crit;
     BOOL                  last_flush_missing_wayland;
@@ -71,6 +73,104 @@ static inline void reset_bounds(RECT *bounds)
 {
     bounds->left = bounds->top = INT_MAX;
     bounds->right = bounds->bottom = INT_MIN;
+}
+
+/***********************************************************************
+ *           wayland_window_surface_preferred_format
+ */
+static int get_preferred_format(struct wayland_window_surface *wws)
+{
+    int format;
+    HRGN window_region = CreateRectRgn(0, 0, 0, 0);
+
+    /* Use ARGB to implement window regions (areas out of the region are
+     * transparent). */
+    if ((window_region && GetWindowRgn(wws->hwnd, window_region) != ERROR))
+        format = WL_SHM_FORMAT_ARGB8888;
+    else
+        format = WL_SHM_FORMAT_XRGB8888;
+
+    if (window_region) DeleteObject(window_region);
+
+    return format;
+}
+
+/***********************************************************************
+ *           recreate_wayland_buffer_queue
+ */
+static void recreate_wayland_buffer_queue(struct wayland_window_surface *wws)
+{
+    int width;
+    int height;
+    int format;
+
+    if (!wws->wayland_buffer_queue) return;
+
+    width = wws->wayland_buffer_queue->width;
+    height = wws->wayland_buffer_queue->height;
+    format = get_preferred_format(wws);
+
+    wayland_buffer_queue_destroy(wws->wayland_buffer_queue);
+
+    wws->wayland_buffer_queue =
+        wayland_buffer_queue_create(wws->wayland_surface->wayland,
+                                    width, height, format);
+}
+
+/***********************************************************************
+ *           wayland_window_surface_set_window_region
+ */
+void wayland_window_surface_set_window_region(struct window_surface *window_surface,
+                                              HRGN win_region)
+{
+    struct wayland_window_surface *wws =
+        wayland_window_surface_cast(window_surface);
+    HRGN region = 0;
+
+    TRACE("hwnd %p surface %p region %p\n", wws->hwnd, wws, win_region);
+
+    if (win_region == (HRGN)1)  /* hack: win_region == 1 means retrieve region from server */
+    {
+        region = CreateRectRgn(0, 0, 0, 0);
+        if (region && GetWindowRgn(wws->hwnd, region) == ERROR)
+        {
+            DeleteObject(region);
+            region = 0;
+        }
+    }
+    else if (win_region)
+    {
+        region = CreateRectRgn(0, 0, 0, 0);
+        if (region) CombineRgn(region, win_region, 0, RGN_COPY);
+    }
+
+    if (wws->region)
+    {
+        if (region)
+        {
+            CombineRgn(region, region, wws->region, RGN_AND);
+        }
+        else
+        {
+            region = CreateRectRgn(0, 0, 0, 0);
+            if (region) CombineRgn(region, wws->region, 0, RGN_COPY);
+        }
+    }
+
+    window_surface->funcs->lock(window_surface);
+
+    if (wws->total_region) DeleteObject(wws->total_region);
+    wws->total_region = region;
+    *window_surface->funcs->get_bounds(window_surface) = wws->header.rect;
+    /* Unconditionally recreate the buffer queue to ensure we have clean buffers, so
+     * that areas outside the region are transparent. */
+    recreate_wayland_buffer_queue(wws);
+
+    TRACE("hwnd %p bounds %s rect %s\n", wws->hwnd,
+          wine_dbgstr_rect(window_surface->funcs->get_bounds(window_surface)),
+          wine_dbgstr_rect(&wws->header.rect));
+
+    window_surface->funcs->unlock(window_surface);
 }
 
 /***********************************************************************
@@ -119,7 +219,23 @@ static RECT CDECL *wayland_window_surface_get_bounds(struct window_surface *wind
 static void CDECL wayland_window_surface_set_region(struct window_surface *window_surface,
                                                     HRGN region)
 {
-    /* TODO */
+    struct wayland_window_surface *wws = wayland_window_surface_cast(window_surface);
+
+    TRACE("updating hwnd=%p surface=%p region=%p\n", wws->hwnd, wws, region);
+
+    window_surface->funcs->lock(window_surface);
+    if (!region)
+    {
+        if (wws->region) DeleteObject(wws->region);
+        wws->region = NULL;
+    }
+    else
+    {
+        if (!wws->region) wws->region = CreateRectRgn(0, 0, 0, 0);
+        CombineRgn(wws->region, region, 0, RGN_COPY);
+    }
+    window_surface->funcs->unlock(window_surface);
+    wayland_window_surface_set_window_region(&wws->header, (HRGN)1);
 }
 
 /***********************************************************************
@@ -142,6 +258,16 @@ void CDECL wayland_window_surface_flush(struct window_surface *window_surface)
           wine_dbgstr_rect(&wws->header.rect), wine_dbgstr_rect(&wws->bounds));
 
     needs_flush = IntersectRect(&damage_rect, &wws->header.rect, &wws->bounds);
+    if (needs_flush)
+    {
+        surface_damage_region = CreateRectRgnIndirect(&damage_rect);
+        if (wws->total_region)
+        {
+            needs_flush = CombineRgn(surface_damage_region, surface_damage_region,
+                                     wws->total_region, RGN_AND);
+        }
+    }
+
     if (needs_flush &&
         (!wws->wayland_surface || !wws->wayland_buffer_queue ||
          !wayland_surface_is_drawing_allowed(wws->wayland_surface)))
@@ -156,11 +282,9 @@ void CDECL wayland_window_surface_flush(struct window_surface *window_surface)
     reset_bounds(&wws->bounds);
     if (!needs_flush) goto done;
 
-    surface_damage_region = CreateRectRgnIndirect(&damage_rect);
-
-    TRACE("flushing surface %p hwnd %p surface_rect %s bits %p\n",
+    TRACE("flushing surface %p hwnd %p surface_rect %s bits %p region %p\n",
           wws, wws->hwnd, wine_dbgstr_rect(&wws->header.rect),
-          wws->bits);
+          wws->bits, wws->total_region);
 
     assert(wws->wayland_buffer_queue);
 
@@ -171,7 +295,7 @@ void CDECL wayland_window_surface_flush(struct window_surface *window_surface)
         WARN("failed to acquire wayland buffer, returning\n");
         goto done;
     }
-    buffer_damage = wayland_shm_buffer_get_damage_clipped(buffer, NULL);
+    buffer_damage = wayland_shm_buffer_get_damage_clipped(buffer, wws->total_region);
 
     rgn_rect = (RECT *)buffer_damage->Buffer;
     rgn_rect_end = rgn_rect + buffer_damage->rdh.nCount;
@@ -180,7 +304,8 @@ void CDECL wayland_window_surface_flush(struct window_surface *window_surface)
     for (;rgn_rect < rgn_rect_end; rgn_rect++)
     {
         unsigned int *src, *dst;
-        int y, width, height;
+        int x, y, width, height;
+        BOOL apply_surface_alpha;
 
         TRACE("damage %s\n", wine_dbgstr_rect(rgn_rect));
 
@@ -196,8 +321,13 @@ void CDECL wayland_window_surface_flush(struct window_surface *window_surface)
         width = min(rgn_rect->right, buffer->width) - rgn_rect->left;
         height = min(rgn_rect->bottom, buffer->height) - rgn_rect->top;
 
+        /* If we have an ARGB buffer we need to explicitly apply the surface
+         * alpha (assumed to be 255 currently) to ensure the destination has
+         * sensible alpha values. */
+        apply_surface_alpha = buffer->format == WL_SHM_FORMAT_ARGB8888;
+
         /* Fast path for full width rectangles. */
-        if (width == buffer->width)
+        if (width == buffer->width && !apply_surface_alpha)
         {
             memcpy(dst, src, height * buffer->stride);
             continue;
@@ -205,7 +335,15 @@ void CDECL wayland_window_surface_flush(struct window_surface *window_surface)
 
         for (y = 0; y < height; y++)
         {
-            memcpy(dst, src, width * 4);
+            if (!apply_surface_alpha)
+            {
+                memcpy(dst, src, width * 4);
+            }
+            else
+            {
+                for (x = 0; x < width; x++)
+                    dst[x] = 0xff000000 | src[x];
+            }
 
             src += wws->info.bmiHeader.biWidth;
             dst = (unsigned int*)((unsigned char*)dst + buffer->stride);
@@ -233,6 +371,8 @@ static void CDECL wayland_window_surface_destroy(struct window_surface *window_s
 
     wws->crit.DebugInfo->Spare[0] = 0;
     DeleteCriticalSection(&wws->crit);
+    if (wws->region) DeleteObject(wws->region);
+    if (wws->total_region) DeleteObject(wws->total_region);
     if (wws->wayland_buffer_queue)
         wayland_buffer_queue_destroy(wws->wayland_buffer_queue);
     heap_free(wws->bits);
@@ -277,6 +417,7 @@ struct window_surface *wayland_window_surface_create(HWND hwnd, const RECT *rect
     wws->header.rect  = *rect;
     wws->header.ref   = 1;
     wws->hwnd         = hwnd;
+    wayland_window_surface_set_window_region(&wws->header, (HRGN)1);
     reset_bounds(&wws->bounds);
 
     if (!(wws->bits = heap_alloc(wws->info.bmiHeader.biSizeImage)))
@@ -319,7 +460,7 @@ void wayland_window_surface_update_wayland_surface(struct window_surface *window
         wws->wayland_buffer_queue =
             wayland_buffer_queue_create(wws->wayland_surface->wayland,
                     wws->info.bmiHeader.biWidth, abs(wws->info.bmiHeader.biHeight),
-                    WL_SHM_FORMAT_XRGB8888);
+                    get_preferred_format(wws));
     }
 
     window_surface->funcs->unlock(window_surface);

@@ -378,6 +378,7 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
 
     if (!(style & WS_VISIBLE))
     {
+        wayland_surface_set_drawing_allowed(data->wayland_surface, TRUE);
         wayland_surface_unmap(data->wayland_surface);
         return;
     }
@@ -473,6 +474,7 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
         {
             TRACE("hwnd=%p window state not compatible with current or "
                   "pending wayland surface configuration\n", data->hwnd);
+            wayland_surface_set_drawing_allowed(data->wayland_surface, FALSE);
             return;
         }
 
@@ -497,6 +499,8 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
                                 width, height);
 
     wayland_surface_reconfigure_apply(data->wayland_surface);
+
+    wayland_surface_set_drawing_allowed(data->wayland_surface, TRUE);
 
     wayland_win_data_release(parent_data);
 }

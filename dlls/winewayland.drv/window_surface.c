@@ -143,9 +143,10 @@ void CDECL wayland_window_surface_flush(struct window_surface *window_surface)
 
     needs_flush = IntersectRect(&damage_rect, &wws->header.rect, &wws->bounds);
     if (needs_flush &&
-        (!wws->wayland_surface || !wws->wayland_buffer_queue))
+        (!wws->wayland_surface || !wws->wayland_buffer_queue ||
+         !wayland_surface_is_drawing_allowed(wws->wayland_surface)))
     {
-        TRACE("missing wayland surface=%p buffer_queue=%p, returning\n",
+        TRACE("missing wayland surface=%p buffer_queue=%p or drawing disallowed, returning\n",
               wws->wayland_surface, wws->wayland_buffer_queue);
         wws->last_flush_missing_wayland = TRUE;
         goto done;

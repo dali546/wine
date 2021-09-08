@@ -120,6 +120,7 @@ struct wayland
     struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
     DWORD last_dispatch_mask;
+    uint32_t last_button_serial;
     DWORD last_event_type;
     int event_notification_pipe[2];
     struct wl_list thread_link;
@@ -376,6 +377,7 @@ extern DWORD CDECL WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE
                                                        DWORD timeout, DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
 extern void CDECL WAYLAND_SetCursor(HCURSOR hcursor) DECLSPEC_HIDDEN;
 extern UINT CDECL WAYLAND_ShowWindow(HWND hwnd, INT cmd, RECT *rect, UINT swp) DECLSPEC_HIDDEN;
+extern LRESULT CDECL WAYLAND_SysCommand(HWND hwnd, WPARAM wparam, LPARAM lparam) DECLSPEC_HIDDEN;
 extern INT CDECL WAYLAND_ToUnicodeEx(UINT virt, UINT scan, const BYTE *state,
                                      LPWSTR buf, int nchars, UINT flags, HKL hkl) DECLSPEC_HIDDEN;
 extern SHORT CDECL WAYLAND_VkKeyScanEx(WCHAR ch, HKL hkl) DECLSPEC_HIDDEN;

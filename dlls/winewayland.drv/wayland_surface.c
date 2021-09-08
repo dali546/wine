@@ -135,6 +135,7 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
         goto err;
 
     wl_surface_set_user_data(surface->wl_surface, surface);
+    surface->drawing_allowed = TRUE;
 
     surface->ref = 1;
 
@@ -577,4 +578,20 @@ void wayland_surface_unref(struct wayland_surface *surface)
 
     if (ref == 0)
         wayland_surface_destroy(surface);
+}
+
+/**********************************************************************
+ *          wayland_surface_set_drawing_allowed
+ */
+void wayland_surface_set_drawing_allowed(struct wayland_surface *surface, BOOL allowed)
+{
+    __atomic_store_n(&surface->drawing_allowed, allowed, __ATOMIC_SEQ_CST);
+}
+
+/**********************************************************************
+ *          wayland_surface_is_drawing_allowed
+ */
+BOOL wayland_surface_is_drawing_allowed(struct wayland_surface *surface)
+{
+    return __atomic_load_n(&surface->drawing_allowed, __ATOMIC_SEQ_CST);
 }

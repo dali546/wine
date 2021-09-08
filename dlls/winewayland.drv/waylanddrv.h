@@ -443,6 +443,7 @@ UINT WAYLAND_MapVirtualKeyEx(UINT code, UINT maptype, HKL hkl) DECLSPEC_HIDDEN;
 DWORD WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
                                           DWORD timeout, DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
 void WAYLAND_SetCursor(HCURSOR hcursor) DECLSPEC_HIDDEN;
+UINT WAYLAND_ShowWindow(HWND hwnd, INT cmd, RECT *rect, UINT swp) DECLSPEC_HIDDEN;
 INT WAYLAND_ToUnicodeEx(UINT virt, UINT scan, const BYTE *state,
                         LPWSTR buf, int nchars, UINT flags, HKL hkl) DECLSPEC_HIDDEN;
 void WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,

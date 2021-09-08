@@ -286,6 +286,11 @@ BOOL wayland_surface_commit_buffer(struct wayland_surface *surface,
                                    struct wayland_shm_buffer *shm_buffer,
                                    HRGN surface_damage_region);
 void wayland_surface_destroy(struct wayland_surface *surface);
+void wayland_surface_reconfigure_position(struct wayland_surface *surface,
+                                          int x, int y);
+void wayland_surface_reconfigure_geometry(struct wayland_surface *surface,
+                                          int x, int y, int width, int height);
+void wayland_surface_reconfigure_apply(struct wayland_surface *surface);
 void wayland_surface_unmap(struct wayland_surface *surface);
 void wayland_surface_ack_pending_configure(struct wayland_surface *surface);
 void wayland_surface_coords_to_screen(struct wayland_surface *surface,

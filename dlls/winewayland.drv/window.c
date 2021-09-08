@@ -51,6 +51,10 @@ struct wayland_win_data
     struct wayland_surface *wayland_surface;
     /* wine window_surface backing this window */
     struct window_surface *window_surface;
+    /* whether the window is currently fullscreen */
+    BOOL           fullscreen;
+    /* whether the window is currently maximized */
+    BOOL           maximized;
     /* whether this window is visible */
     BOOL           visible;
     /* Save previous state to be able to decide when to recreate wayland surface */
@@ -355,6 +359,10 @@ static void wayland_win_data_update_wayland_surface(struct wayland_win_data *dat
 
     data->effective_parent = effective_parent_hwnd;
 
+    /* Reset window state, so that it can be properly applied again. */
+    data->maximized = FALSE;
+    data->fullscreen = FALSE;
+
     /* Use wayland subsurfaces for children windows and toplevels that we
      * consider to be popups and have an effective parent. Otherwise, if the
      * window is visible make it wayland toplevel. Finally, if the window is
@@ -371,10 +379,190 @@ static void wayland_win_data_update_wayland_surface(struct wayland_win_data *dat
         data->wayland_surface->hwnd = data->hwnd;
 }
 
+static BOOL wayland_win_data_update_wayland_xdg_state(struct wayland_win_data *data)
+{
+    int wayland_width, wayland_height;
+    BOOL compat_with_current = FALSE;
+    BOOL compat_with_pending = FALSE;
+    int width = data->window_rect.right - data->window_rect.left;
+    int height = data->window_rect.bottom - data->window_rect.top;
+    struct wayland_surface *wsurface = data->wayland_surface;
+    enum wayland_configure_flags conf_flags = 0;
+    DWORD style = GetWindowLongW(data->hwnd, GWL_STYLE);
+    HMONITOR hmonitor;
+    MONITORINFOEXW mi;
+    struct wayland_output *output;
+    RECT window_in_monitor;
+
+    mi.cbSize = sizeof(mi);
+    if ((hmonitor = MonitorFromWindow(data->hwnd, MONITOR_DEFAULTTOPRIMARY)) &&
+        GetMonitorInfoW(hmonitor, (MONITORINFO *)&mi))
+    {
+        output = wayland_output_get_by_wine_name(wsurface->wayland, mi.szDevice);
+    }
+    else
+    {
+        output = NULL;
+        SetRectEmpty(&mi.rcMonitor);
+    }
+
+    TRACE("hwnd=%p window=%dx%d monitor=%dx%d maximized=%d fullscreen=%d\n",
+          data->hwnd, width, height,
+          mi.rcMonitor.right - mi.rcMonitor.left,
+          mi.rcMonitor.bottom - mi.rcMonitor.top,
+          data->maximized, data->fullscreen);
+
+    /* Set the wayland fullscreen state if the window rect covers the
+     * current monitor. Note that we set/maintain the fullscreen wayland state,
+     * even if the window style is also maximized. */
+    if (!IsRectEmpty(&mi.rcMonitor) &&
+        IntersectRect(&window_in_monitor, &data->window_rect, &mi.rcMonitor) &&
+        EqualRect(&window_in_monitor, &mi.rcMonitor) &&
+        !(style & (WS_MINIMIZE|WS_CAPTION)))
+    {
+        conf_flags |= WAYLAND_CONFIGURE_FLAG_FULLSCREEN;
+    }
+    if (style & WS_MAXIMIZE)
+    {
+        conf_flags |= WAYLAND_CONFIGURE_FLAG_MAXIMIZED;
+    }
+
+    /* First do all state unsettings, before setting new state. Some wayland
+     * compositors misbehave if the order is reversed. */
+    if (data->maximized && !(conf_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
+    {
+        xdg_toplevel_unset_maximized(wsurface->xdg_toplevel);
+        data->maximized = FALSE;
+    }
+
+    if (data->fullscreen && !(conf_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
+    {
+        xdg_toplevel_unset_fullscreen(wsurface->xdg_toplevel);
+        data->fullscreen = FALSE;
+    }
+
+    if (!data->maximized && (conf_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
+    {
+        xdg_toplevel_set_maximized(wsurface->xdg_toplevel);
+        data->maximized = TRUE;
+    }
+
+   /* Set the fullscreen state after the maximized state on the wayland surface
+    * to ensure compositors apply the final fullscreen state properly. */
+    if (!data->fullscreen && (conf_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
+    {
+        xdg_toplevel_set_fullscreen(wsurface->xdg_toplevel,
+                                    output ? output->wl_output : NULL);
+        data->fullscreen = TRUE;
+    }
+
+    TRACE("hwnd=%p current state maximized=%d fullscreen=%d\n",
+          data->hwnd, data->maximized, data->fullscreen);
+
+    wayland_surface_coords_rounded_from_wine(wsurface, width, height,
+                                             &wayland_width, &wayland_height);
+
+    if (wsurface->current.serial &&
+        wayland_surface_configure_is_compatible(&wsurface->current,
+                                                wayland_width, wayland_height,
+                                                conf_flags))
+    {
+        compat_with_current = TRUE;
+    }
+
+    if (wsurface->pending.serial &&
+        wayland_surface_configure_is_compatible(&wsurface->pending,
+                                                wayland_width, wayland_height,
+                                                conf_flags))
+    {
+        compat_with_pending = TRUE;
+    }
+
+    TRACE("current conf serial=%d size=%dx%d flags=%#x\n compat=%d\n",
+          wsurface->current.serial, wsurface->current.width,
+          wsurface->current.height, wsurface->current.configure_flags,
+          compat_with_current);
+    TRACE("pending conf serial=%d size=%dx%d flags=%#x compat=%d\n",
+          wsurface->pending.serial, wsurface->pending.width,
+          wsurface->pending.height, wsurface->pending.configure_flags,
+          compat_with_pending);
+
+    /* Only update the wayland surface state to match the window
+     * configuration if the surface can accept the new config, in order to
+     * avoid transient states that may cause glitches. */
+    if (!compat_with_pending && !compat_with_current)
+    {
+        TRACE("hwnd=%p window state not compatible with current or "
+              "pending wayland surface configuration\n", data->hwnd);
+        return FALSE;
+    }
+
+    if (compat_with_pending)
+        wayland_surface_ack_pending_configure(wsurface);
+
+    return TRUE;
+}
+
+static void wayland_win_data_update_wayland_surface_state(struct wayland_win_data *data)
+{
+    RECT screen_rect;
+    RECT parent_screen_rect;
+    int width = data->window_rect.right - data->window_rect.left;
+    int height = data->window_rect.bottom - data->window_rect.top;
+    struct wayland_surface *wsurface = data->wayland_surface;
+    DWORD style = GetWindowLongW(data->hwnd, GWL_STYLE);
+
+    TRACE("hwnd=%p window=%dx%d style=0x%x\n", data->hwnd, width, height, style);
+
+    if (!(style & WS_VISIBLE))
+    {
+        wayland_surface_unmap(wsurface);
+        return;
+    }
+
+    /* Lock the wayland surface to avoid commits from other threads while we
+     * are setting up the new state. */
+    EnterCriticalSection(&wsurface->crit);
+
+    if (wsurface->xdg_toplevel &&
+        !wayland_win_data_update_wayland_xdg_state(data))
+    {
+        LeaveCriticalSection(&wsurface->crit);
+        return;
+    }
+
+    if (wsurface->wl_subsurface)
+    {
+        /* In addition to children windows, we manage some top level, popup window
+         * with subsurfaces (see wayland_win_data_get_effective_parent), which use
+         * coordinates relative to their parent surface. */
+        if (!GetWindowRect(data->hwnd, &screen_rect))
+            SetRectEmpty(&screen_rect);
+        if (!GetWindowRect(data->effective_parent, &parent_screen_rect))
+            SetRectEmpty(&parent_screen_rect);
+
+        wayland_surface_reconfigure_position(
+            wsurface,
+            screen_rect.left - parent_screen_rect.left,
+            screen_rect.top - parent_screen_rect.top);
+    }
+    else if (wsurface->xdg_surface)
+    {
+        wayland_surface_reconfigure_geometry(wsurface, 0, 0, width, height);
+    }
+
+    wayland_surface_reconfigure_apply(wsurface);
+
+    LeaveCriticalSection(&wsurface->crit);
+}
+
 static void update_wayland_state(struct wayland_win_data *data)
 {
     if (wayland_win_data_wayland_surface_needs_update(data))
         wayland_win_data_update_wayland_surface(data);
+
+    if (data->wayland_surface)
+        wayland_win_data_update_wayland_surface_state(data);
 
     if (data->window_surface)
     {

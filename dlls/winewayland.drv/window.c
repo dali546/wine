@@ -52,10 +52,18 @@ struct wayland_win_data
     struct wayland_surface *wayland_surface;
     /* wine window_surface backing this window */
     struct window_surface *window_surface;
+    /* whether this window is currently being resized */
+    BOOL           resizing;
+    /* the window_rect this window should be restored to after unmaximizing */
+    RECT           restore_rect;
     /* whether the window is currently fullscreen */
     BOOL           fullscreen;
     /* whether the window is currently maximized */
     BOOL           maximized;
+    /* whether we are currently handling a wayland configure event */
+    BOOL           handling_wayland_configure_event;
+    /* the configure flags for the configure event we are handling */
+    enum wayland_configure_flags wayland_configure_event_flags;
     /* whether this window is visible */
     BOOL visible;
     /* Save previous state to be able to decide when to recreate wayland surface */
@@ -402,11 +410,11 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
         SetRectEmpty(&mi.rcMonitor);
     }
 
-    TRACE("hwnd=%p window=%dx%d monitor=%dx%d maximized=%d fullscreen=%d\n",
+    TRACE("hwnd=%p window=%dx%d monitor=%dx%d maximized=%d fullscreen=%d handling_event=%d\n",
           data->hwnd, width, height,
           mi.rcMonitor.right - mi.rcMonitor.left,
           mi.rcMonitor.bottom - mi.rcMonitor.top,
-          data->maximized, data->fullscreen);
+          data->maximized, data->fullscreen, data->handling_wayland_configure_event);
 
     if (!(style & WS_VISIBLE))
     {
@@ -415,37 +423,51 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
         return;
     }
 
-    /* Set the wayland fullscreen state if the window rect covers the
-     * current monitor exactly. Note that we set/maintain the fullscreen
-     * wayland state, even if the window style is also maximized. */
-    if (!IsRectEmpty(&mi.rcMonitor) &&
-        EqualRect(&data->window_rect, &mi.rcMonitor) &&
-        !(style & (WS_MINIMIZE|WS_CAPTION)))
+    /* If we are currently handling a wayland configure event (i.e., we are
+     * being called through handle_wm_wayland_configure() -> SetWindowPos()),
+     * use the event configure flags directly. Otherwise try to infer the flags
+     * from the window style and rectangle. */
+    if (data->handling_wayland_configure_event)
     {
-        conf_flags |= WAYLAND_CONFIGURE_FLAG_FULLSCREEN;
+        conf_flags = data->wayland_configure_event_flags;
     }
-    if (style & WS_MAXIMIZE)
+    else
     {
-        conf_flags |= WAYLAND_CONFIGURE_FLAG_MAXIMIZED;
+        /* Set the wayland fullscreen state if the window rect covers the
+         * current monitor exactly. Note that we set/maintain the fullscreen
+         * wayland state, even if the window style is also maximized. */
+        if (!IsRectEmpty(&mi.rcMonitor) &&
+            EqualRect(&data->window_rect, &mi.rcMonitor) &&
+            !(style & (WS_MINIMIZE|WS_CAPTION)))
+        {
+            conf_flags |= WAYLAND_CONFIGURE_FLAG_FULLSCREEN;
+        }
+        if (style & WS_MAXIMIZE)
+        {
+            conf_flags |= WAYLAND_CONFIGURE_FLAG_MAXIMIZED;
+        }
     }
 
     /* First do all state unsettings, before setting new state. Some wayland
      * compositors misbehave if the order is reversed. */
     if (data->maximized && !(conf_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
     {
-        xdg_toplevel_unset_maximized(data->wayland_surface->xdg_toplevel);
+        if (!data->handling_wayland_configure_event)
+            xdg_toplevel_unset_maximized(data->wayland_surface->xdg_toplevel);
         data->maximized = FALSE;
     }
 
     if (data->fullscreen && !(conf_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
     {
-        xdg_toplevel_unset_fullscreen(data->wayland_surface->xdg_toplevel);
+        if (!data->handling_wayland_configure_event)
+            xdg_toplevel_unset_fullscreen(data->wayland_surface->xdg_toplevel);
         data->fullscreen = FALSE;
     }
 
     if (!data->maximized && (conf_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
     {
-        xdg_toplevel_set_maximized(data->wayland_surface->xdg_toplevel);
+        if (!data->handling_wayland_configure_event)
+            xdg_toplevel_set_maximized(data->wayland_surface->xdg_toplevel);
         data->maximized = TRUE;
     }
 
@@ -453,9 +475,21 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
     * to ensure compositors apply the final fullscreen state properly. */
     if (!data->fullscreen && (conf_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
     {
-        xdg_toplevel_set_fullscreen(data->wayland_surface->xdg_toplevel,
-                                    output ? output->wl_output : NULL);
+        if (!data->handling_wayland_configure_event)
+        {
+            xdg_toplevel_set_fullscreen(data->wayland_surface->xdg_toplevel,
+                                        output ? output->wl_output : NULL);
+        }
         data->fullscreen = TRUE;
+    }
+
+    if (!(conf_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN) &&
+        !(conf_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED) &&
+        !(style & WS_MINIMIZE))
+    {
+        data->restore_rect = data->window_rect;
+        TRACE("setting hwnd=%p restore_rect=%s\n",
+              data->hwnd, wine_dbgstr_rect(&data->restore_rect));
     }
 
     TRACE("hwnd=%p current state maximized=%d fullscreen=%d\n",
@@ -662,4 +696,195 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
     update_wayland_state(data);
 
     wayland_win_data_release(data);
+}
+
+static LRESULT handle_wm_wayland_configure(HWND hwnd)
+{
+    struct wayland_win_data *data;
+    struct wayland_surface *wsurface;
+    DWORD flags;
+    int width, height, wine_width, wine_height;
+    BOOL needs_move_to_origin;
+    int origin_x, origin_y;
+    UINT swp_flags;
+    BOOL needs_enter_size_move = FALSE;
+    BOOL needs_exit_size_move = FALSE;
+
+    if (!(data = wayland_win_data_get(hwnd))) return 0;
+    if (!data->wayland_surface || !data->wayland_surface->xdg_toplevel)
+    {
+        TRACE("no suitable wayland surface, returning\n");
+        wayland_win_data_release(data);
+        return 0;
+    }
+
+    wsurface = data->wayland_surface;
+
+    TRACE("serial=%d size=%dx%d flags=%#x restore_rect=%s\n",
+          wsurface->pending.serial, wsurface->pending.width,
+          wsurface->pending.height, wsurface->pending.configure_flags,
+          wine_dbgstr_rect(&data->restore_rect));
+
+    if (wsurface->pending.serial == 0)
+    {
+        TRACE("pending configure event already handled, returning\n");
+        wayland_win_data_release(data);
+        return 0;
+    }
+
+    wsurface->pending.processed = TRUE;
+
+    data->wayland_configure_event_flags = wsurface->pending.configure_flags;
+
+    width = wsurface->pending.width;
+    height = wsurface->pending.height;
+    flags = wsurface->pending.configure_flags;
+
+    /* If we are free to set our size, first try the restore size, then
+     * the current size. */
+    if (width == 0)
+    {
+        int ignore;
+        width = data->restore_rect.right - data->restore_rect.left;
+        if (width == 0)
+            width = data->window_rect.right - data->window_rect.left;
+        wayland_surface_coords_rounded_from_wine(wsurface, width, 0,
+                                                 &width, &ignore);
+        wsurface->pending.width = width;
+    }
+    if (height == 0)
+    {
+        int ignore;
+        height = data->restore_rect.bottom - data->restore_rect.top;
+        if (height == 0)
+            height = data->window_rect.bottom - data->window_rect.top;
+        wayland_surface_coords_rounded_from_wine(wsurface, 0, height,
+                                                 &ignore, &height);
+        wsurface->pending.height = height;
+    }
+
+    wayland_surface_coords_to_wine(wsurface, width, height,
+                                   &wine_width, &wine_height);
+
+    TRACE("hwnd=%p effective_size=%dx%d wine_size=%dx%d\n",
+          data->hwnd, width, height, wine_width, wine_height);
+
+    if ((flags & WAYLAND_CONFIGURE_FLAG_RESIZING) && !data->resizing)
+    {
+        data->resizing = TRUE;
+        needs_enter_size_move = TRUE;
+    }
+
+    if (!(flags & WAYLAND_CONFIGURE_FLAG_RESIZING) && data->resizing)
+    {
+        data->resizing = FALSE;
+        needs_exit_size_move = TRUE;
+    }
+
+    /* Parts of the window that are outside the win32 display are not
+     * accessible to mouse events, although they may be visible and accessible
+     * to the user from a wayland compositor pespective. To mitigate this, we
+     * place all top-level windows at 0,0, to maximize the area that can reside
+     * within the win32 display. */
+    origin_x = 0;
+    origin_y = 0;
+    needs_move_to_origin = data->window_rect.top != origin_x ||
+                           data->window_rect.left != origin_y;
+    TRACE("current=%d,%d origin=%d,%d\n",
+          data->window_rect.left, data->window_rect.top,
+          origin_x, origin_y);
+
+    wayland_win_data_release(data);
+
+    if (needs_enter_size_move)
+        SendMessageW(hwnd, WM_ENTERSIZEMOVE, 0, 0);
+
+    if (needs_exit_size_move)
+        SendMessageW(hwnd, WM_EXITSIZEMOVE, 0, 0);
+
+    if ((data = wayland_win_data_get(hwnd)))
+    {
+        data->handling_wayland_configure_event = TRUE;
+        wayland_win_data_release(data);
+    }
+
+    if (flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED)
+        SetWindowLongW(hwnd, GWL_STYLE, GetWindowLongW(hwnd, GWL_STYLE) | WS_MAXIMIZE);
+    else
+        SetWindowLongW(hwnd, GWL_STYLE, GetWindowLongW(hwnd, GWL_STYLE) & ~WS_MAXIMIZE);
+
+    swp_flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER;
+
+    if (!needs_move_to_origin) swp_flags |= SWP_NOMOVE;
+    if (wine_width > 0 && wine_height > 0)
+        swp_flags |= SWP_FRAMECHANGED;
+    else
+        swp_flags |= SWP_NOSIZE | SWP_NOREDRAW;
+    /* When we are maximized or fullscreen, wayland is particular about the
+     * surface size it accepts, so don't allow the app to change it. */
+    if (flags & (WAYLAND_CONFIGURE_FLAG_MAXIMIZED|WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
+        swp_flags |= SWP_NOSENDCHANGING;
+
+    SetWindowPos(hwnd, 0, origin_x, origin_y, wine_width, wine_height, swp_flags);
+
+    if ((data = wayland_win_data_get(hwnd)))
+    {
+        data->handling_wayland_configure_event = FALSE;
+        wayland_win_data_release(data);
+    }
+
+    return 0;
+}
+
+static void CALLBACK post_configure(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD elapsed)
+{
+    TRACE("hwnd=%p\n", hwnd);
+    KillTimer(hwnd, timer_id);
+    handle_wm_wayland_configure(hwnd);
+}
+
+/**********************************************************************
+ *           WAYLAND_WindowMessage
+ */
+LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    TRACE("msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
+
+    switch (msg)
+    {
+    case WM_WAYLAND_CONFIGURE:
+        /* While resizing, configure events can come continuously and due to the
+         * amount of other message their handling produces (e.g., paints), have
+         * the potential to keep the message loop busy for some time. This may
+         * lead Wine core to think that the app never goes idle (see
+         * win.c:flush_window_surfaces), and thus start flushing at unfortunate
+         * times (e.g., in between partial window paints), causing visual
+         * artifacts.
+         *
+         * To mitigate this we handle the configure message only if the message
+         * queue is empty, ensuring that the loop has had time to become idle.
+         * If the queue is not currently empty, we schedule a timer message,
+         * which due to having the lowest priority is guaranteed to be triggered
+         * only on otherwise empty queues.
+         */
+        if (!GetQueueStatus(QS_ALLINPUT))
+        {
+            return handle_wm_wayland_configure(hwnd);
+        }
+        else
+        {
+            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
+            if (wayland_surface && wayland_surface->xdg_toplevel)
+            {
+                SetTimer(hwnd, (UINT_PTR)wayland_surface->wl_surface, 10,
+                         post_configure);
+            }
+            wayland_surface_for_hwnd_unlock(wayland_surface);
+        }
+        break;
+    default:
+        FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
+    }
+
+    return 0;
 }

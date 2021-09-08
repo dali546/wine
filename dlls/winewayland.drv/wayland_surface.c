@@ -251,6 +251,56 @@ err:
     return NULL;
 }
 
+/**********************************************************************
+ *          wayland_surface_reconfigure
+ *
+ * Configures the position and size of a wayland surface. Depending on the
+ * surface type, either repositioning or resizing may have no effect.
+ *
+ * The coordinates and sizes should be given in wine's coordinate space.
+ *
+ * This function sets up but doesn't actually apply any new configuration.
+ * The wayland_surface_reconfigure_apply() needs to be called for changes
+ * to take effect.
+ */
+void wayland_surface_reconfigure(struct wayland_surface *surface,
+                                 int wine_x, int wine_y,
+                                 int wine_width, int wine_height)
+{
+    int x, y, width, height;
+
+    wayland_surface_coords_rounded_from_wine(surface, wine_x, wine_y, &x, &y);
+    wayland_surface_coords_rounded_from_wine(surface, wine_width, wine_height,
+                                             &width, &height);
+
+    TRACE("surface=%p hwnd=%p %d,%d+%dx%d %d,%d+%dx%d\n",
+          surface, surface->hwnd,
+          wine_x, wine_y, wine_width, wine_height,
+          x, y, width, height);
+
+    if (surface->wl_subsurface)
+        wl_subsurface_set_position(surface->wl_subsurface, x, y);
+
+    if (surface->xdg_surface && width != 0 && height != 0)
+        xdg_surface_set_window_geometry(surface->xdg_surface, 0, 0, width, height);
+}
+
+/**********************************************************************
+ *          wayland_surface_reconfigure_apply
+ *
+ * Applies the configuration set by previous calls to the
+ * wayland_surface_reconfigure{_glvk}() functions.
+ */
+void wayland_surface_reconfigure_apply(struct wayland_surface *surface)
+{
+    wl_surface_commit(surface->wl_surface);
+
+    /* Commit the parent so any subsurface repositioning takes effect. */
+    if (surface->parent)
+        wl_surface_commit(surface->parent->wl_surface);
+}
+
+
 static RGNDATA *get_region_data(HRGN region)
 {
     RGNDATA *data = NULL;

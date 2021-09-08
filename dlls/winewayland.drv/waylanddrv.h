@@ -375,6 +375,7 @@ extern UINT CDECL WAYLAND_MapVirtualKeyEx(UINT code, UINT maptype, HKL hkl) DECL
 extern DWORD CDECL WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
                                                        DWORD timeout, DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
 extern void CDECL WAYLAND_SetCursor(HCURSOR hcursor) DECLSPEC_HIDDEN;
+extern UINT CDECL WAYLAND_ShowWindow(HWND hwnd, INT cmd, RECT *rect, UINT swp) DECLSPEC_HIDDEN;
 extern INT CDECL WAYLAND_ToUnicodeEx(UINT virt, UINT scan, const BYTE *state,
                                      LPWSTR buf, int nchars, UINT flags, HKL hkl) DECLSPEC_HIDDEN;
 extern SHORT CDECL WAYLAND_VkKeyScanEx(WCHAR ch, HKL hkl) DECLSPEC_HIDDEN;

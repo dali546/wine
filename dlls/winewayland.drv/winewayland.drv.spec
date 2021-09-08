@@ -7,6 +7,7 @@
 @ cdecl MapVirtualKeyEx(long long long) WAYLAND_MapVirtualKeyEx
 @ cdecl MsgWaitForMultipleObjectsEx(long ptr long long long) WAYLAND_MsgWaitForMultipleObjectsEx
 @ cdecl SetCursor(long) WAYLAND_SetCursor
+@ cdecl SetWindowRgn(long long long) WAYLAND_SetWindowRgn
 @ cdecl ShowWindow(long long ptr long) WAYLAND_ShowWindow
 @ cdecl SysCommand(long long long) WAYLAND_SysCommand
 @ cdecl ThreadDetach() WAYLAND_ThreadDetach

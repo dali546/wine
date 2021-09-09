@@ -14,6 +14,7 @@
 @ cdecl SysCommand(long long long) WAYLAND_SysCommand
 @ cdecl ThreadDetach() WAYLAND_ThreadDetach
 @ cdecl ToUnicodeEx(long long ptr ptr long long long) WAYLAND_ToUnicodeEx
+@ cdecl UpdateLayeredWindow(long ptr ptr) WAYLAND_UpdateLayeredWindow
 @ cdecl VkKeyScanEx(long long) WAYLAND_VkKeyScanEx
 @ cdecl WindowMessage(long long long long) WAYLAND_WindowMessage
 @ cdecl WindowPosChanging(long long long ptr ptr ptr ptr) WAYLAND_WindowPosChanging

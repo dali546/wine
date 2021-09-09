@@ -37,6 +37,7 @@
 #include "windef.h"
 #include "winbase.h"
 #include "wingdi.h"
+#include "winuser.h"
 
 #include "wine/gdi_driver.h"
 
@@ -391,7 +392,8 @@ struct wayland_shm_buffer *wayland_buffer_queue_acquire_buffer(struct wayland_bu
  */
 
 struct window_surface *wayland_window_surface_create(HWND hwnd, const RECT *rect,
-                                                     COLORREF color_key, BYTE alpha);
+                                                     COLORREF color_key, BYTE alpha,
+                                                     BOOL src_alpha);
 void wayland_window_surface_flush(struct window_surface *window_surface);
 BOOL wayland_window_surface_needs_flush(struct window_surface *surface);
 void wayland_window_surface_update_wayland_surface(struct window_surface *surface,
@@ -399,7 +401,8 @@ void wayland_window_surface_update_wayland_surface(struct window_surface *surfac
 void wayland_window_surface_set_window_region(struct window_surface *window_surface,
                                               HRGN win_region);
 void wayland_window_surface_update_layered(struct window_surface *window_surface,
-                                           COLORREF color_key, BYTE alpha);
+                                           COLORREF color_key, BYTE alpha,
+                                           BOOL src_alpha);
 
 /**********************************************************************
  *          Wayland Keyboard
@@ -459,6 +462,8 @@ extern INT WAYLAND_ToUnicodeEx(UINT virt, UINT scan, const BYTE *state,
                                LPWSTR buf, int nchars, UINT flags, HKL hkl) DECLSPEC_HIDDEN;
 extern void WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                          BOOL force, void *param) DECLSPEC_HIDDEN;
+extern BOOL WAYLAND_UpdateLayeredWindow(HWND hwnd, const UPDATELAYEREDWINDOWINFO *info,
+                                        const RECT *window_rect) DECLSPEC_HIDDEN;
 extern SHORT WAYLAND_VkKeyScanEx(WCHAR ch, HKL hkl) DECLSPEC_HIDDEN;
 extern LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;
 extern void WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags,

@@ -319,13 +319,16 @@ RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_bu
  *          Wayland window surface
  */
 
-struct window_surface *wayland_window_surface_create(HWND hwnd, const RECT *rect);
+struct window_surface *wayland_window_surface_create(HWND hwnd, const RECT *rect,
+                                                     COLORREF color_key, BYTE alpha);
 void CDECL wayland_window_surface_flush(struct window_surface *window_surface);
 BOOL wayland_window_surface_needs_flush(struct window_surface *surface);
 void wayland_window_surface_update_wayland_surface(struct window_surface *surface,
                                                    struct wayland_surface *wayland_surface);
 void wayland_window_surface_set_window_region(struct window_surface *window_surface,
                                               HRGN win_region);
+void wayland_window_surface_update_layered(struct window_surface *window_surface,
+                                           COLORREF color_key, BYTE alpha);
 
 /**********************************************************************
  *          Wayland Keyboard

@@ -128,6 +128,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
     .pMapVirtualKeyEx = WAYLAND_MapVirtualKeyEx,
     .pMsgWaitForMultipleObjectsEx = WAYLAND_MsgWaitForMultipleObjectsEx,
     .pSetCursor = WAYLAND_SetCursor,
+    .pSetLayeredWindowAttributes = WAYLAND_SetLayeredWindowAttributes,
     .pSetWindowRgn = WAYLAND_SetWindowRgn,
     .pShowWindow = WAYLAND_ShowWindow,
     .pSysCommand = WAYLAND_SysCommand,

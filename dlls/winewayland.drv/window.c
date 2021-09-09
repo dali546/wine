@@ -647,7 +647,7 @@ BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flag
     if (!(flags & LWA_COLORKEY)) color_key = CLR_INVALID;
     if (!(flags & LWA_ALPHA)) alpha = 255;
 
-    *surface = wayland_window_surface_create(data->hwnd, &surface_rect, color_key, alpha);
+    *surface = wayland_window_surface_create(data->hwnd, &surface_rect, color_key, alpha, FALSE);
 
 done:
     wayland_win_data_release(data);
@@ -740,7 +740,7 @@ void CDECL WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style)
     {
         TRACE("hwnd=%p changed layered\n", hwnd);
         if (data->window_surface)
-            wayland_window_surface_update_layered(data->window_surface, CLR_INVALID, 255);
+            wayland_window_surface_update_layered(data->window_surface, CLR_INVALID, 255, FALSE);
     }
 
     wayland_win_data_release(data);
@@ -761,9 +761,101 @@ void CDECL WAYLAND_SetLayeredWindowAttributes(HWND hwnd, COLORREF key, BYTE alph
     if ((data = wayland_win_data_get(hwnd)))
     {
         if (data->window_surface)
-            wayland_window_surface_update_layered(data->window_surface, key, alpha);
+            wayland_window_surface_update_layered(data->window_surface, key, alpha, FALSE);
         wayland_win_data_release(data);
     }
+}
+
+/*****************************************************************************
+ *           WAYLAND_UpdateLayeredWindow
+ */
+BOOL CDECL WAYLAND_UpdateLayeredWindow(HWND hwnd, const UPDATELAYEREDWINDOWINFO *info,
+                                       const RECT *window_rect)
+{
+    struct window_surface *window_surface;
+    struct wayland_win_data *data;
+    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, 0 };
+    COLORREF color_key = (info->dwFlags & ULW_COLORKEY) ? info->crKey : CLR_INVALID;
+    char buffer[FIELD_OFFSET(BITMAPINFO, bmiColors[256])];
+    BITMAPINFO *bmi = (BITMAPINFO *)buffer;
+    void *src_bits, *dst_bits;
+    RECT rect, src_rect;
+    HDC hdc = 0;
+    HBITMAP dib;
+    BOOL ret = FALSE;
+
+    if (!(data = wayland_win_data_get(hwnd))) return FALSE;
+
+    TRACE("hwnd %p colorkey %x dirty %s flags %x src_alpha %d alpha_format %d\n",
+          hwnd, info->crKey, wine_dbgstr_rect(info->prcDirty), info->dwFlags,
+          info->pblend->SourceConstantAlpha, info->pblend->AlphaFormat == AC_SRC_ALPHA);
+
+    rect = *window_rect;
+    OffsetRect(&rect, -window_rect->left, -window_rect->top);
+
+    window_surface = data->window_surface;
+    if (!window_surface || !EqualRect(&window_surface->rect, &rect))
+    {
+        data->window_surface =
+            wayland_window_surface_create(data->hwnd, &rect, 255, color_key, TRUE);
+        if (window_surface) window_surface_release(window_surface);
+        window_surface = data->window_surface;
+        wayland_window_surface_update_wayland_surface(data->window_surface,
+                                                      data->wayland_surface);
+    }
+    else
+    {
+        wayland_window_surface_update_layered(window_surface, 255, color_key, TRUE);
+    }
+
+    if (window_surface) window_surface_add_ref(window_surface);
+    wayland_win_data_release(data);
+
+    if (!window_surface) return FALSE;
+    if (!info->hdcSrc)
+    {
+        window_surface_release(window_surface);
+        return TRUE;
+    }
+
+    dst_bits = window_surface->funcs->get_info(window_surface, bmi);
+
+    if (!(dib = CreateDIBSection(info->hdcDst, bmi, DIB_RGB_COLORS, &src_bits, NULL, 0))) goto done;
+    if (!(hdc = CreateCompatibleDC(0))) goto done;
+
+    SelectObject(hdc, dib);
+
+    window_surface->funcs->lock(window_surface);
+
+    if (info->prcDirty)
+    {
+        IntersectRect(&rect, &rect, info->prcDirty);
+        memcpy(src_bits, dst_bits, bmi->bmiHeader.biSizeImage);
+        PatBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, BLACKNESS);
+    }
+    src_rect = rect;
+    if (info->pptSrc) OffsetRect(&src_rect, info->pptSrc->x, info->pptSrc->y);
+    DPtoLP(info->hdcSrc, (POINT *)&src_rect, 2);
+
+    ret = GdiAlphaBlend(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+                        info->hdcSrc, src_rect.left, src_rect.top,
+                        src_rect.right - src_rect.left, src_rect.bottom - src_rect.top,
+                        (info->dwFlags & ULW_ALPHA) ? *info->pblend : blend);
+    if (ret)
+    {
+        RECT *bounds = window_surface->funcs->get_bounds(window_surface);
+        memcpy(dst_bits, src_bits, bmi->bmiHeader.biSizeImage);
+        UnionRect(bounds, bounds, &rect);
+    }
+
+    window_surface->funcs->unlock(window_surface);
+    window_surface->funcs->flush(window_surface);
+
+done:
+    window_surface_release(window_surface);
+    if (hdc) DeleteDC(hdc);
+    if (dib) DeleteObject(dib);
+    return ret;
 }
 
 static enum xdg_toplevel_resize_edge hittest_to_resize_edge(WPARAM hittest)

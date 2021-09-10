@@ -261,6 +261,11 @@ static void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *poi
                              0, 0,
                              wayland_cursor->shm_buffer->width,
                              wayland_cursor->shm_buffer->height);
+    if (pointer->focused_surface)
+        wl_surface_set_buffer_scale(pointer->cursor_wl_surface,
+                                    wayland_surface_get_buffer_scale(pointer->focused_surface));
+    else
+        wl_surface_set_buffer_scale(pointer->cursor_wl_surface, 1);
 
     wl_surface_commit(pointer->cursor_wl_surface);
 

@@ -248,6 +248,7 @@ BOOL wayland_init(struct wayland *wayland)
 
     wl_list_init(&wayland->output_list);
     wl_list_init(&wayland->detached_shm_buffer_list);
+    wl_list_init(&wayland->toplevel_list);
 
     /* Populate registry */
     wl_registry_add_listener(wayland->wl_registry, &registry_listener, wayland);
@@ -298,12 +299,16 @@ void wayland_deinit(struct wayland *wayland)
 {
     struct wayland_output *output, *output_tmp;
     struct wayland_shm_buffer *shm_buffer, *shm_buffer_tmp;
+    struct wayland_surface *toplevel, *toplevel_tmp;
 
     TRACE("%p\n", wayland);
 
     wayland_mutex_lock(&thread_wayland_mutex);
     wl_list_remove(&wayland->thread_link);
     wayland_mutex_unlock(&thread_wayland_mutex);
+
+    wl_list_for_each_safe(toplevel, toplevel_tmp, &wayland->toplevel_list, link)
+        wayland_surface_destroy(toplevel);
 
     if (wayland->event_notification_pipe[0] >= 0)
         close(wayland->event_notification_pipe[0]);

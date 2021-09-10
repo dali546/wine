@@ -61,6 +61,7 @@ enum wayland_window_message
     WM_WAYLAND_QUERY_SURFACE_MAPPED,
     WM_WAYLAND_CONFIGURE,
     WM_WAYLAND_STATE_UPDATE,
+    WM_WAYLAND_SURFACE_OUTPUT_CHANGE,
 };
 
 enum wayland_surface_role
@@ -194,6 +195,12 @@ struct wayland_surface_configure
     BOOL processed;
 };
 
+struct wayland_output_ref
+{
+    struct wl_list link;
+    struct wayland_output *output;
+};
+
 struct wayland_surface
 {
     struct wl_list link; /* wayland::surface_list */
@@ -211,8 +218,11 @@ struct wayland_surface
     BOOL mapped;
     LONG ref;
     enum wayland_surface_role role;
+    struct wl_list output_ref_list;
+    struct wayland_output *main_output;
     BOOL drawing_allowed;
     struct wl_list child_list;
+    BOOL window_fullscreen;
 };
 
 struct wayland_native_buffer
@@ -363,6 +373,8 @@ void wayland_surface_coords_to_wine(struct wayland_surface *surface,
                                     int *wine_x, int *wine_y) DECLSPEC_HIDDEN;
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface) DECLSPEC_HIDDEN;
 void wayland_surface_unref(struct wayland_surface *surface) DECLSPEC_HIDDEN;
+void wayland_surface_leave_output(struct wayland_surface *surface,
+                                  struct wayland_output *output) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Wayland native buffer

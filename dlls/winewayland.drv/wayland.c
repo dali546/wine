@@ -224,6 +224,7 @@ BOOL wayland_init(struct wayland *wayland)
     wl_proxy_set_queue((struct wl_proxy *) wayland->wl_registry, wayland->wl_event_queue);
 
     wl_list_init(&wayland->output_list);
+    wl_list_init(&wayland->toplevel_list);
 
     /* Populate registry */
     wl_registry_add_listener(wayland->wl_registry, &registry_listener, wayland);
@@ -263,12 +264,16 @@ BOOL wayland_init(struct wayland *wayland)
 void wayland_deinit(struct wayland *wayland)
 {
     struct wayland_output *output, *output_tmp;
+    struct wayland_surface *toplevel, *toplevel_tmp;
 
     TRACE("%p\n", wayland);
 
     EnterCriticalSection(&thread_wayland_section);
     wl_list_remove(&wayland->thread_link);
     LeaveCriticalSection(&thread_wayland_section);
+
+    wl_list_for_each_safe(toplevel, toplevel_tmp, &wayland->toplevel_list, link)
+        wayland_surface_destroy(toplevel);
 
     if (wayland->event_notification_pipe[0] >= 0)
         close(wayland->event_notification_pipe[0]);

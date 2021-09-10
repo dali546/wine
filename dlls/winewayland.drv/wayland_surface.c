@@ -152,6 +152,8 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
     if (!surface->wl_surface)
         goto err;
 
+    wl_list_init(&surface->link);
+    wl_list_init(&surface->child_list);
     wl_surface_set_user_data(surface->wl_surface, surface);
     surface->drawing_allowed = TRUE;
 
@@ -179,6 +181,8 @@ struct wayland_surface *wayland_surface_create_plain(struct wayland *wayland)
     surface = wayland_surface_create_common(wayland);
     if (!surface)
         goto err;
+
+    wl_list_insert(&wayland->toplevel_list, &surface->link);
 
     wl_surface_commit(surface->wl_surface);
 
@@ -221,6 +225,8 @@ struct wayland_surface *wayland_surface_create_toplevel(struct wayland *wayland,
     if (parent && parent->xdg_toplevel)
         xdg_toplevel_set_parent(surface->xdg_toplevel, parent->xdg_toplevel);
 
+    wl_list_insert(&wayland->toplevel_list, &surface->link);
+
     wl_surface_commit(surface->wl_surface);
 
     /* Wait for the first configure event. */
@@ -252,6 +258,11 @@ struct wayland_surface *wayland_surface_create_subsurface(struct wayland *waylan
         goto err;
 
     surface->parent = wayland_surface_ref(parent);
+
+    EnterCriticalSection(&parent->crit);
+    wl_list_insert(&parent->child_list, &surface->link);
+    LeaveCriticalSection(&parent->crit);
+
     surface->wl_subsurface =
         wl_subcompositor_get_subsurface(wayland->wl_subcompositor,
                                         surface->wl_surface,
@@ -439,7 +450,23 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
  */
 void wayland_surface_destroy(struct wayland_surface *surface)
 {
+    struct wayland_surface *child, *child_tmp;
+
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+
+    /* There are children left only when we force a destruction during
+     * thread deinitialization, otherwise the children hold a reference
+     * to the parent and won't let it be destroyed. */
+    EnterCriticalSection(&surface->crit);
+    wl_list_for_each_safe(child, child_tmp, &surface->child_list, link)
+    {
+        /* Since the current surface (the parent) is being destroyed,
+         * disassociate from the child to avoid the child trying to
+         * destroy the parent. */
+        child->parent = NULL;
+        wayland_surface_destroy(child);
+    }
+    LeaveCriticalSection(&surface->crit);
 
     if (surface->xdg_toplevel)
     {
@@ -467,8 +494,16 @@ void wayland_surface_destroy(struct wayland_surface *surface)
 
     if (surface->parent)
     {
+        EnterCriticalSection(&surface->parent->crit);
+        wl_list_remove(&surface->link);
+        LeaveCriticalSection(&surface->parent->crit);
+
         wayland_surface_unref(surface->parent);
         surface->parent = NULL;
+    }
+    else
+    {
+        wl_list_remove(&surface->link);
     }
 
     surface->crit.DebugInfo->Spare[0] = 0;

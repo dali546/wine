@@ -1081,13 +1081,22 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
      * to the user from a wayland compositor pespective. To mitigate this, we
      * place all top-level windows at 0,0, to maximize the area that can reside
      * within the win32 display. */
-    origin_x = 0;
-    origin_y = 0;
-    needs_move_to_origin = data->window_rect.top != origin_x ||
-                           data->window_rect.left != origin_y;
-    TRACE("current=%d,%d origin=%d,%d\n",
-          data->window_rect.left, data->window_rect.top,
-          origin_x, origin_y);
+    if (data->wayland_surface->main_output)
+    {
+        origin_x = data->wayland_surface->main_output->x;
+        origin_y = data->wayland_surface->main_output->y;
+        needs_move_to_origin = data->window_rect.top != origin_x ||
+                               data->window_rect.left != origin_y;
+        TRACE("current=%d,%d origin=%d,%d\n",
+              data->window_rect.left, data->window_rect.top,
+              origin_x, origin_y);
+    }
+    else
+    {
+        origin_x = 0;
+        origin_y = 0;
+        needs_move_to_origin = FALSE;
+    }
 
     wayland_win_data_release(data);
 
@@ -1144,6 +1153,67 @@ static void CALLBACK post_configure(HWND hwnd, UINT msg, UINT_PTR timer_id, DWOR
     handle_wm_wayland_configure(hwnd);
 }
 
+static void handle_wm_wayland_surface_output_change(HWND hwnd)
+{
+    struct wayland_surface *wsurface;
+    int x, y, w, h;
+    UINT swp_flags;
+
+    TRACE("hwnd=%p\n", hwnd);
+
+    wsurface = wayland_surface_for_hwnd_lock(hwnd);
+    if (!wsurface || !wsurface->xdg_toplevel)
+    {
+        TRACE("no suitable wayland surface, returning\n");
+        goto out;
+    }
+
+    swp_flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER |
+                SWP_FRAMECHANGED | SWP_NOSENDCHANGING;
+
+    if (wsurface->main_output)
+    {
+        x = wsurface->main_output->x;
+        y = wsurface->main_output->y;
+        TRACE("moving window to %d,%d\n", x, y);
+    }
+    else
+    {
+        x = y = 0;
+        swp_flags |= SWP_NOMOVE;
+    }
+
+    /* If we are fullscreen or maximized we need to provide a particular buffer
+     * size to the wayland compositor on the new output (hence swp_flags
+     * includes SWP_NOSENDCHANGING). */
+    if (wsurface->current.serial &&
+        (wsurface->current.configure_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
+    {
+        wayland_surface_coords_to_wine(wsurface, wsurface->current.width,
+                                       wsurface->current.height,
+                                       &w, &h);
+        TRACE("resizing window to maximized %dx%d\n", w, h);
+    }
+    else if (wsurface->current.serial &&
+             (wsurface->current.configure_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
+    {
+        wayland_surface_coords_to_wine(wsurface, wsurface->current.width,
+                                       wsurface->current.height,
+                                       &w, &h);
+        TRACE("resizing window to fullscreen %dx%d\n", w, h);
+    }
+    else
+    {
+        w = h = 0;
+        swp_flags |= SWP_NOSIZE;
+    }
+
+    SetWindowPos(hwnd, 0, x, y, w, h, swp_flags);
+
+out:
+    wayland_surface_for_hwnd_unlock(wsurface);
+}
+
 /**********************************************************************
  *           WAYLAND_WindowMessage
  */
@@ -1193,6 +1263,9 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 wayland_win_data_release(data);
             }
         }
+        break;
+    case WM_WAYLAND_SURFACE_OUTPUT_CHANGE:
+        handle_wm_wayland_surface_output_change(hwnd);
         break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);

@@ -45,6 +45,7 @@ enum wayland_window_message
 {
     WM_WAYLAND_CONFIGURE = 0x80001000,
     WM_WAYLAND_STATE_UPDATE = 0x80001001,
+    WM_WAYLAND_SURFACE_OUTPUT_CHANGE = 0x80001002
 };
 
 enum wayland_configure_flags
@@ -158,6 +159,12 @@ struct wayland_surface_configure
     BOOL processed;
 };
 
+struct wayland_output_ref
+{
+    struct wl_list link;
+    struct wayland_output *output;
+};
+
 struct wayland_surface
 {
     struct wl_list link;
@@ -173,6 +180,8 @@ struct wayland_surface
     struct wayland_surface_configure current;
     BOOL mapped;
     LONG ref;
+    struct wl_list output_ref_list;
+    struct wayland_output *main_output;
     BOOL drawing_allowed;
     struct wl_list child_list;
 };
@@ -303,6 +312,10 @@ void wayland_surface_coords_to_wine(struct wayland_surface *surface,
                                     int *wine_x, int *wine_y);
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
+void wayland_surface_set_main_output(struct wayland_surface *surface,
+                                     struct wayland_output *output, BOOL post);
+void wayland_surface_leave_output(struct wayland_surface *surface,
+                                  struct wayland_output *output);
 void wayland_surface_set_drawing_allowed(struct wayland_surface *surface, BOOL allowed);
 BOOL wayland_surface_is_drawing_allowed(struct wayland_surface *surface);
 

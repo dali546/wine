@@ -197,6 +197,7 @@ struct wayland_surface_configure
 struct wayland_surface
 {
     struct wl_list link; /* wayland::surface_list */
+    struct wl_list parent_link; /* wayland_surface::child_list */
     struct wayland *wayland;
     struct wl_surface *wl_surface;
     struct wl_subsurface *wl_subsurface;
@@ -211,6 +212,7 @@ struct wayland_surface
     LONG ref;
     enum wayland_surface_role role;
     BOOL drawing_allowed;
+    struct wl_list child_list;
 };
 
 struct wayland_native_buffer

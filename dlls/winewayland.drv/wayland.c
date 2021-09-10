@@ -166,7 +166,15 @@ static void registry_handle_global_remove(void *data, struct wl_registry *regist
     {
         if (output->global_id == id)
         {
+            struct wayland_surface *surface;
+
             TRACE("removing output->name=%s\n", output->name);
+
+            /* Remove the output from toplevels, as some compositor don't send
+             * a leave event if the output is disconnected. */
+            wl_list_for_each(surface, &wayland->toplevel_list, link)
+                wayland_surface_leave_output(surface, output);
+
             wayland_output_destroy(output);
             wayland_init_display_devices(wayland);
             return;

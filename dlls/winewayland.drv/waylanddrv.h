@@ -339,6 +339,7 @@ void wayland_surface_leave_output(struct wayland_surface *surface,
                                   struct wayland_output *output);
 void wayland_surface_set_wine_output(struct wayland_surface *surface,
                                      struct wayland_output *output);
+int wayland_surface_get_buffer_scale(struct wayland_surface *surface);
 
 /**********************************************************************
  *          Wayland SHM buffer

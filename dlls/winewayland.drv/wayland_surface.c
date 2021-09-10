@@ -158,12 +158,18 @@ struct wayland_surface *wayland_surface_create_plain(struct wayland *wayland)
     if (!surface->wl_surface)
         goto err;
 
+    wl_list_init(&surface->link);
+    wl_list_init(&surface->child_list);
     wl_surface_set_user_data(surface->wl_surface, surface);
     /* Plain surfaces are unmappable, so don't draw on them. */
     surface->drawing_allowed = FALSE;
 
     surface->ref = 1;
     surface->role = WAYLAND_SURFACE_ROLE_NONE;
+
+    /* Although not technically toplevel, plain surfaces have no parent, so
+     * track them in the toplevel list. */
+    wl_list_insert(&wayland->toplevel_list, &surface->link);
 
     return surface;
 
@@ -205,6 +211,9 @@ void wayland_surface_make_toplevel(struct wayland_surface *surface,
     if (process_name)
         xdg_toplevel_set_app_id(surface->xdg_toplevel, process_name);
 
+    /* Plain surfaces (which are the only kind can become toplevel) are
+     * already tracked in the toplevel_list, there is no need to readd. */
+
     wl_surface_commit(surface->wl_surface);
 
     surface->role = WAYLAND_SURFACE_ROLE_TOPLEVEL;
@@ -240,6 +249,14 @@ void wayland_surface_make_subsurface(struct wayland_surface *surface,
     surface->drawing_allowed = TRUE;
 
     surface->parent = wayland_surface_ref(parent);
+
+    /* Remove from toplevel_list (added as a plain surface) and add to parent
+     * child list. */
+    wl_list_remove(&surface->link);
+    wayland_mutex_lock(&parent->mutex);
+    wl_list_insert(&parent->child_list, &surface->link);
+    wayland_mutex_unlock(&parent->mutex);
+
     surface->wl_subsurface =
         wl_subcompositor_get_subsurface(wayland->wl_subcompositor,
                                         surface->wl_surface,
@@ -272,6 +289,18 @@ void wayland_surface_clear_role(struct wayland_surface *surface)
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
     surface->drawing_allowed = FALSE;
+
+    if (surface->parent)
+    {
+        /* As a plain surface, this should now tracked in the toplevel_list. */
+        wayland_mutex_lock(&surface->parent->mutex);
+        wl_list_remove(&surface->link);
+        wayland_mutex_unlock(&surface->parent->mutex);
+        wl_list_insert(&surface->wayland->toplevel_list, &surface->link);
+
+        wayland_surface_unref(surface->parent);
+        surface->parent = NULL;
+    }
 
     if (surface->xdg_toplevel)
     {
@@ -523,6 +552,7 @@ void wayland_surface_destroy(struct wayland_surface *surface)
 {
     struct wayland_pointer *pointer = &surface->wayland->pointer;
     struct wayland_keyboard *keyboard = &surface->wayland->keyboard;
+    struct wayland_surface *child, *child_tmp;
 
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
 
@@ -531,6 +561,20 @@ void wayland_surface_destroy(struct wayland_surface *surface)
 
     if (keyboard->focused_surface == surface)
         keyboard->focused_surface = NULL;
+
+    /* There are children left only when we force a destruction during
+     * thread deinitialization, otherwise the children hold a reference
+     * to the parent and won't let it be destroyed. */
+    wayland_mutex_lock(&surface->mutex);
+    wl_list_for_each_safe(child, child_tmp, &surface->child_list, link)
+    {
+        /* Since the current surface (the parent) is being destroyed,
+         * disassociate from the child to avoid the child trying to
+         * destroy the parent. */
+        child->parent = NULL;
+        wayland_surface_destroy(child);
+    }
+    wayland_mutex_unlock(&surface->mutex);
 
     if (surface->xdg_toplevel)
     {
@@ -558,8 +602,16 @@ void wayland_surface_destroy(struct wayland_surface *surface)
 
     if (surface->parent)
     {
+        wayland_mutex_lock(&surface->parent->mutex);
+        wl_list_remove(&surface->link);
+        wayland_mutex_unlock(&surface->parent->mutex);
+
         wayland_surface_unref(surface->parent);
         surface->parent = NULL;
+    }
+    else
+    {
+        wl_list_remove(&surface->link);
     }
 
     wayland_mutex_destroy(&surface->mutex);

@@ -44,6 +44,7 @@ extern struct wl_display *process_wl_display;
 enum wayland_window_message
 {
     WM_WAYLAND_CONFIGURE = 0x80001000,
+    WM_WAYLAND_STATE_UPDATE = 0x80001001,
 };
 
 enum wayland_configure_flags

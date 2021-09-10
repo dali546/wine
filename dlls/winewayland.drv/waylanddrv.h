@@ -48,6 +48,7 @@ enum wayland_window_message
     WM_WAYLAND_SET_CURSOR = 0x80001001,
     WM_WAYLAND_QUERY_SURFACE_MAPPED = 0x80001002,
     WM_WAYLAND_CONFIGURE = 0x80001003,
+    WM_WAYLAND_STATE_UPDATE = 0x80001004,
 };
 
 enum wayland_configure_flags

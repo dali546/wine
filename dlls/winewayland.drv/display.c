@@ -327,8 +327,8 @@ static BOOL wayland_init_monitor(HDEVINFO devinfo, struct wayland_output *output
     RECT rc_mode;
 
     SetRect(&rc_mode, output->x, output->y,
-            output->x + output->current_mode->width,
-            output->y + output->current_mode->height);
+            output->x + output->current_wine_mode->width,
+            output->y + output->current_wine_mode->height);
 
     if (!MultiByteToWideChar(CP_UTF8, 0, output->name, -1, output_name, ARRAY_SIZE(output_name)))
         output_name[0] = 0;
@@ -479,7 +479,7 @@ static void wayland_init_display_devices_internal(struct wayland *wayland)
 
     wl_list_for_each(output, &wayland->output_list, link)
     {
-        if (!output->current_mode) continue;
+        if (!output->current_wine_mode) continue;
 
         /* TODO: Detect and support multiple monitors per adapter (i.e., mirroring). */
         if (!wayland_init_adapter(video_hkey, output_index, gpu_index, output_index, 1,
@@ -528,9 +528,9 @@ static void wayland_broadcast_wm_display_change(void)
         wl_list_for_each(output, &wayland->output_list, link)
         {
             int width, height;
-            if (!output->current_mode) continue;
-            width = output->current_mode->width;
-            height = output->current_mode->height;
+            if (!output->current_wine_mode) continue;
+            width = output->current_wine_mode->width;
+            height = output->current_wine_mode->height;
             wayland_process_release();
 
             SendMessageW(GetDesktopWindow(), WM_WAYLAND_BROADCAST_DISPLAY_CHANGE,
@@ -655,7 +655,7 @@ static void populate_devmode(struct wayland_output_mode *output_mode, DEVMODEW *
     mode->dmDisplayFrequency = output_mode->refresh / 1000;
 }
 
-static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, DEVMODEW *mode)
+static BOOL wayland_get_native_devmode(struct wayland *wayland, LPCWSTR name, DEVMODEW *mode)
 {
     struct wayland_output *output;
 
@@ -667,6 +667,22 @@ static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, D
         return FALSE;
 
     populate_devmode(output->current_mode, mode);
+
+    return TRUE;
+}
+
+static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, DEVMODEW *mode)
+{
+    struct wayland_output *output;
+
+    output = wayland_output_get_by_wine_name(wayland, name);
+    if (!output)
+        return FALSE;
+
+    if (!output->current_wine_mode)
+        return FALSE;
+
+    populate_devmode(output->current_wine_mode, mode);
 
     return TRUE;
 }
@@ -710,7 +726,7 @@ BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmo
     if (n == ENUM_REGISTRY_SETTINGS)
     {
         if (!read_registry_settings(name, devmode) &&
-            !wayland_get_current_devmode(wayland, name, devmode))
+            !wayland_get_native_devmode(wayland, name, devmode))
         {
             ERR("Failed to get %s registry display settings and native mode.\n",
                 wine_dbgstr_w(name));

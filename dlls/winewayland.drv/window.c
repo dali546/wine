@@ -594,6 +594,14 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
                                 screen_rect.left - parent_screen_rect.left,
                                 screen_rect.top - parent_screen_rect.top,
                                 width, height);
+    /* The GL/VK subsurface (if any), is positioned over the client area of the
+     * window. The position of the GL/VK subsurface is relative to the window
+     * top-left. */
+    wayland_surface_reconfigure_glvk(data->wayland_surface,
+                                     data->client_rect.left - data->window_rect.left,
+                                     data->client_rect.top - data->window_rect.top,
+                                     data->client_rect.right - data->client_rect.left,
+                                     data->client_rect.bottom - data->client_rect.top);
 
     wayland_surface_reconfigure_apply(data->wayland_surface);
 

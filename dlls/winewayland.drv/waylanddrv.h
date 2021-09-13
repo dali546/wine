@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <stdarg.h>
 #include <wayland-client.h>
+#include <wayland-egl.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-compose.h>
 #include "viewporter-client-protocol.h"
@@ -204,7 +205,11 @@ struct wayland_surface
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *xdg_toplevel;
     struct wp_viewport *wp_viewport;
+    struct wl_egl_window *wl_egl_window;
     struct wayland_surface *parent;
+    struct wayland_surface *glvk;
+    /* The offset of this surface relative to its owning win32 window */
+    int offset_x, offset_y;
     HWND hwnd;
     struct wayland_mutex mutex;
     struct wayland_surface_configure pending;
@@ -354,6 +359,10 @@ void wayland_surface_reconfigure_geometry(struct wayland_surface *surface,
 void wayland_surface_reconfigure_size(struct wayland_surface *surface,
                                       int width, int height);
 void wayland_surface_reconfigure_apply(struct wayland_surface *surface);
+BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface);
+void wayland_surface_unref_glvk(struct wayland_surface *surface);
+void wayland_surface_reconfigure_glvk(struct wayland_surface *surface, int x, int y,
+                                      int width, int height);
 void wayland_surface_unmap(struct wayland_surface *surface);
 void wayland_surface_ack_pending_configure(struct wayland_surface *surface);
 void wayland_surface_coords_to_screen(struct wayland_surface *surface,

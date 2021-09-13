@@ -156,6 +156,7 @@ struct wayland_output
     double wine_scale;
     char *name;
     WCHAR wine_name[128];
+    uint32_t id;
     uint32_t global_id;
 };
 

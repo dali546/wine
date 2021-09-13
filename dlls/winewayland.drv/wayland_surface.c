@@ -209,6 +209,13 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
     if (!surface->wl_surface)
         goto err;
 
+    if (surface->wayland->wp_viewporter)
+    {
+        surface->wp_viewport =
+            wp_viewporter_get_viewport(surface->wayland->wp_viewporter,
+                                       surface->wl_surface);
+    }
+
     wl_list_init(&surface->output_ref_list);
     wl_list_init(&surface->link);
     wl_list_init(&surface->child_list);
@@ -410,6 +417,38 @@ void wayland_surface_reconfigure_geometry(struct wayland_surface *surface,
 }
 
 /**********************************************************************
+ *          wayland_surface_reconfigure_size
+ *
+ * Configures the size of a wayland surface.
+ *
+ * The sizes should be given in wine's coordinate space.
+ *
+ * This function sets up but doesn't actually apply any new configuration.
+ * The wayland_surface_reconfigure_apply() needs to be called for changes
+ * to take effect.
+ */
+void wayland_surface_reconfigure_size(struct wayland_surface *surface,
+                                      int wine_width, int wine_height)
+{
+    int width, height;
+
+    wayland_surface_coords_rounded_from_wine(surface, wine_width, wine_height,
+                                             &width, &height);
+
+    TRACE("surface=%p hwnd=%p wine=%dx%d wayland=%dx%d\n",
+          surface, surface->hwnd, wine_width, wine_height, width, height);
+
+    /* Use a viewport, if supported, to handle display mode changes. */
+    if (surface->wp_viewport)
+    {
+        if (width != 0 && height != 0)
+            wp_viewport_set_destination(surface->wp_viewport, width, height);
+        else
+            wp_viewport_set_destination(surface->wp_viewport, -1, -1);
+    }
+}
+
+/**********************************************************************
  *          wayland_surface_reconfigure_apply
  *
  * Applies the configuration set by previous calls to the
@@ -586,6 +625,12 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     {
         wl_list_remove(&ref->link);
         heap_free(ref);
+    }
+
+    if (surface->wp_viewport)
+    {
+        wp_viewport_destroy(surface->wp_viewport);
+        surface->wp_viewport = NULL;
     }
 
     if (surface->xdg_toplevel)

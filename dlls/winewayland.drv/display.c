@@ -499,7 +499,8 @@ static void wayland_init_display_devices_internal(struct wayland *wayland, BOOL 
     {
         snprintfW(output->wine_name, ARRAY_SIZE(output->wine_name),
                   adapter_name_fmtW, output_index + 1);
-        TRACE("name=%s wine_name=%s\n", output->name, wine_dbgstr_w(output->wine_name));
+        TRACE("output->name=%s (id=0x%x) wine_name=%s\n",
+              output->name, output->id, wine_dbgstr_w(output->wine_name));
         output_index++;
     }
 

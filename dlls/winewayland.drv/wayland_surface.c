@@ -215,6 +215,13 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
     if (!surface->wl_surface)
         goto err;
 
+    if (surface->wayland->wp_viewporter)
+    {
+        surface->wp_viewport =
+            wp_viewporter_get_viewport(surface->wayland->wp_viewporter,
+                                       surface->wl_surface);
+    }
+
     wl_list_init(&surface->output_ref_list);
     wl_list_init(&surface->link);
     wl_list_init(&surface->child_list);
@@ -388,6 +395,15 @@ void wayland_surface_reconfigure(struct wayland_surface *surface,
     if (surface->wl_subsurface)
         wl_subsurface_set_position(surface->wl_subsurface, x, y);
 
+    /* Use a viewport, if supported, to handle display mode changes. */
+    if (surface->wp_viewport)
+    {
+        if (width != 0 && height != 0)
+            wp_viewport_set_destination(surface->wp_viewport, width, height);
+        else
+            wp_viewport_set_destination(surface->wp_viewport, -1, -1);
+    }
+
     if (surface->xdg_surface && width != 0 && height != 0)
         xdg_surface_set_window_geometry(surface->xdg_surface, 0, 0, width, height);
 }
@@ -558,6 +574,12 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     {
         wl_list_remove(&ref->link);
         heap_free(ref);
+    }
+
+    if (surface->wp_viewport)
+    {
+        wp_viewport_destroy(surface->wp_viewport);
+        surface->wp_viewport = NULL;
     }
 
     if (surface->xdg_toplevel)

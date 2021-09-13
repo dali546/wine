@@ -66,6 +66,17 @@ struct default_mode default_modes[] = {
     {3840, 2400}
 };
 
+static CRITICAL_SECTION output_names_section;
+static CRITICAL_SECTION_DEBUG critsect_debug =
+{
+    0, 0, &output_names_section,
+    { &critsect_debug.ProcessLocksList, &critsect_debug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": output_names_section") }
+};
+static CRITICAL_SECTION output_names_section = { &critsect_debug, -1, 0, 0, 0, 0 };
+
+static struct wl_array output_names = { 0, 0, 0 };
+
 /**********************************************************************
  *          Output handling
  */
@@ -119,6 +130,39 @@ static void wayland_output_add_mode_all_bpp(struct wayland_output *output,
     wayland_output_add_mode(output, width, height, refresh, 32, current, native);
     wayland_output_add_mode(output, width, height, refresh, 16, FALSE, FALSE);
     wayland_output_add_mode(output, width, height, refresh, 8, FALSE, FALSE);
+}
+
+/* The id of a name is its index in the output_names array + 1 + 0xd1d10000.
+ * This peculiar id is used for easier differentiation and debugging. */
+static uint32_t wayland_output_name_get_id(const char *output_name)
+{
+    uint32_t id = 0;
+    char **name;
+
+    if (!output_name) return 0;
+
+    EnterCriticalSection(&output_names_section);
+
+    wl_array_for_each(name, &output_names)
+    {
+        id++;
+        if (*name && !strcmp(*name, output_name))
+            goto out;
+    }
+
+    id++;
+
+    name = wl_array_add(&output_names, sizeof(const char*));
+    if (!name || !(*name = strdup(output_name)))
+    {
+        ERR("Failed to allocate memory for output name");
+        id = 0;
+        goto out;
+    }
+
+out:
+    LeaveCriticalSection(&output_names_section);
+    return id > 0 ? id + 0xd1d10000 : 0;
 }
 
 static void wayland_output_add_default_modes(struct wayland_output *output)
@@ -356,6 +400,7 @@ static void zxdg_output_v1_handle_name(void *data,
 
     free(output->name);
     output->name = strdup(name);
+    output->id = wayland_output_name_get_id(output->name);
 }
 
 static void zxdg_output_v1_handle_description(void *data,
@@ -406,6 +451,7 @@ BOOL wayland_output_create(struct wayland *wayland, uint32_t id, uint32_t versio
     {
         snprintf(output->name, 20, "WaylandOutput%d",
                  wayland->next_fallback_output_id++);
+        output->id = wayland_output_name_get_id(output->name);
     }
     else
     {

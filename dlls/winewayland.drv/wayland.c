@@ -135,6 +135,10 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
                                             version < 5 ? version : 5);
         wl_seat_add_listener(wayland->wl_seat, &seat_listener, wayland);
     }
+    else if (strcmp(interface, "wp_viewporter") == 0)
+    {
+        wayland->wp_viewporter = wl_registry_bind(registry, id, &wp_viewporter_interface, 1);
+    }
     else if (strcmp(interface, "wl_output") == 0)
     {
         if (!wayland_output_create(wayland, id, version))
@@ -303,6 +307,9 @@ void wayland_deinit(struct wayland *wayland)
 
     if (wayland->wl_seat)
         wl_seat_destroy(wayland->wl_seat);
+
+    if (wayland->wp_viewporter)
+        wp_viewporter_destroy(wayland->wp_viewporter);
 
     if (wayland->wl_shm)
         wl_shm_destroy(wayland->wl_shm);

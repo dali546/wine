@@ -700,6 +700,8 @@ XSLT_CFLAGS
 XML2_LIBS
 XML2_CFLAGS
 PCAP_LIBS
+WAYLAND_EGL_LIBS
+WAYLAND_EGL_CFLAGS
 XKBCOMMON_LIBS
 XKBCOMMON_CFLAGS
 WAYLAND_SCANNER
@@ -1934,6 +1936,8 @@ WAYLAND_PROTOCOLS_CFLAGS
 WAYLAND_PROTOCOLS_LIBS
 XKBCOMMON_CFLAGS
 XKBCOMMON_LIBS
+WAYLAND_EGL_CFLAGS
+WAYLAND_EGL_LIBS
 XML2_CFLAGS
 XML2_LIBS
 XSLT_CFLAGS
@@ -2731,6 +2735,10 @@ Some influential environment variables:
               C compiler flags for xkbcommon, overriding pkg-config
   XKBCOMMON_LIBS
               Linker flags for xkbcommon, overriding pkg-config
+  WAYLAND_EGL_CFLAGS
+              C compiler flags for wayland-egl, overriding pkg-config
+  WAYLAND_EGL_LIBS
+              Linker flags for wayland-egl, overriding pkg-config
   XML2_CFLAGS C compiler flags for libxml-2.0, overriding pkg-config
   XML2_LIBS   Linker flags for libxml-2.0, overriding pkg-config
   XSLT_CFLAGS C compiler flags for libxslt, overriding pkg-config
@@ -12951,6 +12959,79 @@ fi
 
 CPPFLAGS=$ac_save_CPPFLAGS
 
+    if ${WAYLAND_EGL_CFLAGS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  WAYLAND_EGL_CFLAGS=`$PKG_CONFIG --cflags wayland-egl 2>/dev/null`
+fi
+fi
+
+if ${WAYLAND_EGL_LIBS:+false} :; then :
+  if ${PKG_CONFIG+:} false; then :
+  WAYLAND_EGL_LIBS=`$PKG_CONFIG --libs wayland-egl 2>/dev/null`
+fi
+fi
+
+
+$as_echo "$as_me:${as_lineno-$LINENO}: wayland-egl cflags: $WAYLAND_EGL_CFLAGS" >&5
+$as_echo "$as_me:${as_lineno-$LINENO}: wayland-egl libs: $WAYLAND_EGL_LIBS" >&5
+ac_save_CPPFLAGS=$CPPFLAGS
+CPPFLAGS="$CPPFLAGS $WAYLAND_EGL_CFLAGS"
+for ac_header in wayland-egl.h
+do :
+  ac_fn_c_check_header_mongrel "$LINENO" "wayland-egl.h" "ac_cv_header_wayland_egl_h" "$ac_includes_default"
+if test "x$ac_cv_header_wayland_egl_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_WAYLAND_EGL_H 1
+_ACEOF
+
+fi
+
+done
+
+         { $as_echo "$as_me:${as_lineno-$LINENO}: checking for wl_egl_window_create in -lwayland-egl" >&5
+$as_echo_n "checking for wl_egl_window_create in -lwayland-egl... " >&6; }
+if ${ac_cv_lib_wayland_egl_wl_egl_window_create+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lwayland-egl $WAYLAND_EGL_LIBS $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char wl_egl_window_create ();
+int
+main ()
+{
+return wl_egl_window_create ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_wayland_egl_wl_egl_window_create=yes
+else
+  ac_cv_lib_wayland_egl_wl_egl_window_create=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_wayland_egl_wl_egl_window_create" >&5
+$as_echo "$ac_cv_lib_wayland_egl_wl_egl_window_create" >&6; }
+if test "x$ac_cv_lib_wayland_egl_wl_egl_window_create" = xyes; then :
+  :
+else
+  WAYLAND_EGL_LIBS=""
+fi
+
+CPPFLAGS=$ac_save_CPPFLAGS
+
 fi
 if test -z "$WAYLAND_CLIENT_LIBS" ||
                            test -z "$WAYLAND_PROTOCOLS_DATADIR" ||
@@ -19900,6 +19981,8 @@ WAYLAND_PROTOCOLS_LIBS = $WAYLAND_PROTOCOLS_LIBS
 WAYLAND_PROTOCOLS_DATADIR = $WAYLAND_PROTOCOLS_DATADIR
 XKBCOMMON_CFLAGS = $XKBCOMMON_CFLAGS
 XKBCOMMON_LIBS = $XKBCOMMON_LIBS
+WAYLAND_EGL_CFLAGS = $WAYLAND_EGL_CFLAGS
+WAYLAND_EGL_LIBS = $WAYLAND_EGL_LIBS
 PCAP_LIBS = $PCAP_LIBS
 XML2_CFLAGS = $XML2_CFLAGS
 XML2_LIBS = $XML2_LIBS

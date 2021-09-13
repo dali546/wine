@@ -147,8 +147,8 @@ static void wayland_add_monitor(const struct gdi_device_manager *device_manager,
     }
 
     SetRect(&monitor.rc_monitor, output->x, output->y,
-            output->x + output->current_mode->width,
-            output->y + output->current_mode->height);
+            output->x + output->current_wine_mode->width,
+            output->y + output->current_wine_mode->height);
 
     /* We don't have a direct way to get the work area in Wayland. */
     monitor.rc_work = monitor.rc_monitor;
@@ -210,7 +210,7 @@ BOOL WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manage
 
     wl_list_for_each(output, &wayland->output_list, link)
     {
-        if (!output->current_mode) continue;
+        if (!output->current_wine_mode) continue;
 
         /* TODO: Detect and support multiple monitors per adapter (i.e., mirroring). */
         wayland_add_adapter(device_manager, param, output_id);
@@ -247,10 +247,10 @@ static BOOL wayland_get_current_devmode(struct wayland *wayland, LPCWSTR name, D
     if (!output)
         return FALSE;
 
-    if (!output->current_mode)
+    if (!output->current_wine_mode)
         return FALSE;
 
-    populate_devmode(output->current_mode, mode);
+    populate_devmode(output->current_wine_mode, mode);
 
     mode->dmFields |= DM_POSITION;
     mode->dmPosition.x = output->x;

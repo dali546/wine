@@ -11,6 +11,7 @@ EXTRADLLFLAGS = -mcygwin
 
 C_SRCS = \
 	display.c \
+	gdi.c \
 	wayland.c \
 	wayland_output.c \
 	waylanddrv_main.c \

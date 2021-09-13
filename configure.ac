@@ -1338,6 +1338,10 @@ then
     WINE_PACKAGE_FLAGS(XKBCOMMON,[xkbcommon],,,,
         [AC_CHECK_HEADERS([xkbcommon/xkbcommon.h])
          AC_CHECK_LIB(xkbcommon,xkb_context_new,[:],[XKBCOMMON_LIBS=""],[$XKBCOMMON_LIBS])])
+    WINE_PACKAGE_FLAGS(WAYLAND_EGL,[wayland-egl],,,,
+        [AC_CHECK_HEADERS([wayland-egl.h])
+         AC_CHECK_LIB(wayland-egl,wl_egl_window_create,[:],
+                      [WAYLAND_EGL_LIBS=""],[$WAYLAND_EGL_LIBS])])
 fi
 WINE_NOTICE_WITH(wayland, [test -z "$WAYLAND_CLIENT_LIBS" ||
                            test -z "$WAYLAND_PROTOCOLS_DATADIR" ||

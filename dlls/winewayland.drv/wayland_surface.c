@@ -167,7 +167,8 @@ static void handle_wl_surface_enter(void *data,
 
     if (!output || output->wayland != surface->wayland) return;
 
-    TRACE("hwnd=%p output->name=%s\n", surface->hwnd, output->name);
+    TRACE("hwnd=%p output->name=%s output->id=0x%x\n",
+          surface->hwnd, output->name, output->id);
 
     ref = heap_alloc_zero(sizeof(*ref));
     if (!ref) { ERR("memory allocation failed"); return; }
@@ -188,7 +189,8 @@ static void handle_wl_surface_leave(void *data,
 
     if (!output || output->wayland != surface->wayland) return;
 
-    TRACE("hwnd=%p output->name=%s\n", surface->hwnd, output->name);
+    TRACE("hwnd=%p output->name=%s output->id=0x%x\n",
+          surface->hwnd, output->name, output->id);
 
     wayland_surface_leave_output(surface, output);
 }
@@ -856,10 +858,10 @@ static void wayland_surface_set_main_output(struct wayland_surface *surface,
     /* Don't update non-toplevels. */
     if (surface->parent) return;
 
-    TRACE("surface=%p output->name=%s => output->name=%s\n",
-          surface,
-          surface->main_output ? surface->main_output->name : NULL,
-          output ? output->name : NULL);
+    TRACE("surface=%p output->name=%s (id=0x%x) => output->name=%s (id=0x%x)\n",
+          surface, surface->main_output ? surface->main_output->name : NULL,
+          surface->main_output ? surface->main_output->id : 0,
+          output ? output->name : NULL, output ? output->id : 0);
 
     if (surface->main_output != output)
     {

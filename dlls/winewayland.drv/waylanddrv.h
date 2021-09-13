@@ -41,6 +41,7 @@
 #include "wine/gdi_driver.h"
 
 extern struct wl_display *process_wl_display;
+extern const struct user_driver_funcs waylanddrv_funcs;
 
 /**********************************************************************
   *          Internal messages and data
@@ -453,5 +454,15 @@ extern void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT sw
 extern BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flags,
                                             const RECT *window_rect, const RECT *client_rect,
                                             RECT *visible_rect, struct window_surface **surface) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          GDI driver functions
+ */
+
+extern BOOL CDECL WAYLAND_CreateDC(PHYSDEV *pdev, LPCWSTR device,
+                                   LPCWSTR output, const DEVMODEW* initData) DECLSPEC_HIDDEN;
+extern BOOL CDECL WAYLAND_CreateCompatibleDC(PHYSDEV orig, PHYSDEV *pdev) DECLSPEC_HIDDEN;
+extern BOOL CDECL WAYLAND_CreateCompatibleDC(PHYSDEV orig, PHYSDEV *pdev) DECLSPEC_HIDDEN;
+extern BOOL CDECL WAYLAND_DeleteDC(PHYSDEV dev) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_WAYLANDDRV_H */

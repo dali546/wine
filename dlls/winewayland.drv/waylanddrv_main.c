@@ -119,8 +119,13 @@ static void CDECL WAYLAND_ThreadDetach(void)
     }
 }
 
-static const struct user_driver_funcs waylanddrv_funcs =
+const struct user_driver_funcs waylanddrv_funcs =
 {
+    .dc_funcs.pCreateDC = WAYLAND_CreateDC,
+    .dc_funcs.pCreateCompatibleDC = WAYLAND_CreateCompatibleDC,
+    .dc_funcs.pDeleteDC = WAYLAND_DeleteDC,
+    .dc_funcs.priority = GDI_PRIORITY_GRAPHICS_DRV,
+
     .pChangeDisplaySettingsEx = WAYLAND_ChangeDisplaySettingsEx,
     .pCreateWindow = WAYLAND_CreateWindow,
     .pDestroyWindow = WAYLAND_DestroyWindow,

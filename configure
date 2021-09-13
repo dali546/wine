@@ -705,6 +705,8 @@ DBUS_CFLAGS
 INOTIFY_LIBS
 INOTIFY_CFLAGS
 PCAP_LIBS
+WAYLAND_EGL_LIBS
+WAYLAND_EGL_CFLAGS
 XKBCOMMON_LIBS
 XKBCOMMON_CFLAGS
 WAYLAND_SCANNER
@@ -1998,6 +2000,8 @@ WAYLAND_PROTOCOLS_CFLAGS
 WAYLAND_PROTOCOLS_LIBS
 XKBCOMMON_CFLAGS
 XKBCOMMON_LIBS
+WAYLAND_EGL_CFLAGS
+WAYLAND_EGL_LIBS
 INOTIFY_CFLAGS
 INOTIFY_LIBS
 DBUS_CFLAGS
@@ -2807,6 +2811,10 @@ Some influential environment variables:
               C compiler flags for xkbcommon, overriding pkg-config
   XKBCOMMON_LIBS
               Linker flags for xkbcommon, overriding pkg-config
+  WAYLAND_EGL_CFLAGS
+              C compiler flags for wayland-egl, overriding pkg-config
+  WAYLAND_EGL_LIBS
+              Linker flags for wayland-egl, overriding pkg-config
   INOTIFY_CFLAGS
               C compiler flags for libinotify, overriding pkg-config
   INOTIFY_LIBS
@@ -16013,6 +16021,78 @@ fi
 
 CPPFLAGS=$ac_save_CPPFLAGS
 
+    if ${WAYLAND_EGL_CFLAGS:+false} :
+then :
+  if test ${PKG_CONFIG+y}
+then :
+  WAYLAND_EGL_CFLAGS=`$PKG_CONFIG --cflags wayland-egl 2>/dev/null`
+fi
+fi
+
+if ${WAYLAND_EGL_LIBS:+false} :
+then :
+  if test ${PKG_CONFIG+y}
+then :
+  WAYLAND_EGL_LIBS=`$PKG_CONFIG --libs wayland-egl 2>/dev/null`
+fi
+fi
+
+
+printf "%s\n" "$as_me:${as_lineno-$LINENO}: wayland-egl cflags: $WAYLAND_EGL_CFLAGS" >&5
+printf "%s\n" "$as_me:${as_lineno-$LINENO}: wayland-egl libs: $WAYLAND_EGL_LIBS" >&5
+ac_save_CPPFLAGS=$CPPFLAGS
+CPPFLAGS="$CPPFLAGS $WAYLAND_EGL_CFLAGS"
+ac_fn_c_check_header_compile "$LINENO" "wayland-egl.h" "ac_cv_header_wayland_egl_h" "$ac_includes_default"
+if test "x$ac_cv_header_wayland_egl_h" = xyes
+then :
+  printf "%s\n" "#define HAVE_WAYLAND_EGL_H 1" >>confdefs.h
+
+fi
+
+         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for wl_egl_window_create in -lwayland-egl" >&5
+printf %s "checking for wl_egl_window_create in -lwayland-egl... " >&6; }
+if test ${ac_cv_lib_wayland_egl_wl_egl_window_create+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lwayland-egl $WAYLAND_EGL_LIBS $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char wl_egl_window_create ();
+int
+main (void)
+{
+return wl_egl_window_create ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_wayland_egl_wl_egl_window_create=yes
+else $as_nop
+  ac_cv_lib_wayland_egl_wl_egl_window_create=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_wayland_egl_wl_egl_window_create" >&5
+printf "%s\n" "$ac_cv_lib_wayland_egl_wl_egl_window_create" >&6; }
+if test "x$ac_cv_lib_wayland_egl_wl_egl_window_create" = xyes
+then :
+  :
+else $as_nop
+  WAYLAND_EGL_LIBS=""
+fi
+
+CPPFLAGS=$ac_save_CPPFLAGS
+
 fi
 if test -z "$WAYLAND_CLIENT_LIBS" ||
                            test -z "$WAYLAND_PROTOCOLS_DATADIR" ||
@@ -24007,6 +24087,8 @@ WAYLAND_PROTOCOLS_DATADIR = $WAYLAND_PROTOCOLS_DATADIR
 WAYLAND_SCANNER = $WAYLAND_SCANNER
 XKBCOMMON_CFLAGS = $XKBCOMMON_CFLAGS
 XKBCOMMON_LIBS = $XKBCOMMON_LIBS
+WAYLAND_EGL_CFLAGS = $WAYLAND_EGL_CFLAGS
+WAYLAND_EGL_LIBS = $WAYLAND_EGL_LIBS
 PCAP_LIBS = $PCAP_LIBS
 INOTIFY_CFLAGS = $INOTIFY_CFLAGS
 INOTIFY_LIBS = $INOTIFY_LIBS

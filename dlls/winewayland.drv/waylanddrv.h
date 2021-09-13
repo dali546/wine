@@ -52,6 +52,7 @@
 
 extern struct wl_display *process_wl_display;
 extern struct gbm_device *process_gbm_device;
+extern const struct user_driver_funcs waylanddrv_funcs;
 extern char *option_drm_device;
 extern enum wayland_hidpi_scaling option_hidpi_scaling;
 extern BOOL option_show_systray;
@@ -691,5 +692,14 @@ extern BOOL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_fla
                                       RECT *visible_rect, struct window_surface **surface) DECLSPEC_HIDDEN;
 extern const struct vulkan_funcs *WAYLAND_wine_get_vulkan_driver(UINT version) DECLSPEC_HIDDEN;
 extern struct opengl_funcs *WAYLAND_wine_get_wgl_driver(UINT version) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          GDI driver functions
+ */
+
+extern BOOL CDECL WAYLAND_CreateDC(PHYSDEV *pdev, LPCWSTR device,
+                                   LPCWSTR output, const DEVMODEW* initData) DECLSPEC_HIDDEN;
+extern BOOL CDECL WAYLAND_CreateCompatibleDC(PHYSDEV orig, PHYSDEV *pdev) DECLSPEC_HIDDEN;
+extern BOOL CDECL WAYLAND_DeleteDC(PHYSDEV dev) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_WAYLANDDRV_H */

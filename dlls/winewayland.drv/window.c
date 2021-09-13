@@ -1052,8 +1052,17 @@ static LRESULT handle_wm_wayland_configure(HWND hwnd)
         wsurface->pending.height = height;
     }
 
-    wayland_surface_coords_to_wine(wsurface, width, height,
-                                   &wine_width, &wine_height);
+    if ((flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN) &&
+        !(flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED))
+    {
+        wayland_surface_find_wine_fullscreen_fit(wsurface, width, height,
+                                                 &wine_width, &wine_height);
+    }
+    else
+    {
+        wayland_surface_coords_to_wine(wsurface, width, height,
+                                       &wine_width, &wine_height);
+    }
 
     TRACE("hwnd=%p effective_size=%dx%d wine_size=%dx%d\n",
           data->hwnd, width, height, wine_width, wine_height);
@@ -1185,9 +1194,9 @@ static void handle_wm_wayland_surface_output_change(HWND hwnd)
     else if (wsurface->current.serial &&
              (wsurface->current.configure_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN))
     {
-        wayland_surface_coords_to_wine(wsurface, wsurface->current.width,
-                                       wsurface->current.height,
-                                       &w, &h);
+        wayland_surface_find_wine_fullscreen_fit(wsurface, wsurface->current.width,
+                                                 wsurface->current.height,
+                                                 &w, &h);
         TRACE("resizing window to fullscreen %dx%d\n", w, h);
     }
     else

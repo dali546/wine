@@ -160,6 +160,10 @@ struct wayland_output
     int logical_w, logical_h;  /* logical size */
     int x, y;  /* position in native pixel coordinate space */
     int scale; /* wayland output scale factor for hidpi */
+    /* Scale factor by which we need to multiply values in the wine coordinate
+     * space to get values in the wayland coordinate space for this output. Used
+     * when emulating a display mode change. */
+    double wine_scale;
     char *name;
     WCHAR wine_name[128];
     uint32_t global_id;
@@ -334,6 +338,9 @@ void wayland_surface_coords_rounded_from_wine(struct wayland_surface *surface,
 void wayland_surface_coords_to_wine(struct wayland_surface *surface,
                                     double wayland_x, double wayland_y,
                                     int *wine_x, int *wine_y);
+void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
+                                              int wayland_width, int wayland_height,
+                                              int *wine_width, int *wine_height);
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
 void wayland_surface_leave_output(struct wayland_surface *surface,

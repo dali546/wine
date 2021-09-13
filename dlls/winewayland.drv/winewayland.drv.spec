@@ -1,3 +1,7 @@
+# GDI driver
+
+@ cdecl wine_get_gdi_driver(long) WAYLAND_get_gdi_driver
+
 # USER driver
 
 @ cdecl ChangeDisplaySettingsEx(ptr ptr long long long) WAYLAND_ChangeDisplaySettingsEx

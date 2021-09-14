@@ -325,6 +325,8 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface, int x, in
                                       int width, int height);
 void wayland_surface_unmap(struct wayland_surface *surface);
 void wayland_surface_ack_pending_configure(struct wayland_surface *surface);
+struct wayland_surface *wayland_surface_for_hwnd_lock(HWND hwnd);
+void wayland_surface_for_hwnd_unlock(struct wayland_surface *surface);
 void wayland_surface_coords_to_screen(struct wayland_surface *surface,
                                       double wayland_x, double wayland_y,
                                       int *screen_x, int *screen_y);

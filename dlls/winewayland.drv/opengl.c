@@ -37,6 +37,8 @@
 #include "wine/debug.h"
 #include "wine/heap.h"
 
+#include "winuser.h"
+
 #include <EGL/egl.h>
 #include <assert.h>
 
@@ -47,6 +49,15 @@ struct wgl_pixel_format
     EGLConfig config;
 };
 
+struct wayland_gl_drawable
+{
+    struct wl_list  link;
+    HWND            hwnd;
+    int             format;
+    struct wayland_surface  *wayland_surface;
+    EGLSurface      surface;
+};
+
 static void *egl_handle;
 static void *opengl_handle;
 static EGLDisplay egl_display;
@@ -55,7 +66,21 @@ static struct opengl_funcs egl_funcs;
 static struct wgl_pixel_format *pixel_formats;
 static int nb_pixel_formats, nb_onscreen_formats;
 
+static struct wl_list gl_drawables = { &gl_drawables, &gl_drawables };
+
+/* Protects drawables and contexts. */
+static CRITICAL_SECTION drawable_section;
+static CRITICAL_SECTION_DEBUG critsect_debug =
+{
+    0, 0, &drawable_section,
+    { &critsect_debug.ProcessLocksList, &critsect_debug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": drawable_section") }
+};
+static CRITICAL_SECTION drawable_section = { &critsect_debug, -1, 0, 0, 0, 0 };
+
 #define DECL_FUNCPTR(f) static __typeof__(f) * p_##f = NULL
+DECL_FUNCPTR(eglCreateWindowSurface);
+DECL_FUNCPTR(eglDestroySurface);
 DECL_FUNCPTR(eglGetConfigAttrib);
 DECL_FUNCPTR(eglGetConfigs);
 DECL_FUNCPTR(eglGetDisplay);
@@ -66,6 +91,81 @@ DECL_FUNCPTR(eglInitialize);
 static inline BOOL is_onscreen_pixel_format(int format)
 {
     return format > 0 && format <= nb_onscreen_formats;
+}
+
+static struct wayland_gl_drawable *wayland_gl_drawable_create(HWND hwnd, int format)
+{
+    struct wayland_gl_drawable *gl = heap_alloc(sizeof(*gl));
+    struct wayland_surface *wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
+
+    TRACE("hwnd=%p wayland_surface=%p\n", hwnd, wayland_surface);
+
+    if (wayland_surface)
+    {
+        BOOL ref_gl = wayland_surface_create_or_ref_gl(wayland_surface);
+        wayland_surface_for_hwnd_unlock(wayland_surface);
+        if (!ref_gl) return NULL;
+    }
+
+    gl->hwnd   = hwnd;
+    gl->format = format;
+    gl->wayland_surface = wayland_surface;
+    gl->surface = 0;
+
+    EnterCriticalSection(&drawable_section);
+    wl_list_insert(&gl_drawables, &gl->link);
+    return gl;
+}
+
+static void wayland_destroy_gl_drawable(HWND hwnd)
+{
+    struct wayland_gl_drawable *gl;
+
+    EnterCriticalSection(&drawable_section);
+    wl_list_for_each(gl, &gl_drawables, link)
+    {
+        if (gl->hwnd != hwnd) continue;
+        wl_list_remove(&gl->link);
+        if (gl->surface) p_eglDestroySurface(egl_display, gl->surface);
+        if (gl->wayland_surface)
+            wayland_surface_unref_glvk(gl->wayland_surface);
+        heap_free(gl);
+        break;
+    }
+    LeaveCriticalSection(&drawable_section);
+}
+
+static struct wayland_gl_drawable *wayland_gl_drawable_get(HWND hwnd)
+{
+    struct wayland_gl_drawable *gl;
+
+    if (!hwnd) return NULL;
+
+    EnterCriticalSection(&drawable_section);
+    wl_list_for_each(gl, &gl_drawables, link)
+    {
+        if (gl->hwnd == hwnd) return gl;
+    }
+    LeaveCriticalSection(&drawable_section);
+    return NULL;
+}
+
+static void wayland_gl_drawable_release(struct wayland_gl_drawable *gl)
+{
+    if (gl) LeaveCriticalSection(&drawable_section);
+}
+
+static void wayland_gl_drawable_update(struct wayland_gl_drawable *gl)
+{
+    TRACE("hwnd=%p\n", gl->hwnd);
+
+    if (gl->surface || !gl->wayland_surface) goto out;
+
+    gl->surface = p_eglCreateWindowSurface(egl_display, pixel_formats[gl->format - 1].config,
+                                           gl->wayland_surface->glvk->wl_egl_window, NULL);
+
+out:
+    RedrawWindow(gl->hwnd, NULL, 0, RDW_INVALIDATE | RDW_ERASE);
 }
 
 /***********************************************************************
@@ -531,6 +631,8 @@ static BOOL egl_init(void)
         if (!(p_##func = dlsym(egl_handle, #func))) \
         { ERR("can't find symbol %s\n", #func); return FALSE; }    \
     } while(0)
+    LOAD_FUNCPTR(eglCreateWindowSurface);
+    LOAD_FUNCPTR(eglDestroySurface);
     LOAD_FUNCPTR(eglGetConfigAttrib);
     LOAD_FUNCPTR(eglGetConfigs);
     LOAD_FUNCPTR(eglGetDisplay);

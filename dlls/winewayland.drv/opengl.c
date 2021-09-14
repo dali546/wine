@@ -66,6 +66,7 @@ struct wgl_context
     EGLContext context;
     HWND       draw_hwnd;
     HWND       read_hwnd;
+    BOOL       refresh;
     BOOL       has_been_current;
     BOOL       sharing;
     int        *attribs;
@@ -104,6 +105,7 @@ DECL_FUNCPTR(eglGetDisplay);
 DECL_FUNCPTR(eglGetProcAddress);
 DECL_FUNCPTR(eglInitialize);
 DECL_FUNCPTR(eglMakeCurrent);
+DECL_FUNCPTR(eglSwapBuffers);
 #undef DECL_FUNCPTR
 
 static inline BOOL is_onscreen_pixel_format(int format)
@@ -194,6 +196,7 @@ static BOOL wgl_context_make_current(struct wgl_context *ctx, HWND draw_hwnd, HW
     {
         ctx->draw_hwnd = draw_hwnd;
         ctx->read_hwnd = read_hwnd;
+        InterlockedExchange(&ctx->refresh, FALSE);
         ctx->has_been_current = TRUE;
         NtCurrentTeb()->glContext = ctx;
     }
@@ -223,6 +226,8 @@ static void wayland_gl_drawable_update(struct wayland_gl_drawable *gl)
                   gl->hwnd, ctx, NtCurrentTeb()->glContext == ctx ? "" : "not ");
             if (NtCurrentTeb()->glContext == ctx)
                 wgl_context_make_current(ctx, ctx->draw_hwnd, ctx->read_hwnd);
+            else
+                InterlockedExchange(&ctx->refresh, TRUE);
         }
     }
 
@@ -359,6 +364,7 @@ static struct wgl_context *create_context(HDC hdc, struct wgl_context *share,
                                       ctx->attribs);
     ctx->draw_hwnd = 0;
     ctx->read_hwnd = 0;
+    ctx->refresh = FALSE;
     ctx->has_been_current = FALSE;
     ctx->sharing = FALSE;
 
@@ -647,6 +653,52 @@ static BOOL WINAPI wayland_wglShareLists(struct wgl_context *org,
     }
 
     return FALSE;
+}
+
+static BOOL wgl_context_refresh(struct wgl_context *ctx)
+{
+    BOOL ret = InterlockedExchange(&ctx->refresh, FALSE);
+
+    if (ret)
+    {
+        TRACE("refreshing context %p hwnd %p/%p\n",
+              ctx->context, ctx->draw_hwnd, ctx->read_hwnd);
+        wgl_context_make_current(ctx, ctx->draw_hwnd, ctx->read_hwnd);
+        RedrawWindow(ctx->draw_hwnd, NULL, 0, RDW_INVALIDATE | RDW_ERASE);
+    }
+    return ret;
+}
+
+/***********************************************************************
+ *		wayland_wglSwapBuffers
+ */
+static BOOL WINAPI wayland_wglSwapBuffers(HDC hdc)
+{
+    struct wgl_context *ctx = NtCurrentTeb()->glContext;
+    HWND hwnd = WindowFromDC(hdc);
+    struct wayland_gl_drawable *draw_gl;
+
+    TRACE("hdc %p hwnd %p ctx %p\n", hdc, hwnd, ctx);
+
+    if (ctx && wgl_context_refresh(ctx)) return TRUE;
+
+    draw_gl = wayland_gl_drawable_get(hwnd);
+    if (draw_gl && draw_gl->surface)
+    {
+        BOOL drawing_allowed = TRUE;
+        if (draw_gl->wayland_surface)
+        {
+            drawing_allowed =
+                wayland_surface_is_drawing_allowed(draw_gl->wayland_surface);
+            if (drawing_allowed)
+                wayland_surface_ensure_mapped(draw_gl->wayland_surface);
+        }
+        if (drawing_allowed) p_eglSwapBuffers(egl_display, draw_gl->surface);
+    }
+
+    wayland_gl_drawable_release(draw_gl);
+
+    return TRUE;
 }
 
 /***********************************************************************
@@ -1078,6 +1130,7 @@ static BOOL egl_init(void)
     LOAD_FUNCPTR(eglGetProcAddress);
     LOAD_FUNCPTR(eglInitialize);
     LOAD_FUNCPTR(eglMakeCurrent);
+    LOAD_FUNCPTR(eglSwapBuffers);
 #undef LOAD_FUNCPTR
 
     egl_display = p_eglGetDisplay((EGLNativeDisplayType) process_wl_display);
@@ -1117,6 +1170,7 @@ static struct opengl_funcs egl_funcs =
         .p_wglMakeCurrent = wayland_wglMakeCurrent,
         .p_wglSetPixelFormat = wayland_wglSetPixelFormat,
         .p_wglShareLists = wayland_wglShareLists,
+        .p_wglSwapBuffers = wayland_wglSwapBuffers,
     },
 #define USE_GL_FUNC(name) (void *)glstub_##name,
     .gl = { ALL_WGL_FUNCS }

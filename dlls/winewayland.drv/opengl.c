@@ -49,8 +49,21 @@ static struct opengl_funcs egl_funcs;
 
 #define DECL_FUNCPTR(f) static __typeof__(f) * p_##f = NULL
 DECL_FUNCPTR(eglGetDisplay);
+DECL_FUNCPTR(eglGetProcAddress);
 DECL_FUNCPTR(eglInitialize);
 #undef DECL_FUNCPTR
+
+/***********************************************************************
+ *		wayland_wglGetProcAddress
+ */
+static PROC WINAPI wayland_wglGetProcAddress(LPCSTR name)
+{
+    PROC ret;
+    if (!strncmp(name, "wgl", 3)) return NULL;
+    ret = (PROC)p_eglGetProcAddress(name);
+    TRACE("%s -> %p\n", name, ret);
+    return ret;
+}
 
 /***********************************************************************
  *		wayland_wglGetExtensionsStringARB
@@ -399,6 +412,7 @@ static BOOL egl_init(void)
         { ERR("can't find symbol %s\n", #func); return FALSE; }    \
     } while(0)
     LOAD_FUNCPTR(eglGetDisplay);
+    LOAD_FUNCPTR(eglGetProcAddress);
     LOAD_FUNCPTR(eglInitialize);
 #undef LOAD_FUNCPTR
 
@@ -426,6 +440,10 @@ ALL_WGL_FUNCS
 
 static struct opengl_funcs egl_funcs =
 {
+    .wgl =
+    {
+        .p_wglGetProcAddress = wayland_wglGetProcAddress,
+    },
 #define USE_GL_FUNC(name) (void *)glstub_##name,
     .gl = { ALL_WGL_FUNCS }
 #undef USE_GL_FUNC

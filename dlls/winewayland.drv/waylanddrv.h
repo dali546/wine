@@ -379,6 +379,9 @@ void wayland_window_surface_set_window_region(struct window_surface *window_surf
 void wayland_window_surface_update_layered(struct window_surface *window_surface,
                                            COLORREF color_key, BYTE alpha,
                                            BOOL src_alpha);
+void wayland_window_surface_update_front_buffer(struct window_surface *window_surface,
+                                                void (*read_pixels)(void *pixels_out,
+                                                                    int width, int height));
 
 /**********************************************************************
  *          Wayland Keyboard
@@ -408,6 +411,9 @@ struct opengl_funcs *wayland_get_wgl_driver(UINT version);
 void wayland_update_gl_drawable_surface(HWND hwnd,
                                         struct wayland_surface *wayland_surface);
 void wayland_destroy_gl_drawable(HWND hwnd);
+void wayland_update_front_buffer(HWND hwnd,
+                                 void (*read_pixels)(void *pixels_out,
+                                                     int width, int height));
 
 /**********************************************************************
  *          XKB helpers

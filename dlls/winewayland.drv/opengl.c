@@ -168,6 +168,55 @@ out:
     RedrawWindow(gl->hwnd, NULL, 0, RDW_INVALIDATE | RDW_ERASE);
 }
 
+static BOOL set_pixel_format(HDC hdc, int format, BOOL allow_change)
+{
+    struct wayland_gl_drawable *gl;
+    HWND hwnd = WindowFromDC(hdc);
+    int prev = 0;
+
+    if (!hwnd || hwnd == GetDesktopWindow())
+    {
+        WARN("not a proper window DC %p/%p\n", hdc, hwnd);
+        return FALSE;
+    }
+    if (!is_onscreen_pixel_format(format))
+    {
+        WARN("Invalid format %d\n", format);
+        return FALSE;
+    }
+    TRACE("%p/%p format %d\n", hdc, hwnd, format);
+
+    if ((gl = wayland_gl_drawable_get(hwnd)))
+    {
+        prev = gl->format;
+        /* If we are changing formats, destroy any existing EGL surface so that
+         * it can be recreated by wayland_gl_drawable_update. */
+        if (allow_change && gl->format != format)
+        {
+            gl->format = format;
+            if (gl->surface)
+            {
+                p_eglDestroySurface(egl_display, gl->surface);
+                gl->surface = EGL_NO_SURFACE;
+            }
+        }
+    }
+    else
+    {
+        gl = wayland_gl_drawable_create(hwnd, format);
+    }
+
+    if (gl) wayland_gl_drawable_update(gl);
+
+    wayland_gl_drawable_release(gl);
+
+    if (prev && prev != format && !allow_change) return FALSE;
+    if (__wine_set_pixel_format(hwnd, format)) return TRUE;
+
+    wayland_destroy_gl_drawable(hwnd);
+    return FALSE;
+}
+
 /***********************************************************************
  *		wayland_wglDescribePixelFormat
  */
@@ -229,6 +278,23 @@ static PROC WINAPI wayland_wglGetProcAddress(LPCSTR name)
 }
 
 /***********************************************************************
+ *		wayland_wglSetPixelFormat
+ */
+static BOOL WINAPI wayland_wglSetPixelFormat(HDC hdc, int format,
+                                             const PIXELFORMATDESCRIPTOR *pfd)
+{
+    return set_pixel_format(hdc, format, FALSE);
+}
+
+/***********************************************************************
+ *		wayland_wglSetPixelFormatWINE
+ */
+static BOOL wayland_wglSetPixelFormatWINE(HDC hdc, int format)
+{
+    return set_pixel_format(hdc, format, TRUE);
+}
+
+/***********************************************************************
  *		wayland_wglGetExtensionsStringARB
  */
 static const char *wayland_wglGetExtensionsStringARB(HDC hdc)
@@ -262,6 +328,13 @@ static void init_extensions(void)
 
     register_extension("WGL_EXT_extensions_string");
     egl_funcs.ext.p_wglGetExtensionsStringEXT = wayland_wglGetExtensionsStringEXT;
+
+    /* In WineD3D we need the ability to set the pixel format more than once
+     * (e.g. after a device reset).  The default wglSetPixelFormat doesn't
+     * allow this, so add our own which allows it.
+     */
+    register_extension("WGL_WINE_pixel_format_passthrough");
+    egl_funcs.ext.p_wglSetPixelFormatWINE = wayland_wglSetPixelFormatWINE;
 
     /* load standard functions and extensions exported from the OpenGL library */
 
@@ -670,6 +743,7 @@ static struct opengl_funcs egl_funcs =
     {
         .p_wglDescribePixelFormat = wayland_wglDescribePixelFormat,
         .p_wglGetProcAddress = wayland_wglGetProcAddress,
+        .p_wglSetPixelFormat = wayland_wglSetPixelFormat,
     },
 #define USE_GL_FUNC(name) (void *)glstub_##name,
     .gl = { ALL_WGL_FUNCS }

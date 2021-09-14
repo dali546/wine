@@ -58,6 +58,15 @@ struct wayland_gl_drawable
     EGLSurface      surface;
 };
 
+struct wgl_context
+{
+    struct wl_list link;
+    EGLConfig  config;
+    EGLContext context;
+    HWND       draw_hwnd;
+    HWND       read_hwnd;
+};
+
 static void *egl_handle;
 static void *opengl_handle;
 static EGLDisplay egl_display;
@@ -67,6 +76,7 @@ static struct wgl_pixel_format *pixel_formats;
 static int nb_pixel_formats, nb_onscreen_formats;
 
 static struct wl_list gl_drawables = { &gl_drawables, &gl_drawables };
+static struct wl_list gl_contexts = { &gl_contexts, &gl_contexts };
 
 /* Protects drawables and contexts. */
 static CRITICAL_SECTION drawable_section;
@@ -79,7 +89,10 @@ static CRITICAL_SECTION_DEBUG critsect_debug =
 static CRITICAL_SECTION drawable_section = { &critsect_debug, -1, 0, 0, 0, 0 };
 
 #define DECL_FUNCPTR(f) static __typeof__(f) * p_##f = NULL
+DECL_FUNCPTR(eglBindAPI);
+DECL_FUNCPTR(eglCreateContext);
 DECL_FUNCPTR(eglCreateWindowSurface);
+DECL_FUNCPTR(eglDestroyContext);
 DECL_FUNCPTR(eglDestroySurface);
 DECL_FUNCPTR(eglGetConfigAttrib);
 DECL_FUNCPTR(eglGetConfigs);
@@ -215,6 +228,74 @@ static BOOL set_pixel_format(HDC hdc, int format, BOOL allow_change)
 
     wayland_destroy_gl_drawable(hwnd);
     return FALSE;
+}
+
+static struct wgl_context *create_context(HDC hdc)
+{
+    struct wayland_gl_drawable *gl;
+    struct wgl_context *ctx;
+
+    if (!(gl = wayland_gl_drawable_get(WindowFromDC(hdc)))) return NULL;
+
+    ctx = heap_alloc(sizeof(*ctx));
+    if (!ctx)
+    {
+        ERR("Failed to allocate memory for GL context\n");
+        goto out;
+    }
+
+    ctx->config  = pixel_formats[gl->format - 1].config;
+    ctx->context = p_eglCreateContext(egl_display, ctx->config,
+                                      EGL_NO_CONTEXT,
+                                      NULL);
+    ctx->draw_hwnd = 0;
+    ctx->read_hwnd = 0;
+
+    /* The drawable critical section also guards access to gl_contexts, so it's
+     * safe to add the entry here. */
+    wl_list_insert(&gl_contexts, &ctx->link);
+
+out:
+    wayland_gl_drawable_release(gl);
+
+    TRACE("ctx=%p hdc=%p fmt=%d egl_ctx=%p\n",
+          ctx, hdc, gl->format, ctx ? ctx->context : NULL);
+
+    return ctx;
+}
+
+/***********************************************************************
+ *		wayland_wglCopyContext
+ */
+static BOOL WINAPI wayland_wglCopyContext(struct wgl_context *src,
+                                          struct wgl_context *dst, UINT mask)
+{
+    FIXME("%p -> %p mask %#x unsupported\n", src, dst, mask);
+    return FALSE;
+}
+
+/***********************************************************************
+ *		wayland_wglCreateContext
+ */
+static struct wgl_context * WINAPI wayland_wglCreateContext(HDC hdc)
+{
+    TRACE("hdc=%p\n", hdc);
+
+    p_eglBindAPI(EGL_OPENGL_API);
+
+    return create_context(hdc);
+}
+
+/***********************************************************************
+ *		wayland_wglDeleteContext
+ */
+static BOOL WINAPI wayland_wglDeleteContext(struct wgl_context *ctx)
+{
+    EnterCriticalSection(&drawable_section);
+    wl_list_remove(&ctx->link);
+    LeaveCriticalSection(&drawable_section);
+    p_eglDestroyContext(egl_display, ctx->context);
+    return HeapFree(GetProcessHeap(), 0, ctx);
 }
 
 /***********************************************************************
@@ -704,7 +785,10 @@ static BOOL egl_init(void)
         if (!(p_##func = dlsym(egl_handle, #func))) \
         { ERR("can't find symbol %s\n", #func); return FALSE; }    \
     } while(0)
+    LOAD_FUNCPTR(eglBindAPI);
+    LOAD_FUNCPTR(eglCreateContext);
     LOAD_FUNCPTR(eglCreateWindowSurface);
+    LOAD_FUNCPTR(eglDestroyContext);
     LOAD_FUNCPTR(eglDestroySurface);
     LOAD_FUNCPTR(eglGetConfigAttrib);
     LOAD_FUNCPTR(eglGetConfigs);
@@ -741,6 +825,9 @@ static struct opengl_funcs egl_funcs =
 {
     .wgl =
     {
+        .p_wglCopyContext = wayland_wglCopyContext,
+        .p_wglCreateContext = wayland_wglCreateContext,
+        .p_wglDeleteContext = wayland_wglDeleteContext,
         .p_wglDescribePixelFormat = wayland_wglDescribePixelFormat,
         .p_wglGetProcAddress = wayland_wglGetProcAddress,
         .p_wglSetPixelFormat = wayland_wglSetPixelFormat,

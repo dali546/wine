@@ -68,6 +68,7 @@ enum wayland_window_message
     WM_WAYLAND_CONFIGURE,
     WM_WAYLAND_STATE_UPDATE,
     WM_WAYLAND_SURFACE_OUTPUT_CHANGE,
+    WM_WAYLAND_WINDOW_SURFACE_FLUSH,
 };
 
 enum wayland_surface_role
@@ -514,6 +515,9 @@ void wayland_window_surface_set_window_region(struct window_surface *window_surf
 void wayland_window_surface_update_layered(struct window_surface *window_surface,
                                            COLORREF color_key, BYTE alpha,
                                            BOOL src_alpha) DECLSPEC_HIDDEN;
+void wayland_window_surface_update_front_buffer(struct window_surface *window_surface,
+                                                void (*read_pixels)(void *pixels_out,
+                                                                    int width, int height)) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Wayland Keyboard
@@ -551,6 +555,9 @@ dev_t wayland_gbm_get_render_dev(void) DECLSPEC_HIDDEN;
 
 void wayland_update_gl_drawable_surface(HWND hwnd, struct wayland_surface *wayland_surface) DECLSPEC_HIDDEN;
 void wayland_destroy_gl_drawable(HWND hwnd) DECLSPEC_HIDDEN;
+void wayland_update_front_buffer(HWND hwnd,
+                                 void (*read_pixels)(void *pixels_out,
+                                                     int width, int height)) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Registry helpers

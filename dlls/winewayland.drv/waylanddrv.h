@@ -339,6 +339,7 @@ void wayland_surface_coords_to_wine(struct wayland_surface *surface,
 void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
                                               int wayland_width, int wayland_height,
                                               int *wine_width, int *wine_height);
+void wayland_surface_ensure_mapped(struct wayland_surface *surface);
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
 void wayland_surface_set_main_output(struct wayland_surface *surface,

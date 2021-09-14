@@ -34,6 +34,7 @@
 #undef GLAPIENTRY
 #include "wine/wgl_driver.h"
 #include "wine/debug.h"
+#include "wine/heap.h"
 
 #include <EGL/egl.h>
 #include <assert.h>
@@ -41,13 +42,22 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
+struct wgl_pixel_format
+{
+    EGLConfig config;
+};
+
 static void *egl_handle;
 static void *opengl_handle;
 static EGLDisplay egl_display;
 static char wgl_extensions[4096];
 static struct opengl_funcs egl_funcs;
+static struct wgl_pixel_format *pixel_formats;
+static int nb_pixel_formats, nb_onscreen_formats;
 
 #define DECL_FUNCPTR(f) static __typeof__(f) * p_##f = NULL
+DECL_FUNCPTR(eglGetConfigAttrib);
+DECL_FUNCPTR(eglGetConfigs);
 DECL_FUNCPTR(eglGetDisplay);
 DECL_FUNCPTR(eglGetProcAddress);
 DECL_FUNCPTR(eglInitialize);
@@ -383,6 +393,63 @@ static void init_extensions(void)
 #undef LOAD_FUNCPTR
 }
 
+static BOOL init_pixel_formats(void)
+{
+    EGLint count, i, pass;
+    EGLConfig *egl_configs;
+
+    p_eglGetConfigs(egl_display, NULL, 0, &count);
+    egl_configs = heap_alloc(count * sizeof(*egl_configs));
+    pixel_formats = heap_alloc(count * sizeof(*pixel_formats));
+    p_eglGetConfigs(egl_display, egl_configs, count, &count);
+    if (!count || !egl_configs || !pixel_formats)
+    {
+        heap_free(egl_configs);
+        heap_free(pixel_formats);
+        ERR("eglGetConfigs returned no configs\n");
+        return FALSE;
+    }
+
+    /* Use two passes: the first pass adds the onscreen formats to the format list,
+     * the second offscreen ones. */
+    for (pass = 0; pass < 2; pass++)
+    {
+        for (i = 0; i < count; i++)
+        {
+            EGLint id, type, visual_id, native, render, color, r, g, b, d, s;
+
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_SURFACE_TYPE, &type);
+            if (!(type & EGL_WINDOW_BIT) == !pass) continue;
+
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_RENDERABLE_TYPE, &render);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_CONFIG_ID, &id);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_NATIVE_VISUAL_ID, &visual_id);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_NATIVE_RENDERABLE, &native);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_COLOR_BUFFER_TYPE, &color);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_RED_SIZE, &r);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_GREEN_SIZE, &g);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_BLUE_SIZE, &b);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_DEPTH_SIZE, &d);
+            p_eglGetConfigAttrib(egl_display, egl_configs[i], EGL_STENCIL_SIZE, &s);
+
+            /* Some drivers expose 10 bit components which are not typically what
+             * applications want. */
+            if (r > 8 || g > 8 || b > 8) continue;
+
+            pixel_formats[nb_pixel_formats++].config = egl_configs[i];
+            TRACE("%u: config %u id %u type %x visual %u native %u render %x "
+                  "colortype %u rgb %u,%u,%u depth %u stencil %u\n",
+                   nb_pixel_formats, i, id, type, visual_id, native, render,
+                   color, r, g, b, d, s);
+        }
+        if (pass == 0) nb_onscreen_formats = nb_pixel_formats;
+    }
+
+    heap_free(egl_configs);
+
+    return TRUE;
+}
+
 static BOOL egl_init(void)
 {
     static int retval = -1;
@@ -411,6 +478,8 @@ static BOOL egl_init(void)
         if (!(p_##func = dlsym(egl_handle, #func))) \
         { ERR("can't find symbol %s\n", #func); return FALSE; }    \
     } while(0)
+    LOAD_FUNCPTR(eglGetConfigAttrib);
+    LOAD_FUNCPTR(eglGetConfigs);
     LOAD_FUNCPTR(eglGetDisplay);
     LOAD_FUNCPTR(eglGetProcAddress);
     LOAD_FUNCPTR(eglInitialize);
@@ -419,6 +488,8 @@ static BOOL egl_init(void)
     egl_display = p_eglGetDisplay((EGLNativeDisplayType) process_wl_display);
     if (!p_eglInitialize(egl_display, &major, &minor)) return FALSE;
     TRACE("display %p version %u.%u\n", egl_display, major, minor);
+
+    if (!init_pixel_formats()) return FALSE;
 
     init_extensions();
     retval = 1;

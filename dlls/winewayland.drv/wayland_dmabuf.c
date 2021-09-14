@@ -323,6 +323,23 @@ void wayland_dmabuf_deinit(struct wayland_dmabuf *dmabuf)
         zwp_linux_dmabuf_v1_destroy(dmabuf->zwp_linux_dmabuf_v1);
 }
 
+/***********************************************************************
+ *           wayland_dmabuf_has_format_list
+ */
+BOOL wayland_dmabuf_has_format_list(struct wayland_dmabuf *dmabuf)
+{
+    return !wl_list_empty(&dmabuf->formats);
+}
+
+/***********************************************************************
+ *           wayland_dmabuf_find_format
+ */
+struct wayland_dmabuf_format *wayland_dmabuf_find_format(struct wayland_dmabuf *dmabuf,
+                                                         uint32_t format)
+{
+    return dmabuf_format_list_find_format(&dmabuf->formats, format);
+}
+
 /**********************************************************************
  *          wayland_dmabuf_buffer_from_native
  *

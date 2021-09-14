@@ -325,6 +325,34 @@ void wayland_dmabuf_deinit(struct wayland_dmabuf *dmabuf)
         zwp_linux_dmabuf_v1_destroy(dmabuf->zwp_linux_dmabuf_v1);
 }
 
+/***********************************************************************
+ *           wayland_dmabuf_find_format
+ */
+struct wayland_dmabuf_format *wayland_dmabuf_find_format(struct wayland_dmabuf *dmabuf,
+                                                         uint32_t format)
+{
+    uint32_t dmabuf_version =
+        wl_proxy_get_version((struct wl_proxy *)dmabuf->zwp_linux_dmabuf_v1);
+    struct wayland_dmabuf_format *dmabuf_format = NULL;
+
+    if (dmabuf_version >= ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK_SINCE_VERSION)
+    {
+        struct wayland_dmabuf_feedback_tranche *tranche;
+
+        wl_array_for_each(tranche, &dmabuf->feedback.tranches)
+        {
+            if ((dmabuf_format = dmabuf_format_array_find_format(&tranche->formats, format)))
+                break;
+        }
+    }
+    else
+    {
+        dmabuf_format = dmabuf_format_array_find_format(&dmabuf->formats, format);
+    }
+
+    return dmabuf_format;
+}
+
 /**********************************************************************
  *          wayland_dmabuf_buffer_from_native
  *

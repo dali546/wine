@@ -169,7 +169,7 @@ static struct wayland_win_data *wayland_win_data_create(HWND hwnd)
  *
  *  Gets the wayland surface for HWND while locking the private window data.
  */
-static struct wayland_surface *wayland_surface_for_hwnd_lock(HWND hwnd)
+struct wayland_surface *wayland_surface_for_hwnd_lock(HWND hwnd)
 {
     struct wayland_win_data *data = wayland_win_data_get(hwnd);
 
@@ -184,7 +184,7 @@ static struct wayland_surface *wayland_surface_for_hwnd_lock(HWND hwnd)
 /***********************************************************************
  *           wayland_surface_for_hwnd_unlock
  */
-static void wayland_surface_for_hwnd_unlock(struct wayland_surface *surface)
+void wayland_surface_for_hwnd_unlock(struct wayland_surface *surface)
 {
     if (surface) LeaveCriticalSection(&win_data_section);
 }

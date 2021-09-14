@@ -32,8 +32,13 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
-static struct wayland_dmabuf_format *wayland_dmabuf_find_format(struct wayland_dmabuf *dmabuf,
-                                                                uint32_t format)
+BOOL wayland_dmabuf_has_format_list(struct wayland_dmabuf *dmabuf)
+{
+    return !wl_list_empty(&dmabuf->formats);
+}
+
+struct wayland_dmabuf_format *wayland_dmabuf_find_format(struct wayland_dmabuf *dmabuf,
+                                                         uint32_t format)
 {
     struct wayland_dmabuf_format *dmabuf_format;
 

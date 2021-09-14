@@ -353,6 +353,27 @@ struct wayland_dmabuf_format *wayland_dmabuf_find_format(struct wayland_dmabuf *
     return dmabuf_format;
 }
 
+/***********************************************************************
+ *           wayland_dmabuf_format_supports_modifiers
+ */
+BOOL wayland_dmabuf_format_supports_modifiers(struct wayland_dmabuf_format *format)
+{
+    uint64_t *mod;
+    uint32_t num_modifiers;
+
+    num_modifiers = format->modifiers.size / sizeof(uint64_t);
+
+    if (num_modifiers == 0) return FALSE;
+
+    if (num_modifiers == 1)
+    {
+        mod = (uint64_t *) format->modifiers.data;
+        if (*mod == DRM_FORMAT_MOD_INVALID) return FALSE;
+    }
+
+    return TRUE;
+}
+
 /**********************************************************************
  *          wayland_dmabuf_buffer_from_native
  *

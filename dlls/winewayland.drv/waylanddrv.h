@@ -423,6 +423,8 @@ void wayland_surface_reconfigure_glvk(struct wayland_surface *surface, int x, in
                                       int width, int height) DECLSPEC_HIDDEN;
 void wayland_surface_unmap(struct wayland_surface *surface) DECLSPEC_HIDDEN;
 void wayland_surface_ack_pending_configure(struct wayland_surface *surface) DECLSPEC_HIDDEN;
+struct wayland_surface *wayland_surface_for_hwnd_lock(HWND hwnd) DECLSPEC_HIDDEN;
+void wayland_surface_for_hwnd_unlock(struct wayland_surface *surface) DECLSPEC_HIDDEN;
 void wayland_surface_coords_to_screen(struct wayland_surface *surface,
                                       double wayland_x, double wayland_y,
                                       int *screen_x, int *screen_y) DECLSPEC_HIDDEN;
@@ -480,6 +482,7 @@ void wayland_dmabuf_init(struct wayland_dmabuf *dmabuf,
 void wayland_dmabuf_deinit(struct wayland_dmabuf *dmabuf) DECLSPEC_HIDDEN;
 struct wayland_dmabuf_format *wayland_dmabuf_find_format(struct wayland_dmabuf *dmabuf,
                                                          uint32_t format) DECLSPEC_HIDDEN;
+BOOL wayland_dmabuf_format_supports_modifiers(struct wayland_dmabuf_format *format) DECLSPEC_HIDDEN;
 struct wayland_dmabuf_buffer *wayland_dmabuf_buffer_create_from_native(struct wayland *wayland,
                                                                        struct wayland_native_buffer *native) DECLSPEC_HIDDEN;
 void wayland_dmabuf_buffer_destroy(struct wayland_dmabuf_buffer *dmabuf_buffer) DECLSPEC_HIDDEN;

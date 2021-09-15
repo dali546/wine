@@ -649,6 +649,10 @@ static BOOL wayland_set_cursor(HCURSOR hcursor)
 
     send_message(foreground, WM_WAYLAND_SET_CURSOR, 0, (LPARAM)hcursor);
 
+    /* Cursor visibility affects pointer confinement mode. */
+    send_message(foreground, WM_WAYLAND_POINTER_CONFINEMENT_UPDATE,
+                 WAYLAND_POINTER_CONFINEMENT_RETAIN_CLIP, 0);
+
     return TRUE;
 }
 
@@ -683,4 +687,28 @@ void WAYLAND_SetCursor(HCURSOR hcursor)
     {
         if (!wayland_set_cursor(hcursor)) wayland_invalidate_set_cursor();
     }
+}
+
+/***********************************************************************
+ *           WAYLAND_ClipCursor
+ */
+BOOL WAYLAND_ClipCursor(const RECT *clip)
+{
+    HWND foreground = NULL;
+    struct wayland *wayland = thread_wayland();
+    WPARAM confine = clip ? WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP :
+                            WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP;
+
+    if (wayland && wayland->pointer.focused_surface)
+        foreground = wayland->pointer.focused_surface->hwnd;
+
+    if (!foreground)
+        foreground = NtUserGetForegroundWindow();
+
+    if (!foreground)
+        return FALSE;
+
+    send_message(foreground, WM_WAYLAND_POINTER_CONFINEMENT_UPDATE, confine, 0);
+
+    return TRUE;
 }

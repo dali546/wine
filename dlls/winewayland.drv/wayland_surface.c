@@ -687,12 +687,10 @@ static struct wayland_surface *wayland_surface_ref_glvk(struct wayland_surface *
     return glvk;
 }
 
-/**********************************************************************
- *          wayland_surface_create_gl
- *
- * Creates a GL subsurface for this wayland surface.
- */
-BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
+enum WAYLAND_GLVK { WAYLAND_GLVK_GL, WAYLAND_GLVK_VK };
+
+static BOOL wayland_surface_create_or_ref_glvk(struct wayland_surface *surface,
+                                               enum WAYLAND_GLVK wayland_glvk)
 {
     struct wayland_surface *glvk;
     RECT client_rect;
@@ -706,9 +704,12 @@ BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
     if (!glvk)
         goto err;
 
-    glvk->wl_egl_window = wl_egl_window_create(glvk->wl_surface, 1, 1);
-    if (!glvk->wl_egl_window)
-        goto err;
+    if (wayland_glvk == WAYLAND_GLVK_GL)
+    {
+        glvk->wl_egl_window = wl_egl_window_create(glvk->wl_surface, 1, 1);
+        if (!glvk->wl_egl_window)
+            goto err;
+    }
 
     EnterCriticalSection(&surface->crit);
     surface->glvk = glvk;
@@ -731,6 +732,26 @@ err:
         wayland_surface_destroy(glvk);
 
     return FALSE;
+}
+
+/**********************************************************************
+ *          wayland_surface_create_gl
+ *
+ * Creates a GL subsurface for this wayland surface.
+ */
+BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface)
+{
+    return wayland_surface_create_or_ref_glvk(surface, WAYLAND_GLVK_GL);
+}
+
+/**********************************************************************
+ *          wayland_surface_create_or_ref_vk
+ *
+ * Creates a VK subsurface for this wayland surface.
+ */
+BOOL wayland_surface_create_or_ref_vk(struct wayland_surface *surface)
+{
+    return wayland_surface_create_or_ref_glvk(surface, WAYLAND_GLVK_VK);
 }
 
 /**********************************************************************

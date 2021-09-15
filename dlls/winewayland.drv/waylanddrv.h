@@ -438,6 +438,12 @@ void wayland_update_front_buffer(HWND hwnd,
                                                      int width, int height));
 
 /**********************************************************************
+ *          Vulkan support
+ */
+
+const struct vulkan_funcs *wayland_get_vulkan_driver(UINT version);
+
+/**********************************************************************
  *          XKB helpers
  */
 xkb_layout_index_t _xkb_state_get_active_layout(struct xkb_state *xkb_state);

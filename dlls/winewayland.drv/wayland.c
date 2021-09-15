@@ -30,6 +30,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <poll.h>
 #include <unistd.h>
 
@@ -172,6 +173,11 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     {
         wayland->wp_viewporter = wl_registry_bind(registry, id, &wp_viewporter_interface, 1);
     }
+    else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0)
+    {
+        wayland->zwp_pointer_constraints_v1 =
+            wl_registry_bind(registry, id, &zwp_pointer_constraints_v1_interface, 1);
+    }
     else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0)
     {
         wayland->zwp_relative_pointer_manager_v1 =
@@ -263,6 +269,8 @@ BOOL wayland_init(struct wayland *wayland)
 
     wl_list_init(&wayland->output_list);
     wl_list_init(&wayland->toplevel_list);
+
+    SetRect(&wayland->cursor_clip, INT_MIN, INT_MIN, INT_MAX, INT_MAX);
 
     /* Populate registry */
     wl_registry_add_listener(wayland->wl_registry, &registry_listener, wayland);

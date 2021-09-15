@@ -31,6 +31,8 @@
 #include "wine/debug.h"
 #include "wine/heap.h"
 
+#include <limits.h>
+
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
 /* private window data */
@@ -719,6 +721,8 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
         wsurface->drawing_allowed = TRUE;
 
     LeaveCriticalSection(&wsurface->crit);
+
+    wayland_surface_update_pointer_confinement(wsurface);
 }
 
 static void update_wayland_state(struct wayland_win_data *data)
@@ -1448,6 +1452,25 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (data && data->window_surface)
                 wayland_window_surface_flush(data->window_surface);
             wayland_win_data_release(data);
+        }
+        break;
+    case WM_WAYLAND_POINTER_CONFINEMENT_UPDATE:
+        {
+            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
+            if (wayland_surface)
+            {
+                if (wp == WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP)
+                {
+                    GetClipCursor(&wayland_surface->wayland->cursor_clip);
+                }
+                else if (wp == WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP)
+                {
+                    SetRect(&wayland_surface->wayland->cursor_clip,
+                            INT_MIN, INT_MIN, INT_MAX, INT_MAX);
+                }
+                wayland_surface_update_pointer_confinement(wayland_surface);
+            }
+            wayland_surface_for_hwnd_unlock(wayland_surface);
         }
         break;
     default:

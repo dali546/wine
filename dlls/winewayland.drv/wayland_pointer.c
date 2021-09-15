@@ -101,6 +101,7 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
     struct wayland *wayland = data;
     struct wayland_surface *wayland_surface =
         surface ? wl_surface_get_user_data(surface) : NULL;
+    RECT clip;
 
     /* Since pointer events can arrive in multiple threads, ensure we only
      * handle them in the thread that owns the surface, to avoid passing
@@ -119,6 +120,9 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
          * visibility state (i.e., ShowCursor()), which is difficult to access
          * otherwise, is taken into account. */
         NtUserSetCursor(NtUserGetCursor());
+        /* Reapply the current cursor clip, so that the wayland pointer
+         * constraint is updated for the newly entered window. */
+        NtUserClipCursor(NtUserGetClipCursor(&clip) ? &clip : NULL);
         /* Handle the enter as a motion, to account for cases where the
          * window first appears beneath the pointer and won't get a separate
          * motion event. */

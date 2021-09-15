@@ -333,6 +333,7 @@ void wayland_surface_reconfigure(struct wayland_surface *surface, int x, int y,
                                  int width,int height);
 void wayland_surface_reconfigure_apply(struct wayland_surface *surface);
 BOOL wayland_surface_create_or_ref_gl(struct wayland_surface *surface);
+BOOL wayland_surface_create_or_ref_vk(struct wayland_surface *surface);
 void wayland_surface_unref_glvk(struct wayland_surface *surface);
 void wayland_surface_reconfigure_glvk(struct wayland_surface *surface, int x, int y,
                                       int width, int height);

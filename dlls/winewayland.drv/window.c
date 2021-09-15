@@ -405,7 +405,15 @@ static void wayland_win_data_update_wayland_surface(struct wayland_win_data *dat
         data->wayland_surface = wayland_surface_create_plain(wayland);
 
     if (data->wayland_surface)
+    {
         data->wayland_surface->hwnd = data->hwnd;
+        if (data->wayland_surface->xdg_toplevel)
+        {
+            WCHAR text[1024];
+            if (!InternalGetWindowText(data->hwnd, text, ARRAY_SIZE(text))) text[0] = 0;
+            wayland_surface_set_title(data->wayland_surface, text);
+        }
+    }
 
     wayland_update_gl_drawable_surface(data->hwnd, data->wayland_surface);
 }
@@ -834,6 +842,21 @@ void CDECL WAYLAND_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style)
     }
 
     wayland_win_data_release(data);
+}
+
+/*****************************************************************
+ *		WAYLAND_SetWindowText
+ */
+void CDECL WAYLAND_SetWindowText(HWND hwnd, LPCWSTR text)
+{
+    struct wayland_surface *wsurface = wayland_surface_for_hwnd_lock(hwnd);
+
+    TRACE("hwnd=%p text=%s\n", hwnd, wine_dbgstr_w(text));
+
+    if (wsurface && wsurface->xdg_toplevel)
+        wayland_surface_set_title(wsurface, text);
+
+    wayland_surface_for_hwnd_unlock(wsurface);
 }
 
 /***********************************************************************

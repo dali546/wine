@@ -13,6 +13,7 @@ C_SRCS = \
 	display.c \
 	gdi.c \
 	opengl.c \
+	vulkan.c \
 	wayland.c \
 	wayland_output.c \
 	waylanddrv_main.c \

@@ -30,6 +30,7 @@
 #include <wayland-egl.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-compose.h>
+#include "pointer-constraints-unstable-v1-client-protocol.h"
 #include "relative-pointer-unstable-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
@@ -53,6 +54,7 @@ enum wayland_window_message
     WM_WAYLAND_SURFACE_OUTPUT_CHANGE = 0x80001003,
     WM_WAYLAND_MODE_CHANGE = 0x80001004,
     WM_WAYLAND_WINDOW_SURFACE_FLUSH = 0x80001005,
+    WM_WAYLAND_POINTER_CONFINEMENT_UPDATE = 0x80001006,
 };
 
 enum wayland_configure_flags
@@ -61,6 +63,13 @@ enum wayland_configure_flags
     WAYLAND_CONFIGURE_FLAG_ACTIVATED  = (1 << 1),
     WAYLAND_CONFIGURE_FLAG_MAXIMIZED  = (1 << 2),
     WAYLAND_CONFIGURE_FLAG_FULLSCREEN = (1 << 3),
+};
+
+enum wayland_pointer_confinement
+{
+    WAYLAND_POINTER_CONFINEMENT_RETAIN_CLIP,
+    WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP,
+    WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP,
 };
 
 /**********************************************************************
@@ -119,6 +128,7 @@ struct wayland
     struct wl_shm *wl_shm;
     struct wl_seat *wl_seat;
     struct wp_viewporter *wp_viewporter;
+    struct zwp_pointer_constraints_v1 *zwp_pointer_constraints_v1;
     struct zwp_relative_pointer_manager_v1 *zwp_relative_pointer_manager_v1;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
@@ -131,6 +141,7 @@ struct wayland
     DWORD last_event_type;
     int event_notification_pipe[2];
     struct wl_list thread_link;
+    RECT cursor_clip;
 };
 
 struct wayland_output_mode
@@ -193,6 +204,8 @@ struct wayland_surface
     struct wl_egl_window *wl_egl_window;
     struct wayland_surface *parent;
     struct wayland_surface *glvk;
+    struct zwp_confined_pointer_v1 *zwp_confined_pointer_v1;
+    struct zwp_locked_pointer_v1 *zwp_locked_pointer_v1;
     /* The offset of this surface relative to its owning win32 window */
     int offset_x, offset_y;
     HWND hwnd;
@@ -352,6 +365,7 @@ void wayland_surface_find_wine_fullscreen_fit(struct wayland_surface *surface,
 void wayland_surface_ensure_mapped(struct wayland_surface *surface);
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
+void wayland_surface_update_pointer_confinement(struct wayland_surface *surface);
 void wayland_surface_leave_output(struct wayland_surface *surface,
                                   struct wayland_output *output);
 void wayland_surface_set_wine_output(struct wayland_surface *surface,

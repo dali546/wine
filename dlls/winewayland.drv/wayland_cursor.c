@@ -319,6 +319,7 @@ void CDECL WAYLAND_SetCursor(HCURSOR handle)
 
     if (InterlockedExchangePointer((void **)&last_cursor, handle) != handle)
     {
+        HWND foreground = GetForegroundWindow();
         struct wayland *wayland = thread_wayland();
 
         /* If a non GUI thread calls SetCursor, just ignore it, since it doesn't
@@ -328,5 +329,21 @@ void CDECL WAYLAND_SetCursor(HCURSOR handle)
             wayland_pointer_update_cursor_from_win32(&wayland->pointer, handle);
         else
             wayland_invalidate_set_cursor();
+
+        /* Cursor visibility affects pointer confinement mode. */
+        SendMessageW(foreground, WM_WAYLAND_POINTER_CONFINEMENT_UPDATE,
+                     WAYLAND_POINTER_CONFINEMENT_RETAIN_CLIP, 0);
     }
+}
+
+/***********************************************************************
+ *           WAYLAND_ClipCursor
+ */
+void CDECL WAYLAND_ClipCursor(const RECT *clip)
+{
+    HWND foreground = GetForegroundWindow();
+    WPARAM confine = clip ? WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP :
+                            WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP;
+
+    SendMessageW(foreground, WM_WAYLAND_POINTER_CONFINEMENT_UPDATE, confine, 0);
 }

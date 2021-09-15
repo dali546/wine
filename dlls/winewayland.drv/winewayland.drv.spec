@@ -4,6 +4,7 @@
 
 # USER driver
 
+@ cdecl ClipCursor(ptr) WAYLAND_ClipCursor
 @ cdecl ChangeDisplaySettingsEx(ptr ptr long long long) WAYLAND_ChangeDisplaySettingsEx
 @ cdecl CreateWindow(long) WAYLAND_CreateWindow
 @ cdecl DestroyWindow(long) WAYLAND_DestroyWindow

@@ -144,6 +144,11 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
         if (!wayland_output_create(wayland, id, version))
             ERR("Failed to create wayland_output for global id=%u\n", id);
     }
+    else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0)
+    {
+        wayland->zwp_pointer_constraints_v1 =
+            wl_registry_bind(registry, id, &zwp_pointer_constraints_v1_interface, 1);
+    }
     else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0)
     {
         wayland->zwp_relative_pointer_manager_v1 =

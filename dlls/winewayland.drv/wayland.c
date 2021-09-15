@@ -172,6 +172,11 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     {
         wayland->wp_viewporter = wl_registry_bind(registry, id, &wp_viewporter_interface, 1);
     }
+    else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0)
+    {
+        wayland->zwp_pointer_constraints_v1 =
+            wl_registry_bind(registry, id, &zwp_pointer_constraints_v1_interface, 1);
+    }
     else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0)
     {
         wayland->zwp_relative_pointer_manager_v1 =

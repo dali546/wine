@@ -17,6 +17,7 @@ C_SRCS = \
 	gdi.c \
 	opengl.c \
 	options.c \
+	vulkan.c \
 	wayland.c \
 	wayland_buffer_queue.c \
 	wayland_cursor.c \

@@ -679,5 +679,26 @@ void WAYLAND_SetCursor(HCURSOR hcursor)
     {
         send_message(cursor_hwnd, WM_WAYLAND_SET_CURSOR, GetCurrentThreadId(),
                      (LPARAM)hcursor);
+        /* Cursor visibility affects pointer confinement mode. */
+        send_message(cursor_hwnd, WM_WAYLAND_POINTER_CONSTRAINT_UPDATE,
+                     WAYLAND_POINTER_CONSTRAINT_RETAIN_CLIP, 0);
     }
+}
+
+/***********************************************************************
+ *           WAYLAND_ClipCursor
+ */
+BOOL WAYLAND_ClipCursor(const RECT *clip)
+{
+    HWND cursor_hwnd = wayland_get_thread_cursor_hwnd();
+    WPARAM constrain;
+
+    if (!cursor_hwnd) return TRUE;
+
+    constrain = clip ? WAYLAND_POINTER_CONSTRAINT_SYSTEM_CLIP :
+                       WAYLAND_POINTER_CONSTRAINT_UNSET_CLIP;
+
+    send_message(cursor_hwnd, WM_WAYLAND_POINTER_CONSTRAINT_UPDATE, constrain, 0);
+
+    return TRUE;
 }

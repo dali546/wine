@@ -138,6 +138,7 @@ const struct user_driver_funcs waylanddrv_funcs =
     .pSetCursor = WAYLAND_SetCursor,
     .pSetLayeredWindowAttributes = WAYLAND_SetLayeredWindowAttributes,
     .pSetWindowRgn = WAYLAND_SetWindowRgn,
+    .pSetWindowText = WAYLAND_SetWindowText,
     .pShowWindow = WAYLAND_ShowWindow,
     .pSysCommand = WAYLAND_SysCommand,
     .pToUnicodeEx = WAYLAND_ToUnicodeEx,

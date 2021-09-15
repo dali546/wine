@@ -23,6 +23,7 @@
 #include "waylanddrv.h"
 #include "wine/debug.h"
 #include "wine/heap.h"
+#include "wine/unicode.h"
 
 #include "winuser.h"
 
@@ -1496,4 +1497,28 @@ int wayland_surface_get_buffer_scale(struct wayland_surface *surface)
 
     TRACE("hwnd=%p (toplevel=%p) => scale=%d\n", surface->hwnd, toplevel->hwnd, scale);
     return scale;
+}
+
+/**********************************************************************
+ *          wayland_surface_set_title
+ */
+void wayland_surface_set_title(struct wayland_surface *surface, LPCWSTR text)
+{
+    int utf8_count;
+    char *utf8 = NULL;
+
+    if (!surface->xdg_toplevel)
+        return;
+
+    TRACE("surface=%p hwnd=%p text='%s'\n",
+          surface, surface->hwnd, wine_dbgstr_w(text));
+
+    utf8_count = WideCharToMultiByte(CP_UTF8, 0, text, -1, NULL, 0, NULL, NULL);
+    if (utf8_count && (utf8 = heap_alloc(utf8_count)) &&
+        WideCharToMultiByte(CP_UTF8, 0, text, -1, utf8, utf8_count, NULL, NULL))
+    {
+        xdg_toplevel_set_title(surface->xdg_toplevel, utf8);
+    }
+
+    heap_free(utf8);
 }

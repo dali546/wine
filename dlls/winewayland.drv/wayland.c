@@ -172,6 +172,11 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     {
         wayland->wp_viewporter = wl_registry_bind(registry, id, &wp_viewporter_interface, 1);
     }
+    else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0)
+    {
+        wayland->zwp_relative_pointer_manager_v1 =
+            wl_registry_bind(registry, id, &zwp_relative_pointer_manager_v1_interface, 1);
+    }
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
@@ -327,6 +332,9 @@ void wayland_deinit(struct wayland *wayland)
 
     if (wayland->wl_seat)
         wl_seat_destroy(wayland->wl_seat);
+
+    if (wayland->zwp_relative_pointer_manager_v1)
+        zwp_relative_pointer_manager_v1_destroy(wayland->zwp_relative_pointer_manager_v1);
 
     if (wayland->wp_viewporter)
         wp_viewporter_destroy(wayland->wp_viewporter);

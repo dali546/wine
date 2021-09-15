@@ -32,6 +32,8 @@
 #include "wine/gdi_driver.h"
 #include "wine/heap.h"
 
+#include <limits.h>
+
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
 /* private window data */
@@ -548,6 +550,8 @@ static void wayland_win_data_update_wayland_surface_state(struct wayland_win_dat
                                      data->client_rect.bottom - data->client_rect.top);
 
     wayland_surface_reconfigure_apply(data->wayland_surface);
+
+    wayland_surface_update_pointer_confinement(data->wayland_surface);
 
     wayland_surface_set_drawing_allowed(data->wayland_surface, TRUE);
 
@@ -1262,6 +1266,25 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 wayland_output_get_by_id(thread_wayland(), wp);
             if (output)
                 wayland_output_set_wine_mode(output, LOWORD(lp), HIWORD(lp));
+        }
+        break;
+    case WM_WAYLAND_POINTER_CONFINEMENT_UPDATE:
+        {
+            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
+            if (wayland_surface)
+            {
+                if (wp == WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP)
+                {
+                    GetClipCursor(&wayland_surface->wayland->cursor_clip);
+                }
+                else if (wp == WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP)
+                {
+                    SetRect(&wayland_surface->wayland->cursor_clip,
+                            INT_MIN, INT_MIN, INT_MAX, INT_MAX);
+                }
+                wayland_surface_update_pointer_confinement(wayland_surface);
+            }
+            wayland_surface_for_hwnd_unlock(wayland_surface);
         }
         break;
     default:

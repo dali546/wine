@@ -85,6 +85,7 @@ struct wine_vk_swapchain
     HWND hwnd;
     struct wayland_surface *wayland_surface;
     VkSwapchainKHR native_vk_swapchain;
+    VkExtent2D extent;
 };
 
 static inline void wine_vk_list_add(struct wl_list *list, struct wl_list *link)
@@ -269,6 +270,7 @@ static VkResult wayland_vkCreateSwapchainKHR(VkDevice device,
         wine_vk_swapchain->wayland_surface = wine_vk_surface->wayland_surface;
     }
     wine_vk_swapchain->native_vk_swapchain = *swapchain;
+    wine_vk_swapchain->extent = create_info->imageExtent;
 
     wine_vk_list_add(&wine_vk_swapchain_list, &wine_vk_swapchain->link);
 
@@ -405,12 +407,28 @@ static VkResult validate_present_info(const VkPresentInfoKHR *present_info)
     {
         const VkSwapchainKHR vk_swapchain = present_info->pSwapchains[i];
         struct wine_vk_swapchain *wine_vk_swapchain = wine_vk_swapchain_from_handle(vk_swapchain);
+        RECT client;
 
-        TRACE("swapchain[%d] vk=0x%s wine=%p wayland_surface=%p ",
+        TRACE("swapchain[%d] vk=0x%s wine=%p extent=%ux%u wayland_surface=%p "
+              "drawing_allowed=%d\n",
                i, wine_dbgstr_longlong(vk_swapchain), wine_vk_swapchain,
-               wine_vk_swapchain ? wine_vk_swapchain->wayland_surface : NULL);
+               wine_vk_swapchain->extent.width, wine_vk_swapchain->extent.height,
+               wine_vk_swapchain ? wine_vk_swapchain->wayland_surface : NULL,
+               (wine_vk_swapchain && wine_vk_swapchain->wayland_surface) ?
+                   wayland_surface_is_drawing_allowed(wine_vk_swapchain->wayland_surface) : -1);
 
-        if (!wine_vk_swapchain) res = VK_ERROR_SURFACE_LOST_KHR;
+        if (!wine_vk_swapchain ||
+            !GetClientRect(wine_vk_swapchain->hwnd, &client))
+        {
+            res = VK_ERROR_SURFACE_LOST_KHR;
+        }
+        else if (client.right != wine_vk_swapchain->extent.width ||
+                 client.bottom != wine_vk_swapchain->extent.height ||
+                 (wine_vk_swapchain->wayland_surface &&
+                  !wayland_surface_is_drawing_allowed(wine_vk_swapchain->wayland_surface)))
+        {
+            res = VK_ERROR_OUT_OF_DATE_KHR;
+        }
 
         /* Since Vulkan content is presented on a Wayland subsurface, we need
          * to ensure the parent Wayland surface is mapped for the Vulkan

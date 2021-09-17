@@ -53,6 +53,7 @@ typedef struct VkWaylandSurfaceCreateInfoKHR
 static VkResult (*pvkCreateInstance)(const VkInstanceCreateInfo *, const VkAllocationCallbacks *, VkInstance *);
 static VkResult (*pvkCreateWaylandSurfaceKHR)(VkInstance, const VkWaylandSurfaceCreateInfoKHR *, const VkAllocationCallbacks *, VkSurfaceKHR *);
 static void (*pvkDestroyInstance)(VkInstance, const VkAllocationCallbacks *);
+static void (*pvkDestroySurfaceKHR)(VkInstance, VkSurfaceKHR, const VkAllocationCallbacks *);
 
 static void *vulkan_handle;
 
@@ -93,6 +94,22 @@ static void wine_vk_surface_destroy(struct wine_vk_surface *wine_vk_surface)
         wayland_surface_unref_glvk(wine_vk_surface->wayland_surface);
 
     free(wine_vk_surface);
+}
+
+static struct wine_vk_surface *wine_vk_surface_from_handle(VkSurfaceKHR handle)
+{
+    struct wine_vk_surface *surf;
+
+    wayland_mutex_lock(&wine_vk_object_mutex);
+
+    wl_list_for_each(surf, &wine_vk_surface_list, link)
+        if (surf->native_vk_surface == handle) goto out;
+
+    surf = NULL;
+
+out:
+    wayland_mutex_unlock(&wine_vk_object_mutex);
+    return surf;
 }
 
 /* Helper function for converting between win32 and Wayland compatible VkInstanceCreateInfo.
@@ -246,6 +263,24 @@ static void wayland_vkDestroyInstance(VkInstance instance, const VkAllocationCal
     pvkDestroyInstance(instance, NULL /* allocator */);
 }
 
+static void wayland_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
+                                        const VkAllocationCallbacks *allocator)
+{
+    struct wine_vk_surface *wine_vk_surface = wine_vk_surface_from_handle(surface);
+
+    TRACE("%p 0x%s %p\n", instance, wine_dbgstr_longlong(surface), allocator);
+
+    if (allocator)
+        FIXME("Support for allocation callbacks not implemented yet\n");
+
+    if (wine_vk_surface)
+    {
+        pvkDestroySurfaceKHR(instance, wine_vk_surface->native_vk_surface,
+                             NULL /* allocator */);
+        wine_vk_surface_destroy(wine_vk_surface);
+    }
+}
+
 static BOOL WINAPI wine_vk_init(INIT_ONCE *once, void *param, void **context)
 {
     if (!(vulkan_handle = dlopen(SONAME_LIBVULKAN, RTLD_NOW)))
@@ -258,6 +293,7 @@ static BOOL WINAPI wine_vk_init(INIT_ONCE *once, void *param, void **context)
     LOAD_FUNCPTR(vkCreateInstance);
     LOAD_FUNCPTR(vkCreateWaylandSurfaceKHR);
     LOAD_FUNCPTR(vkDestroyInstance);
+    LOAD_FUNCPTR(vkDestroySurfaceKHR);
 #undef LOAD_FUNCPTR
 
     return TRUE;
@@ -273,6 +309,7 @@ static const struct vulkan_funcs vulkan_funcs =
     .p_vkCreateInstance = wayland_vkCreateInstance,
     .p_vkCreateWin32SurfaceKHR = wayland_vkCreateWin32SurfaceKHR,
     .p_vkDestroyInstance = wayland_vkDestroyInstance,
+    .p_vkDestroySurfaceKHR = wayland_vkDestroySurfaceKHR,
 };
 
 static const struct vulkan_funcs *wayland_get_vulkan_driver(UINT version)

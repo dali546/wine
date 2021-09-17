@@ -55,6 +55,7 @@ static VkResult (*pvkCreateWaylandSurfaceKHR)(VkInstance, const VkWaylandSurface
 static void (*pvkDestroyInstance)(VkInstance, const VkAllocationCallbacks *);
 static void (*pvkDestroySurfaceKHR)(VkInstance, VkSurfaceKHR, const VkAllocationCallbacks *);
 static void (*pvkDestroySwapchainKHR)(VkDevice, VkSwapchainKHR, const VkAllocationCallbacks *);
+static VkResult (*pvkQueuePresentKHR)(VkQueue, const VkPresentInfoKHR *);
 
 static void *vulkan_handle;
 
@@ -401,6 +402,50 @@ static void wayland_vkDestroySwapchainKHR(VkDevice device,
     }
 }
 
+static VkResult validate_present_info(const VkPresentInfoKHR *present_info)
+{
+    uint32_t i;
+    VkResult res = VK_SUCCESS;
+
+    for (i = 0; i < present_info->swapchainCount; ++i)
+    {
+        const VkSwapchainKHR vk_swapchain = present_info->pSwapchains[i];
+        struct wine_vk_swapchain *wine_vk_swapchain = wine_vk_swapchain_from_handle(vk_swapchain);
+
+        TRACE("swapchain[%d] vk=0x%s wine=%p wayland_surface=%p ",
+               i, wine_dbgstr_longlong(vk_swapchain), wine_vk_swapchain,
+               wine_vk_swapchain ? wine_vk_swapchain->wayland_surface : NULL);
+
+        if (!wine_vk_swapchain) res = VK_ERROR_SURFACE_LOST_KHR;
+
+        /* Since Vulkan content is presented on a Wayland subsurface, we need
+         * to ensure the parent Wayland surface is mapped for the Vulkan
+         * content to be visible. */
+        if (wine_vk_swapchain->wayland_surface)
+            wayland_surface_ensure_mapped(wine_vk_swapchain->wayland_surface);
+    }
+
+    return res;
+}
+
+static VkResult wayland_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *present_info)
+{
+    VkResult res;
+    VkResult validation_res;
+
+    TRACE("%p, %p\n", queue, present_info);
+
+    validation_res = validate_present_info(present_info);
+    /* Even if validation fails, we need to call the native vkQueuePresent to ensure
+     * the presented image is handled/released properly. */
+    res = pvkQueuePresentKHR(queue, present_info);
+
+    if (validation_res != VK_SUCCESS)
+        return validation_res;
+
+    return res;
+}
+
 static BOOL WINAPI wine_vk_init(INIT_ONCE *once, void *param, void **context)
 {
     if (!(vulkan_handle = dlopen(SONAME_LIBVULKAN, RTLD_NOW)))
@@ -416,6 +461,7 @@ static BOOL WINAPI wine_vk_init(INIT_ONCE *once, void *param, void **context)
     LOAD_FUNCPTR(vkDestroyInstance);
     LOAD_FUNCPTR(vkDestroySurfaceKHR);
     LOAD_FUNCPTR(vkDestroySwapchainKHR);
+    LOAD_FUNCPTR(vkQueuePresentKHR);
 #undef LOAD_FUNCPTR
 
     return TRUE;
@@ -434,6 +480,7 @@ static const struct vulkan_funcs vulkan_funcs =
     .p_vkDestroyInstance = wayland_vkDestroyInstance,
     .p_vkDestroySurfaceKHR = wayland_vkDestroySurfaceKHR,
     .p_vkDestroySwapchainKHR = wayland_vkDestroySwapchainKHR,
+    .p_vkQueuePresentKHR = wayland_vkQueuePresentKHR,
 };
 
 const struct vulkan_funcs *wayland_get_vulkan_driver(UINT version)

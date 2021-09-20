@@ -568,6 +568,12 @@ void wayland_update_front_buffer(HWND hwnd,
                                                      int width, int height));
 
 /**********************************************************************
+ *          Vulkan support
+ */
+
+void wayland_invalidate_vulkan_objects(HWND hwnd);
+
+/**********************************************************************
  *          XKB helpers
  */
 

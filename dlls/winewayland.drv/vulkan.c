@@ -713,6 +713,14 @@ static VkResult wayland_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
     return res;
 }
 
+/* The VkSurfaceKHR we return in wayland_vkCreateWin32SurfaceKHR *is* the
+ * native surface. */
+static VkSurfaceKHR wayland_wine_get_native_surface(VkSurfaceKHR surface)
+{
+    TRACE("0x%s\n", wine_dbgstr_longlong(surface));
+    return surface;
+}
+
 static BOOL WINAPI wine_vk_init(INIT_ONCE *once, void *param, void **context)
 {
     if (!(vulkan_handle = dlopen(SONAME_LIBVULKAN, RTLD_NOW)))
@@ -776,6 +784,7 @@ static const struct vulkan_funcs vulkan_funcs =
     .p_vkGetPhysicalDeviceWin32PresentationSupportKHR = wayland_vkGetPhysicalDeviceWin32PresentationSupportKHR,
     .p_vkGetSwapchainImagesKHR = wayland_vkGetSwapchainImagesKHR,
     .p_vkQueuePresentKHR = wayland_vkQueuePresentKHR,
+    .p_wine_get_native_surface = wayland_wine_get_native_surface,
 };
 
 const struct vulkan_funcs *wayland_get_vulkan_driver(UINT version)

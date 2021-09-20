@@ -443,6 +443,7 @@ void wayland_update_front_buffer(HWND hwnd,
  */
 
 const struct vulkan_funcs *wayland_get_vulkan_driver(UINT version);
+void wayland_invalidate_vulkan_objects(HWND hwnd);
 
 /**********************************************************************
  *          XKB helpers

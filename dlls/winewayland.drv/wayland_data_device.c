@@ -21,6 +21,8 @@
 #include "config.h"
 #include "wine/port.h"
 
+#define NONAMELESSUNION
+
 #include "waylanddrv.h"
 
 #include "wine/heap.h"
@@ -49,6 +51,7 @@ struct wayland_data_offer
     struct wl_array types;
     uint32_t source_actions;
     uint32_t action;
+    const char *accepted_mime_type;
     IDataObject data_object;
 };
 
@@ -681,7 +684,31 @@ static HRESULT WINAPI dataOfferDataObject_GetData(IDataObject *data_object,
                                                   FORMATETC *format_etc,
                                                   STGMEDIUM *medium)
 {
+    HRESULT hr;
+    struct wayland_data_offer *data_offer;
+    struct wayland_data_device_format *format;
+
     TRACE("(%p, %p, %p)\n", data_object, format_etc, medium);
+
+    hr = IDataObject_QueryGetData(data_object, format_etc);
+    if (!SUCCEEDED(hr))
+        return hr;
+
+    data_offer = wayland_data_offer_from_data_object(data_object);
+
+    /* A successful QueryGetData invocation sets a valid accepted_mime_type */
+    assert(data_offer->accepted_mime_type);
+
+    format = wayland_data_device_format_for_mime_type(data_offer->accepted_mime_type);
+    if (format)
+    {
+        medium->tymed = TYMED_HGLOBAL;
+        medium->u.hGlobal = wayland_data_offer_import_format(data_offer, format);
+        if (medium->u.hGlobal == NULL)
+            return E_OUTOFMEMORY;
+        medium->pUnkForRelease = 0;
+        return S_OK;
+    }
 
     return E_UNEXPECTED;
 }
@@ -719,6 +746,7 @@ static HRESULT WINAPI dataOfferDataObject_QueryGetData(IDataObject *data_object,
         if (format && format->clipboard_format == format_etc->cfFormat)
         {
             TRACE("found offer %s for clipboard format %u\n", *p, format->clipboard_format);
+            data_offer->accepted_mime_type = format->mime_type;
             return S_OK;
         }
     }

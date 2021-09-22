@@ -233,6 +233,12 @@ struct wayland_dmabuf
     struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1;
 };
 
+struct wayland_data_device
+{
+    struct wayland *wayland;
+    struct wl_data_device *wl_data_device;
+};
+
 struct wayland
 {
     struct wl_list thread_link;
@@ -248,6 +254,7 @@ struct wayland
     struct wl_shm *wl_shm;
     struct wl_seat *wl_seat;
     struct wp_viewporter *wp_viewporter;
+    struct wl_data_device_manager *wl_data_device_manager;
     struct zwp_pointer_constraints_v1 *zwp_pointer_constraints_v1;
     struct zwp_relative_pointer_manager_v1 *zwp_relative_pointer_manager_v1;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
@@ -259,6 +266,7 @@ struct wayland
     struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
     struct wayland_dmabuf dmabuf;
+    struct wayland_data_device data_device;
     DWORD last_dispatch_mask;
     uint32_t last_button_serial;
     int last_event_type;
@@ -659,6 +667,14 @@ void wayland_update_front_buffer(HWND hwnd,
  */
 
 void wayland_invalidate_vulkan_objects(HWND hwnd) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          Wayland data device
+ */
+
+void wayland_data_device_init(struct wayland_data_device *data_device,
+                              struct wayland *wayland) DECLSPEC_HIDDEN;
+void wayland_data_device_deinit(struct wayland_data_device *data_device) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Registry helpers

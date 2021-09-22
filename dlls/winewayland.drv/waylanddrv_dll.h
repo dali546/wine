@@ -31,5 +31,6 @@
 extern NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *params) DECLSPEC_HIDDEN;
 #define WAYLANDDRV_UNIX_CALL(func, params) waylanddrv_unix_call(waylanddrv_unix_func_ ## func, params)
 
+NTSTATUS WINAPI waylanddrv_client_create_clipboard_window(void *arg, ULONG size);
 
 #endif /* __WINE_WAYLANDDRV_DLL_H */

@@ -54,6 +54,7 @@ enum wayland_window_message
     WM_WAYLAND_SURFACE_OUTPUT_CHANGE = 0x80001003,
     WM_WAYLAND_MODE_CHANGE = 0x80001004,
     WM_WAYLAND_POINTER_CONFINEMENT_UPDATE = 0x80001005,
+    WM_WAYLAND_CLIPBOARD_WINDOW_CREATE = 0x80001006,
 };
 
 enum wayland_configure_flags
@@ -150,6 +151,7 @@ struct wayland
     DWORD last_event_type;
     int event_notification_pipe[2];
     struct wl_list thread_link;
+    HWND clipboard_hwnd;
     RECT cursor_clip;
 };
 
@@ -468,6 +470,7 @@ void wayland_invalidate_vulkan_objects(HWND hwnd);
 void wayland_data_device_init(struct wayland_data_device *data_device,
                               struct wayland *wayland);
 void wayland_data_device_deinit(struct wayland_data_device *data_device);
+void wayland_data_device_ensure_clipboard_window(struct wayland *wayland);
 
 /**********************************************************************
  *          XKB helpers

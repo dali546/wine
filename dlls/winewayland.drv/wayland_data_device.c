@@ -31,6 +31,8 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(clipboard);
 
+#define WINEWAYLAND_TAG_MIME_TYPE "application/x.winewayland.tag"
+
 struct wayland_data_offer
 {
     struct wayland *wayland;
@@ -257,8 +259,109 @@ void wayland_data_device_deinit(struct wayland_data_device *data_device)
 }
 
 /**********************************************************************
+ *          wl_data_source handling
+ */
+
+static void data_source_target(void *data, struct wl_data_source *source,
+                               const char *mime_type)
+{
+}
+
+static void data_source_send(void *data, struct wl_data_source *source,
+                             const char *mime_type, int32_t fd)
+{
+    struct wayland_data_device_format *format =
+        wayland_data_device_format_for_mime_type(mime_type);
+
+    TRACE("source=%p mime_type=%s\n", source, mime_type);
+
+    if (format) format->export(format, fd);
+
+    close(fd);
+}
+
+static void data_source_cancelled(void *data, struct wl_data_source *source)
+{
+    TRACE("source=%p\n", source);
+    wl_data_source_destroy(source);
+}
+
+static void data_source_dnd_drop_performed(void *data,
+                                           struct wl_data_source *source)
+{
+}
+
+static void data_source_dnd_finished(void *data, struct wl_data_source *source)
+{
+}
+
+static void data_source_action(void *data, struct wl_data_source *source,
+                               uint32_t dnd_action)
+{
+}
+
+static const struct wl_data_source_listener data_source_listener = {
+    data_source_target,
+    data_source_send,
+    data_source_cancelled,
+    data_source_dnd_drop_performed,
+    data_source_dnd_finished,
+    data_source_action,
+};
+
+/**********************************************************************
  *          clipboard window handling
  */
+
+static void clipboard_update(void)
+{
+    struct wayland *wayland = thread_wayland();
+    uint32_t enter_serial;
+    struct wl_data_source *source;
+    UINT clipboard_format = 0;
+
+    TRACE("WM_CLIPBOARDUPDATE wayland %p enter_serial=%d/%d\n",
+          wayland,
+          wayland ? wayland->keyboard.enter_serial : -1,
+          wayland ? wayland->pointer.enter_serial : -1);
+
+    if (!wayland)
+        return;
+
+    enter_serial = wayland->keyboard.enter_serial ? wayland->keyboard.enter_serial
+                                                  : wayland->pointer.enter_serial;
+
+    if (!enter_serial)
+        return;
+
+    if (!OpenClipboard(wayland->clipboard_hwnd))
+    {
+        TRACE("failed to open clipboard\n");
+        return;
+    }
+
+    source = wl_data_device_manager_create_data_source(wayland->wl_data_device_manager);
+
+    while ((clipboard_format = EnumClipboardFormats(clipboard_format)))
+    {
+        struct wayland_data_device_format *format =
+            wayland_data_device_format_for_clipboard_format(clipboard_format);
+        if (format)
+        {
+            TRACE("Offering source=%p mime=%s\n", source, format->mime_type);
+            wl_data_source_offer(source, format->mime_type);
+        }
+    }
+
+    /* Add a special entry so that we can detect when an offer is coming from us. */
+    wl_data_source_offer(source, WINEWAYLAND_TAG_MIME_TYPE);
+
+    wl_data_source_add_listener(source, &data_source_listener, NULL);
+    wl_data_device_set_selection(wayland->data_device.wl_data_device, source,
+                                 enter_serial);
+
+    CloseClipboard();
+}
 
 static LRESULT CALLBACK clipboard_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -266,6 +369,11 @@ static LRESULT CALLBACK clipboard_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
     {
     case WM_NCCREATE:
         return TRUE;
+    case WM_CLIPBOARDUPDATE:
+        TRACE("WM_CLIPBOARDUPDATE\n");
+        /* Ignore our own updates */
+        if (GetClipboardOwner() != hwnd) clipboard_update();
+        break;
     }
     return DefWindowProcW( hwnd, msg, wp, lp );
 }
@@ -297,6 +405,9 @@ static HWND wayland_data_device_create_clipboard_window(void)
     }
 
     wayland_data_device_init_formats();
+
+    if (!AddClipboardFormatListener(clipboard_hwnd))
+        ERR("failed to set clipboard listener %u\n", GetLastError());
 
     TRACE("clipboard_hwnd=%p\n", clipboard_hwnd);
     return clipboard_hwnd;

@@ -27,6 +27,7 @@ enum waylanddrv_unix_func
 {
     waylanddrv_unix_func_init,
     waylanddrv_unix_func_read_events,
+    waylanddrv_unix_func_clipboard_message,
     waylanddrv_unix_func_count,
 };
 
@@ -36,10 +37,19 @@ struct waylanddrv_unix_init_params
     NTSTATUS (CDECL *unix_call)(enum waylanddrv_unix_func func, void *params);
 };
 
+struct waylanddrv_unix_clipboard_message_params
+{
+    HWND hwnd;
+    UINT msg;
+    WPARAM wparam;
+    LPARAM lparam;
+};
+
 /* driver client callbacks exposed with KernelCallbackTable interface */
 enum waylanddrv_client_func
 {
-    waylanddrv_client_func_last = NtUserDriverCallbackFirst
+    waylanddrv_client_func_create_clipboard_window = NtUserDriverCallbackFirst,
+    waylanddrv_client_func_last
 };
 
 C_ASSERT(waylanddrv_client_func_last <= NtUserDriverCallbackLast + 1);

@@ -95,6 +95,14 @@ struct wayland_thread_data *wayland_init_thread_data(void)
     set_queue_fd(&data->wayland);
     NtUserGetThreadInfo()->driver_data = (UINT_PTR)data;
 
+    /* Create the clipboard window outside of thread init. We delay window
+     * creation since the thread init function may be invoked from within the
+     * context of a user32 function which holds the internal Wine user32 lock.
+     * In such a case creating the clipboard window would cause an internal
+     * user32 lock error. */
+    NtUserPostThreadMessage(data->wayland.thread_id,
+                            WM_WAYLAND_CLIPBOARD_WINDOW_CREATE, 0, 0);
+
     return data;
 }
 
@@ -214,6 +222,7 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
 {
     waylanddrv_unix_init,
     waylanddrv_unix_read_events,
+    waylanddrv_unix_clipboard_message,
 };
 
 C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == waylanddrv_unix_func_count);

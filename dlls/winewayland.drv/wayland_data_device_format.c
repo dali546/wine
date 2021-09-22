@@ -352,6 +352,10 @@ static struct wayland_data_device_format supported_formats[] =
     {"text/rtf", 0, "Rich Text Format", import_data, export_data, 0},
     {"text/richtext", 0, "Rich Text Format", import_data, export_data, 0},
     {"text/uri-list", CF_HDROP, NULL, import_uri_list, export_uri_list, 0},
+    {"image/tiff", CF_TIFF, 0, import_data, export_data, 0},
+    {"image/png", 0, "PNG", import_data, export_data, 0},
+    {"image/jpeg", 0, "JFIF", import_data, export_data, 0},
+    {"image/gif", 0, "GIF", import_data, export_data, 0},
     {NULL, 0, NULL, 0},
 };
 

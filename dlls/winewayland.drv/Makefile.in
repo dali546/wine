@@ -1,5 +1,5 @@
 MODULE    = winewayland.drv
-IMPORTS   = advapi32 gdi32 rpcrt4 setupapi user32
+IMPORTS   = advapi32 gdi32 rpcrt4 setupapi user32 uuid
 EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_EGL_CFLAGS) $(XKBCOMMON_CFLAGS)
 EXTRALIBS = $(WAYLAND_CLIENT_LIBS) $(WAYLAND_EGL_LIBS) $(XKBCOMMON_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement

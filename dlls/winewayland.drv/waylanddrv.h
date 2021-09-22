@@ -110,6 +110,12 @@ struct wayland_pointer
     struct zwp_relative_pointer_v1 *zwp_relative_pointer_v1;
 };
 
+struct wayland_data_device
+{
+    struct wayland *wayland;
+    struct wl_data_device *wl_data_device;
+};
+
 struct wayland
 {
     BOOL initialized;
@@ -125,6 +131,7 @@ struct wayland
     struct wl_shm *wl_shm;
     struct wl_seat *wl_seat;
     struct wp_viewporter *wp_viewporter;
+    struct wl_data_device_manager *wl_data_device_manager;
     struct zwp_pointer_constraints_v1 *zwp_pointer_constraints_v1;
     struct zwp_relative_pointer_manager_v1 *zwp_relative_pointer_manager_v1;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
@@ -133,6 +140,7 @@ struct wayland
     struct wl_list toplevel_list;
     struct wayland_keyboard keyboard;
     struct wayland_pointer pointer;
+    struct wayland_data_device data_device;
     DWORD last_dispatch_mask;
     uint32_t last_button_serial;
     DWORD last_event_type;
@@ -444,6 +452,14 @@ void wayland_update_front_buffer(HWND hwnd,
 
 const struct vulkan_funcs *wayland_get_vulkan_driver(UINT version);
 void wayland_invalidate_vulkan_objects(HWND hwnd);
+
+/**********************************************************************
+ *          Wayland data device
+ */
+
+void wayland_data_device_init(struct wayland_data_device *data_device,
+                              struct wayland *wayland);
+void wayland_data_device_deinit(struct wayland_data_device *data_device);
 
 /**********************************************************************
  *          XKB helpers

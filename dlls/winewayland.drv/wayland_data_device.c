@@ -242,6 +242,11 @@ static HGLOBAL wayland_data_offer_import_format(struct wayland_data_offer *data_
     return mem_handle;
 }
 
+static struct wayland_data_offer *wayland_data_offer_from_data_object(struct IDataObject *data_object)
+{
+    return CONTAINING_RECORD(data_object, struct wayland_data_offer, data_object);
+}
+
 /**********************************************************************
  *          wl_data_device handling
  */
@@ -690,10 +695,33 @@ static HRESULT WINAPI dataOfferDataObject_GetDataHere(IDataObject *data_object,
 static HRESULT WINAPI dataOfferDataObject_QueryGetData(IDataObject *data_object,
                                                        FORMATETC *format_etc)
 {
+    struct wayland_data_offer *data_offer;
+    char **p;
+
     TRACE("(%p, %p={.tymed=0x%x, .dwAspect=%d, .cfFormat=%d}\n",
           data_object, format_etc, format_etc->tymed, format_etc->dwAspect,
           format_etc->cfFormat);
 
+    if (format_etc->tymed && !(format_etc->tymed & TYMED_HGLOBAL))
+    {
+        FIXME("only HGLOBAL medium types supported right now\n");
+        return DV_E_TYMED;
+    }
+
+    data_offer = wayland_data_offer_from_data_object(data_object);
+
+    wl_array_for_each(p, &data_offer->types)
+    {
+        struct wayland_data_device_format *format =
+            wayland_data_device_format_for_mime_type(*p);
+        if (format && format->clipboard_format == format_etc->cfFormat)
+        {
+            TRACE("found offer %s for clipboard format %u\n", *p, format->clipboard_format);
+            return S_OK;
+        }
+    }
+
+    TRACE("didn't find offer for clipboard format %u\n", format_etc->cfFormat);
     return DV_E_FORMATETC;
 }
 

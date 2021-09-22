@@ -20,6 +20,7 @@ C_SRCS = \
 	wayland_buffer_queue.c \
 	wayland_cursor.c \
 	wayland_data_device.c \
+	wayland_data_device_format.c \
 	wayland_keyboard.c \
 	wayland_keyboard_layout.c \
 	wayland_pointer.c \

@@ -30,6 +30,7 @@
 
 #define COBJMACROS
 #include "objidl.h"
+#include "shlobj.h"
 #include "winuser.h"
 
 #include <assert.h>
@@ -773,12 +774,70 @@ static HRESULT WINAPI dataOfferDataObject_SetData(IDataObject *data_object,
     return E_NOTIMPL;
 }
 
+static BOOL formats_etc_contains_clipboard_format(FORMATETC *formats_etc,
+                                                  size_t formats_etc_count,
+                                                  UINT clipboard_format)
+{
+    size_t i;
+
+    for (i = 0; i < formats_etc_count; i++)
+    {
+        if (formats_etc[i].cfFormat == clipboard_format)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 static HRESULT WINAPI dataOfferDataObject_EnumFormatEtc(IDataObject *data_object,
                                                         DWORD direction,
                                                         IEnumFORMATETC **enum_format_etc)
 {
+    HRESULT hr;
+    FORMATETC *formats_etc;
+    size_t formats_etc_count = 0;
+    struct wayland_data_offer *data_offer;
+    char **p;
+
     TRACE("(%p, %u, %p)\n", data_object, direction, enum_format_etc);
-    return E_NOTIMPL;
+
+    if (direction != DATADIR_GET)
+    {
+        FIXME("only the get direction is implemented\n");
+        return E_NOTIMPL;
+    }
+
+    data_offer = wayland_data_offer_from_data_object(data_object);
+
+    /* Allocate space for all offered mime types, although we may not use them all */
+    formats_etc = heap_alloc((data_offer->types.size / sizeof(char *)) * sizeof(FORMATETC));
+    if (!formats_etc)
+        return E_OUTOFMEMORY;
+
+    wl_array_for_each(p, &data_offer->types)
+    {
+        struct wayland_data_device_format *format =
+            wayland_data_device_format_for_mime_type(*p);
+        if (format &&
+            !formats_etc_contains_clipboard_format(formats_etc, formats_etc_count,
+                                                   format->clipboard_format))
+        {
+            FORMATETC *current= &formats_etc[formats_etc_count];
+
+            current->cfFormat = format->clipboard_format;
+            current->ptd = NULL;
+            current->dwAspect = DVASPECT_CONTENT;
+            current->lindex = -1;
+            current->tymed = TYMED_HGLOBAL;
+
+            formats_etc_count += 1;
+        }
+    }
+
+    hr = SHCreateStdEnumFmtEtc(formats_etc_count, formats_etc, enum_format_etc);
+    heap_free(formats_etc);
+
+    return hr;
 }
 
 static HRESULT WINAPI dataOfferDataObject_DAdvise(IDataObject *data_object,

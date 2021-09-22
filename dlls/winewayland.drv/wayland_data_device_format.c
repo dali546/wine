@@ -26,6 +26,7 @@
 #include "wine/heap.h"
 #include "wine/unicode.h"
 
+#include "shlobj.h"
 #include "winuser.h"
 
 #include <errno.h>
@@ -143,6 +144,202 @@ static void export_data(struct wayland_data_device_format *format, int fd)
     CloseClipboard();
 }
 
+/* Adapted from winex11.drv/clipboard.c */
+static char *decode_uri(const char *uri, size_t uri_length)
+{
+    char *decoded = heap_alloc_zero(uri_length + 1);
+    size_t uri_i = 0;
+    size_t decoded_i = 0;
+
+    if (decoded == NULL)
+        goto err;
+
+    while (uri_i < uri_length)
+    {
+        if (uri[uri_i] == '%')
+        {
+            unsigned long number;
+            char buffer[3];
+
+            if (uri_i + 1 == uri_length || uri_i + 2 == uri_length)
+                goto err;
+
+            buffer[0] = uri[uri_i + 1];
+            buffer[1] = uri[uri_i + 2];
+            buffer[2] = '\0';
+            errno = 0;
+            number = strtoul(buffer, NULL, 16);
+            if (errno != 0)
+                goto err;
+            decoded[decoded_i] = number;
+
+            uri_i += 3;
+            decoded_i++;
+        }
+        else
+        {
+            decoded[decoded_i++] = uri[uri_i++];
+        }
+    }
+
+    decoded[decoded_i] = '\0';
+
+    return decoded;
+
+err:
+    heap_free(decoded);
+    return NULL;
+}
+
+/* Adapted from winex11.drv/clipboard.c */
+static WCHAR* decoded_uri_to_dos(const char *uri)
+{
+    WCHAR *ret = NULL;
+
+    if (strncmp(uri, "file:/", 6))
+        return NULL;
+
+    if (uri[6] == '/')
+    {
+        if (uri[7] == '/')
+        {
+            /* file:///path/to/file (nautilus, thunar) */
+            ret = wine_get_dos_file_name(&uri[7]);
+        }
+        else if (uri[7])
+        {
+            /* file://hostname/path/to/file (X file drag spec) */
+            char hostname[256];
+            char *path = strchr(&uri[7], '/');
+            if (path)
+            {
+                *path = '\0';
+                if (strcmp(&uri[7], "localhost") == 0)
+                {
+                    *path = '/';
+                    ret = wine_get_dos_file_name(path);
+                }
+                else if (gethostname(hostname, sizeof(hostname)) == 0)
+                {
+                    if (strcmp(hostname, &uri[7]) == 0)
+                    {
+                        *path = '/';
+                        ret = wine_get_dos_file_name(path);
+                    }
+                }
+            }
+        }
+    }
+    else if (uri[6])
+    {
+        /* file:/path/to/file (konqueror) */
+        ret = wine_get_dos_file_name(&uri[5]);
+    }
+
+    return ret;
+}
+
+static HGLOBAL import_uri_list(struct wayland_data_device_format *format,
+                               const void *data, size_t data_size)
+{
+    HGLOBAL mem_handle = 0;
+    DROPFILES *drop_files;
+    const char *data_end = (const char *) data + data_size;
+    const char *line_start = data;
+    const char *line_end;
+    WCHAR **path;
+    struct wl_array paths;
+    size_t total_chars = 0;
+    WCHAR *dst;
+
+    TRACE("data=%p size=%lu\n", data, (unsigned long)data_size);
+
+    wl_array_init(&paths);
+
+    while (line_start < data_end)
+    {
+        line_end = strchr(line_start, '\r');
+        if (line_end == NULL || line_end == data_end - 1 || line_end[1] != '\n')
+        {
+            WARN("URI list line doesn't end in \\r\\n\n");
+            break;
+        }
+
+        if (line_start[0] != '#')
+        {
+            char *decoded_uri = decode_uri(line_start, line_end - line_start);
+            TRACE("decoded_uri=%s\n", decoded_uri);
+            path = wl_array_add(&paths, sizeof *path);
+            if (!path)
+                goto out;
+            *path = decoded_uri_to_dos(decoded_uri);
+            total_chars += strlenW(*path) + 1;
+            heap_free(decoded_uri);
+        }
+
+        line_start = line_end + 2;
+    }
+
+    /* DROPFILES points to an array of consecutive null terminated WCHAR strings,
+     * followed by a final 0 WCHAR to denote the end of the array. We place that
+     * array just after the DROPFILE struct itself. */
+    mem_handle = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + (total_chars + 1) * sizeof(WCHAR));
+    if (!mem_handle || !(drop_files = GlobalLock(mem_handle)))
+    {
+        if (mem_handle)
+        {
+            GlobalFree(mem_handle);
+            mem_handle = NULL;
+        }
+        goto out;
+    }
+
+    drop_files->pFiles = sizeof(*drop_files);
+    drop_files->pt.x = 0;
+    drop_files->pt.y = 0;
+    drop_files->fNC = FALSE;
+    drop_files->fWide = TRUE;
+
+    dst = (WCHAR*)(drop_files + 1);
+    wl_array_for_each(path, &paths)
+    {
+        strcpyW(dst, *path);
+        dst += strlenW(*path) + 1;
+    }
+    *dst = 0;
+
+    GlobalUnlock(mem_handle);
+
+out:
+    wl_array_for_each(path, &paths)
+        heap_free(*path);
+
+    wl_array_release(&paths);
+
+    return mem_handle;
+}
+
+static void export_uri_list(struct wayland_data_device_format *format, int fd)
+{
+    HGLOBAL mem_handle;
+    void *mem;
+
+    if (!OpenClipboard(thread_wayland()->clipboard_hwnd))
+    {
+        TRACE("failed to open clipboard for export\n");
+        return;
+    }
+
+    mem_handle = GetClipboardData(format->clipboard_format);
+    mem = GlobalLock(mem_handle);
+
+    write_all(fd, mem, GlobalSize(mem_handle));
+
+    GlobalUnlock(mem_handle);
+
+    CloseClipboard();
+}
+
 #define CP_ASCII 20127
 
 /* Order is important. When selecting a mime-type for a clipboard format we
@@ -154,6 +351,7 @@ static struct wayland_data_device_format supported_formats[] =
     {"text/plain", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_ASCII},
     {"text/rtf", 0, "Rich Text Format", import_data, export_data, 0},
     {"text/richtext", 0, "Rich Text Format", import_data, export_data, 0},
+    {"text/uri-list", CF_HDROP, NULL, import_uri_list, export_uri_list, 0},
     {NULL, 0, NULL, 0},
 };
 

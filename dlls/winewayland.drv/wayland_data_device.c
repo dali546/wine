@@ -20,6 +20,8 @@
 
 #include "config.h"
 
+#define NONAMELESSUNION
+
 #include "waylanddrv.h"
 
 #include "wine/debug.h"
@@ -48,6 +50,7 @@ struct wayland_data_offer
     struct wl_array types;
     uint32_t source_actions;
     uint32_t action;
+    const char *accepted_mime_type;
     IDataObject data_object;
 };
 
@@ -733,7 +736,42 @@ static HRESULT WINAPI dataOfferDataObject_GetData(IDataObject *data_object,
                                                   FORMATETC *format_etc,
                                                   STGMEDIUM *medium)
 {
+    HRESULT hr;
+    struct wayland_data_offer *data_offer;
+    struct wayland_data_device_format *format;
+
     TRACE("(%p, %p, %p)\n", data_object, format_etc, medium);
+
+    hr = IDataObject_QueryGetData(data_object, format_etc);
+    if (!SUCCEEDED(hr))
+        return hr;
+
+    data_offer = wayland_data_offer_from_data_object(data_object);
+
+    /* A successful QueryGetData invocation sets a valid accepted_mime_type */
+    assert(data_offer->accepted_mime_type);
+
+    format = wayland_data_device_format_for_mime_type(data_offer->accepted_mime_type);
+    if (format)
+    {
+        void *data;
+        size_t size;
+
+        if (!(data = wayland_data_offer_import_format(data_offer, format, &size)))
+            return E_UNEXPECTED;
+
+        medium->u.hGlobal = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, size);
+        if (medium->u.hGlobal == NULL)
+            return E_OUTOFMEMORY;
+        memcpy(GlobalLock(medium->u.hGlobal), data, size);
+        GlobalUnlock(medium->u.hGlobal);
+
+        medium->tymed = TYMED_HGLOBAL;
+        medium->pUnkForRelease = 0;
+
+        free(data);
+        return S_OK;
+    }
 
     return E_UNEXPECTED;
 }
@@ -769,6 +807,7 @@ static HRESULT WINAPI dataOfferDataObject_QueryGetData(IDataObject *data_object,
     {
         TRACE("found offer %s for clipboard format %u\n",
               format->mime_type, format->clipboard_format);
+        data_offer->accepted_mime_type = format->mime_type;
         return S_OK;
     }
 

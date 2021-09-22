@@ -139,6 +139,12 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     {
         wayland->wp_viewporter = wl_registry_bind(registry, id, &wp_viewporter_interface, 1);
     }
+    else if (strcmp(interface, "wl_data_device_manager") == 0)
+    {
+        wayland->wl_data_device_manager =
+            wl_registry_bind(registry, id, &wl_data_device_manager_interface,
+                             version < 3 ? version : 3);
+    }
     else if (strcmp(interface, "wl_output") == 0)
     {
         if (!wayland_output_create(wayland, id, version))
@@ -262,6 +268,9 @@ BOOL wayland_init(struct wayland *wayland)
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
 
+    if (wayland->wl_data_device_manager && wayland->wl_seat)
+        wayland_data_device_init(&wayland->data_device, wayland);
+
     /* Thread wayland instances have notification pipes to inform them when
      * there might be new events in their queues. The read part of the pipe
      * is also used as the wine server queue fd. */
@@ -314,6 +323,12 @@ void wayland_deinit(struct wayland *wayland)
 
     if (wayland->keyboard.wl_keyboard)
         wayland_keyboard_deinit(&wayland->keyboard);
+
+    if (wayland->data_device.wl_data_device)
+        wayland_data_device_deinit(&wayland->data_device);
+
+    if (wayland->wl_data_device_manager)
+        wl_data_device_manager_destroy(wayland->wl_data_device_manager);
 
     if (wayland->wl_seat)
         wl_seat_destroy(wayland->wl_seat);

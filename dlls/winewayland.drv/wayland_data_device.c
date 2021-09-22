@@ -25,6 +25,8 @@
 #include "wine/heap.h"
 #include "wine/debug.h"
 
+#include "winuser.h"
+
 #include <assert.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(clipboard);
@@ -252,4 +254,60 @@ void wayland_data_device_deinit(struct wayland_data_device *data_device)
         wl_data_device_destroy(data_device->wl_data_device);
 
     memset(data_device, 0, sizeof(*data_device));
+}
+
+/**********************************************************************
+ *          clipboard window handling
+ */
+
+static LRESULT CALLBACK clipboard_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg)
+    {
+    case WM_NCCREATE:
+        return TRUE;
+    }
+    return DefWindowProcW( hwnd, msg, wp, lp );
+}
+
+static HWND wayland_data_device_create_clipboard_window(void)
+{
+    static const WCHAR clipboard_classname[] = {
+        '_','_','w','i','n','e','_','c','l','i','p','b','o','a','r','d',
+        '_','m','a','n','a','g','e','r',0
+    };
+    WNDCLASSW class;
+    HWND clipboard_hwnd;
+
+    memset(&class, 0, sizeof(class));
+    class.lpfnWndProc = clipboard_wndproc;
+    class.lpszClassName = clipboard_classname;
+
+    if (!RegisterClassW(&class) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    {
+        ERR("could not register clipboard window class err %u\n", GetLastError());
+        return 0;
+    }
+
+    if (!(clipboard_hwnd = CreateWindowW(clipboard_classname, NULL, 0, 0, 0, 0, 0,
+                                         HWND_MESSAGE, 0, 0, NULL)))
+    {
+        ERR("failed to create clipboard window err %u\n", GetLastError());
+        return 0;
+    }
+
+    TRACE("clipboard_hwnd=%p\n", clipboard_hwnd);
+    return clipboard_hwnd;
+}
+
+/**********************************************************************
+ *          wayland_data_device_ensure_clipboard_window
+ *
+ * Creates (if not already created) the window which handles clipboard
+ * messages for the specified wayland instance.
+ */
+void wayland_data_device_ensure_clipboard_window(struct wayland *wayland)
+{
+    if (!wayland->clipboard_hwnd)
+        wayland->clipboard_hwnd = wayland_data_device_create_clipboard_window();
 }

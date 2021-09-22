@@ -27,6 +27,8 @@
 #include "wine/debug.h"
 #include "wine/server.h"
 
+#include "winuser.h"
+
 #include <stdlib.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
@@ -96,6 +98,14 @@ struct wayland_thread_data *wayland_init_thread_data(void)
 
     set_queue_fd(&data->wayland);
     NtUserGetThreadInfo()->driver_data = data;
+
+    /* Create the clipboard window outside of thread init. We delay window
+     * creation since the thread init function may be invoked from within the
+     * context of a user32 function which holds the internal Wine user32 lock.
+     * In such a case creating the clipboard window would cause an internal
+     * user32 lock error. */
+    NtUserPostThreadMessage(data->wayland.thread_id,
+                            WM_WAYLAND_CLIPBOARD_WINDOW_CREATE, 0, 0);
 
     return data;
 }

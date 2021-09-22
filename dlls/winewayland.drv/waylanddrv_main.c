@@ -163,6 +163,8 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
 
     wayland_read_options_from_registry();
 
+    wayland_data_device_init_formats();
+
     if (!wayland_init_set_cursor()) return STATUS_UNSUCCESSFUL;
 
     if (!wayland_process_init()) return STATUS_UNSUCCESSFUL;

@@ -310,11 +310,77 @@ static void data_device_selection(void *data,
                                   struct wl_data_offer *wl_data_offer)
 {
     struct wayland_data_device *data_device = data;
+    struct wayland *wayland = thread_wayland();
+    struct wayland_data_offer *data_offer;
+    char **p;
+
+    TRACE("wl_data_offer=%u\n",
+          wl_data_offer ? wl_proxy_get_id((struct wl_proxy*)wl_data_offer) : 0);
+
+    /* We may get a selection event before we have had a chance to create the
+     * clipboard window after thread init (see wayland_init_thread_data), so
+     * we need to ensure we have a valid window here. */
+    wayland_data_device_ensure_clipboard_window(wayland);
 
     /* Destroy any previous data offer. */
     wayland_data_device_destroy_clipboard_data_offer(data_device);
 
+    /* If we didn't get an offer and we are the clipboard owner, empty the
+     * clipboard. Otherwise ignore the empty offer completely. */
+    if (!wl_data_offer)
+    {
+        if (GetClipboardOwner() == wayland->clipboard_hwnd)
+        {
+            OpenClipboard(NULL);
+            EmptyClipboard();
+            CloseClipboard();
+        }
+        return;
+    }
+
+    data_offer = wl_data_offer_get_user_data(wl_data_offer);
+
+    /* If this offer contains the special winewayland tag mime-type, it was sent
+     * from us to notify external wayland clients about a wine clipboard update.
+     * The clipboard already contains all the required data, plus we need to ignore
+     * this in order to avoid an endless notification loop. */
+    wl_array_for_each(p, &data_offer->types)
+    {
+        if (!strcmp(*p, WINEWAYLAND_TAG_MIME_TYPE))
+        {
+            TRACE("ignoring offer produced by winewayland\n");
+            goto ignore_selection;
+        }
+    }
+
+    if (!OpenClipboard(data_offer->wayland->clipboard_hwnd))
+    {
+        WARN("failed to open clipboard for selection\n");
+        goto ignore_selection;
+    }
+
+    EmptyClipboard();
+
+    /* For each mime type, mark that we have available clipboard data. */
+    wl_array_for_each(p, &data_offer->types)
+    {
+        struct wayland_data_device_format *format =
+            wayland_data_device_format_for_mime_type(*p);
+        if (format)
+        {
+            TRACE("Avalaible clipboard format for %s => %u\n", *p, format->clipboard_format);
+            SetClipboardData(format->clipboard_format, 0);
+        }
+    }
+
+    CloseClipboard();
+
     data_device->clipboard_wl_data_offer = wl_data_offer;
+
+    return;
+
+ignore_selection:
+    wayland_data_offer_destroy(data_offer);
 }
 
 static const struct wl_data_device_listener data_device_listener = {

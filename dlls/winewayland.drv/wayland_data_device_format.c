@@ -103,6 +103,46 @@ static void export_text(struct wayland_data_device_format *format, int fd)
     CloseClipboard();
 }
 
+static HGLOBAL import_data(struct wayland_data_device_format *format,
+                           const void *data, size_t data_size)
+{
+    HGLOBAL mem_handle;
+    void *mem;
+
+    mem_handle = GlobalAlloc(GMEM_MOVEABLE, data_size);
+    if (!mem_handle || !(mem = GlobalLock(mem_handle)))
+    {
+        if (mem_handle) GlobalFree(mem_handle);
+        return NULL;
+    }
+
+    memcpy(mem, data, data_size);
+    GlobalUnlock(mem_handle);
+
+    return mem_handle;
+}
+
+static void export_data(struct wayland_data_device_format *format, int fd)
+{
+    HGLOBAL mem_handle;
+    void *mem;
+
+    if (!OpenClipboard(thread_wayland()->clipboard_hwnd))
+    {
+        TRACE("failed to open clipboard for export\n");
+        return;
+    }
+
+    mem_handle = GetClipboardData(format->clipboard_format);
+    mem = GlobalLock(mem_handle);
+
+    write_all(fd, mem, GlobalSize(mem_handle));
+
+    GlobalUnlock(mem_handle);
+
+    CloseClipboard();
+}
+
 #define CP_ASCII 20127
 
 /* Order is important. When selecting a mime-type for a clipboard format we
@@ -112,6 +152,8 @@ static struct wayland_data_device_format supported_formats[] =
     {"text/plain;charset=utf-8", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_UTF8},
     {"text/plain;charset=us-ascii", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_ASCII},
     {"text/plain", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_ASCII},
+    {"text/rtf", 0, "Rich Text Format", import_data, export_data, 0},
+    {"text/richtext", 0, "Rich Text Format", import_data, export_data, 0},
     {NULL, 0, NULL, 0},
 };
 

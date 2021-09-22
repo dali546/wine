@@ -296,6 +296,8 @@ static HWND wayland_data_device_create_clipboard_window(void)
         return 0;
     }
 
+    wayland_data_device_init_formats();
+
     TRACE("clipboard_hwnd=%p\n", clipboard_hwnd);
     return clipboard_hwnd;
 }

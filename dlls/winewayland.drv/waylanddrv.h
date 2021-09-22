@@ -135,6 +135,17 @@ struct wayland_data_device
     struct wl_data_offer *dnd_wl_data_offer;
 };
 
+struct wayland_data_device_format
+{
+    const char *mime_type;
+    UINT clipboard_format;
+    const char *register_name;
+    HGLOBAL (*import)(struct wayland_data_device_format *format,
+                      const void *data, size_t data_size);
+    void (*export)(struct wayland_data_device_format *format, int fd);
+    UINT_PTR extra;
+};
+
 struct wayland
 {
     BOOL initialized;
@@ -492,6 +503,9 @@ void wayland_data_device_init(struct wayland_data_device *data_device,
                               struct wayland *wayland);
 void wayland_data_device_deinit(struct wayland_data_device *data_device);
 void wayland_data_device_ensure_clipboard_window(struct wayland *wayland);
+void wayland_data_device_init_formats(void);
+struct wayland_data_device_format *wayland_data_device_format_for_mime_type(const char *mime);
+struct wayland_data_device_format *wayland_data_device_format_for_clipboard_format(UINT clipboard_format);
 
 /**********************************************************************
  *          XKB helpers

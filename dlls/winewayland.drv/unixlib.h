@@ -33,6 +33,7 @@ enum waylanddrv_unix_func
     waylanddrv_unix_func_read_events,
     waylanddrv_unix_func_clipboard_message,
     waylanddrv_unix_func_data_offer_accept_format,
+    waylanddrv_unix_func_data_offer_enum_formats,
     waylanddrv_unix_func_data_offer_import_format,
     waylanddrv_unix_func_count,
 };
@@ -49,6 +50,13 @@ struct waylanddrv_unix_data_offer_accept_format_params
 {
     PTR32 data_offer;
     UINT format;
+};
+
+struct waylanddrv_unix_data_offer_enum_formats_params
+{
+    PTR32 data_offer;
+    UINT *formats;
+    UINT num_formats;
 };
 
 struct waylanddrv_unix_data_offer_import_format_params

@@ -226,6 +226,7 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
     waylanddrv_unix_read_events,
     waylanddrv_unix_clipboard_message,
     waylanddrv_unix_data_offer_accept_format,
+    waylanddrv_unix_data_offer_enum_formats,
     waylanddrv_unix_data_offer_import_format,
 };
 

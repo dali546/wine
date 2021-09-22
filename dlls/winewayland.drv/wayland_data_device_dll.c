@@ -121,9 +121,38 @@ static HRESULT WINAPI dataOfferDataObject_GetData(IDataObject *data_object,
                                                   FORMATETC *format_etc,
                                                   STGMEDIUM *medium)
 {
+    HRESULT hr;
+    struct waylanddrv_unix_data_offer_import_format_params params;
+    void *data;
+
     TRACE("(%p, %p, %p)\n", data_object, format_etc, medium);
 
-    return E_UNEXPECTED;
+    hr = IDataObject_QueryGetData(data_object, format_etc);
+    if (!SUCCEEDED(hr))
+        return hr;
+
+    params.data_offer = PtrToUint(data_object);
+    params.format = format_etc->cfFormat;
+    params.data = 0;
+    params.size = 0;
+
+    if (WAYLANDDRV_UNIX_CALL(data_offer_import_format, &params) != 0 || !params.data)
+        return E_UNEXPECTED;
+
+    data = UIntToPtr(params.data);
+
+    medium->hGlobal = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, params.size);
+    if (medium->hGlobal == NULL)
+        return E_OUTOFMEMORY;
+    memcpy(GlobalLock(medium->hGlobal), data, params.size);
+    GlobalUnlock(medium->hGlobal);
+
+    medium->tymed = TYMED_HGLOBAL;
+    medium->pUnkForRelease = 0;
+
+    VirtualFree(data, params.size, MEM_RELEASE);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI dataOfferDataObject_GetDataHere(IDataObject *data_object,
@@ -137,10 +166,25 @@ static HRESULT WINAPI dataOfferDataObject_GetDataHere(IDataObject *data_object,
 static HRESULT WINAPI dataOfferDataObject_QueryGetData(IDataObject *data_object,
                                                        FORMATETC *format_etc)
 {
+    struct waylanddrv_unix_data_offer_accept_format_params params;
+
     TRACE("(%p, %p={.tymed=0x%x, .dwAspect=%d, .cfFormat=%d}\n",
           data_object, format_etc, format_etc->tymed, format_etc->dwAspect,
           format_etc->cfFormat);
 
+    if (format_etc->tymed && !(format_etc->tymed & TYMED_HGLOBAL))
+    {
+        FIXME("only HGLOBAL medium types supported right now\n");
+        return DV_E_TYMED;
+    }
+
+    params.data_offer = PtrToUint(data_object);
+    params.format = format_etc->cfFormat;
+
+    if (WAYLANDDRV_UNIX_CALL(data_offer_accept_format, &params) == 0)
+        return S_OK;
+
+    TRACE("didn't find offer for clipboard format %u\n", format_etc->cfFormat);
     return DV_E_FORMATETC;
 }
 

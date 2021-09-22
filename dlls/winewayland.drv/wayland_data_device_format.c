@@ -23,10 +23,12 @@
 #include "waylanddrv.h"
 
 #include "wine/debug.h"
+#include "wine/unicode.h"
 
 #include "winternl.h"
 
 #include <errno.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(clipboard);
@@ -51,10 +53,47 @@ static void write_all(int fd, const void *buf, size_t count)
     }
 }
 
+static void *import_text_as_unicode(struct wayland_data_device_format *format,
+                                    const void *data, size_t data_size, size_t *ret_size)
+{
+    int wide_count;
+    void *ret;
+
+    wide_count = MultiByteToWideChar(format->extra, 0, data, data_size, NULL, 0);
+
+    if (!(ret = malloc((wide_count + 1) * sizeof(WCHAR))))
+        return NULL;
+
+    MultiByteToWideChar(CP_UTF8, 0, data, data_size, ret, wide_count);
+    ((WCHAR*)ret)[wide_count] = 0;
+
+    if (ret_size) *ret_size = (wide_count + 1) * sizeof(WCHAR);
+
+    return ret;
+}
+
+static void export_text(struct wayland_data_device_format *format, int fd, void *data, size_t size)
+{
+    int byte_count;
+    char *bytes;
+
+    byte_count = WideCharToMultiByte(format->extra, 0, data, -1, NULL, 0, NULL, NULL);
+    bytes = malloc(byte_count);
+    WideCharToMultiByte(format->extra, 0, data, -1, bytes, byte_count, NULL, NULL);
+    write_all(fd, bytes, byte_count);
+
+    free(bytes);
+}
+
+#define CP_ASCII 20127
+
 /* Order is important. When selecting a mime-type for a clipboard format we
  * will choose the first entry that matches the specified clipboard format. */
 static struct wayland_data_device_format supported_formats[] =
 {
+    {"text/plain;charset=utf-8", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_UTF8},
+    {"text/plain;charset=us-ascii", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_ASCII},
+    {"text/plain", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_ASCII},
     {NULL, 0, NULL, NULL, NULL, 0},
 };
 

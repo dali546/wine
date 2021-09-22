@@ -23,6 +23,8 @@
 #include "waylanddrv.h"
 
 #include "wine/debug.h"
+#include "wine/heap.h"
+#include "wine/unicode.h"
 
 #include "winuser.h"
 
@@ -51,10 +53,65 @@ static void write_all(int fd, const void *buf, size_t count)
     }
 }
 
+static HGLOBAL import_text_as_unicode(struct wayland_data_device_format *format,
+                                      const void *data, size_t data_size)
+{
+    int wide_count;
+    HGLOBAL mem_handle;
+    void *mem;
+
+    wide_count = MultiByteToWideChar(format->extra, 0, data, data_size, NULL, 0);
+    mem_handle = GlobalAlloc(GMEM_MOVEABLE, wide_count * sizeof(WCHAR) + 1);
+    if (!mem_handle || !(mem = GlobalLock(mem_handle)))
+    {
+        if (mem_handle) GlobalFree(mem_handle);
+        return NULL;
+    }
+
+    MultiByteToWideChar(CP_UTF8, 0, data, data_size, mem, wide_count);
+    ((unsigned char*)mem)[wide_count * sizeof(WCHAR)] = 0;
+    GlobalUnlock(mem_handle);
+
+    return mem_handle;
+}
+
+static void export_text(struct wayland_data_device_format *format, int fd)
+{
+    HGLOBAL mem_handle;
+    void *mem;
+    int byte_count;
+    char *bytes;
+
+    if (!OpenClipboard(thread_wayland()->clipboard_hwnd))
+    {
+        WARN("failed to open clipboard for export\n");
+        return;
+    }
+
+    mem_handle = GetClipboardData(format->clipboard_format);
+    mem = GlobalLock(mem_handle);
+
+    byte_count = WideCharToMultiByte(format->extra, 0, mem, -1, NULL, 0, NULL, NULL);
+    bytes = heap_alloc(byte_count);
+    WideCharToMultiByte(format->extra, 0, mem, -1, bytes, byte_count, NULL, NULL);
+    write_all(fd, bytes, byte_count);
+
+    heap_free(bytes);
+
+    GlobalUnlock(mem_handle);
+
+    CloseClipboard();
+}
+
+#define CP_ASCII 20127
+
 /* Order is important. When selecting a mime-type for a clipboard format we
  * will choose the first entry that matches the specified clipboard format. */
 static struct wayland_data_device_format supported_formats[] =
 {
+    {"text/plain;charset=utf-8", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_UTF8},
+    {"text/plain;charset=us-ascii", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_ASCII},
+    {"text/plain", CF_UNICODETEXT, NULL, import_text_as_unicode, export_text, CP_ASCII},
     {NULL, 0, NULL, 0},
 };
 

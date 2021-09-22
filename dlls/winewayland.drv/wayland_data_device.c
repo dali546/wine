@@ -487,6 +487,14 @@ static void clipboard_render_format(UINT clipboard_format)
     }
 }
 
+static void clipboard_destroy(void)
+{
+    struct wayland *wayland = thread_wayland();
+    struct wayland_data_device *data_device =
+        wl_data_device_get_user_data(wayland->data_device.wl_data_device);
+    wayland_data_device_destroy_clipboard_data_offer(data_device);
+}
+
 static LRESULT CALLBACK clipboard_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg)
@@ -501,6 +509,10 @@ static LRESULT CALLBACK clipboard_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
     case WM_RENDERFORMAT:
         TRACE("WM_RENDERFORMAT: %ld\n", wp);
         clipboard_render_format(wp);
+        break;
+    case WM_DESTROYCLIPBOARD:
+        TRACE("WM_DESTROYCLIPBOARD: lost ownership clipboard_hwnd=%p\n", hwnd);
+        clipboard_destroy();
         break;
     }
     return DefWindowProcW( hwnd, msg, wp, lp );

@@ -94,6 +94,7 @@ struct waylanddrv_client_load_cursor_params
 enum waylanddrv_client_dnd_event
 {
     CLIENT_DND_EVENT_ENTER,
+    CLIENT_DND_EVENT_LEAVE,
 };
 
 struct waylanddrv_client_dnd_params

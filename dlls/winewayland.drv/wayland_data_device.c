@@ -541,7 +541,38 @@ static void data_device_motion(void *data, struct wl_data_device *wl_data_device
 static void data_device_drop(void *data, struct wl_data_device *wl_data_device)
 {
     struct wayland_data_device *data_device = data;
+    struct wayland_data_offer *data_offer;
+    IDropTarget *drop_target;
+    POINT point;
+    DWORD drop_effect;
+    HRESULT hr;
 
+    if (!data_device->dnd_wl_data_offer || !data_device->dnd_surface)
+        goto out;
+
+    data_offer = wl_data_offer_get_user_data(data_device->dnd_wl_data_offer);
+
+    wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                     data_device->dnd_x, data_device->dnd_y,
+                                     &point.x, &point.y);
+
+    TRACE("surface=%p hwnd=%p source_actions=%x action=%x\n",
+          data_device->dnd_surface, data_device->dnd_surface->hwnd,
+          data_offer->source_actions, data_offer->action);
+
+    drop_target = drop_target_from_window_point(data_device->dnd_surface->hwnd,
+                                                point);
+    if (drop_target)
+    {
+        drop_effect = dnd_actions_to_drop_effect(data_offer->action);
+        hr = IDropTarget_Drop(drop_target, &data_offer->data_object, MK_LBUTTON,
+                              *(POINTL*)&point, &drop_effect);
+        IDropTarget_Release(drop_target);
+        if (SUCCEEDED(hr) && drop_effect != DROPEFFECT_NONE)
+            wl_data_offer_finish(data_device->dnd_wl_data_offer);
+    }
+
+out:
     wayland_data_device_destroy_dnd_data_offer(data_device);
 }
 

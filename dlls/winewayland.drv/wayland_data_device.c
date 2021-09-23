@@ -467,7 +467,29 @@ static void data_device_enter(void *data, struct wl_data_device *wl_data_device,
 static void data_device_leave(void *data, struct wl_data_device *wl_data_device)
 {
     struct wayland_data_device *data_device = data;
+    IDropTarget *drop_target;
+    POINT point;
 
+    TRACE("surface=%p hwnd=%p\n",
+          data_device->dnd_surface,
+          data_device->dnd_surface ? data_device->dnd_surface->hwnd : 0);
+
+    if (!data_device->dnd_wl_data_offer || !data_device->dnd_surface)
+        goto out;
+
+    wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                     data_device->dnd_x, data_device->dnd_y,
+                                     &point.x, &point.y);
+
+    drop_target = drop_target_from_window_point(data_device->dnd_surface->hwnd,
+                                                point);
+    if (drop_target)
+    {
+        IDropTarget_DragLeave(drop_target);
+        IDropTarget_Release(drop_target);
+    }
+
+out:
     wayland_data_device_destroy_dnd_data_offer(data_device);
 }
 

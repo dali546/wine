@@ -117,6 +117,10 @@ struct wayland_data_device
     struct wl_data_device *wl_data_device;
     struct wl_data_offer *clipboard_wl_data_offer;
     struct wl_data_offer *dnd_wl_data_offer;
+    uint32_t dnd_enter_serial;
+    struct wayland_surface *dnd_surface;
+    int dnd_x;
+    int dnd_y;
 };
 
 struct wayland_data_device_format

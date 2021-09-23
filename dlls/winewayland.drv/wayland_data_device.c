@@ -496,6 +496,46 @@ out:
 static void data_device_motion(void *data, struct wl_data_device *wl_data_device,
                                uint32_t time, wl_fixed_t x_w, wl_fixed_t y_w)
 {
+    struct wayland_data_device *data_device = data;
+    struct wayland_data_offer *data_offer;
+    IDropTarget *drop_target;
+    POINT point;
+    DWORD drop_effect;
+    HRESULT hr;
+
+    if (!data_device->dnd_wl_data_offer || !data_device->dnd_surface)
+        return;
+
+    data_offer = wl_data_offer_get_user_data(data_device->dnd_wl_data_offer);
+
+    data_device->dnd_x = wl_fixed_to_int(x_w);
+    data_device->dnd_y = wl_fixed_to_int(y_w);
+
+    wayland_surface_coords_to_screen(data_device->dnd_surface,
+                                     data_device->dnd_x, data_device->dnd_y,
+                                     &point.x, &point.y);
+
+    TRACE("surface=%p hwnd=%p source_actions=%x action=%x\n",
+          data_device->dnd_surface, data_device->dnd_surface->hwnd,
+          data_offer->source_actions, data_offer->action);
+
+    drop_target = drop_target_from_window_point(data_device->dnd_surface->hwnd,
+                                                point);
+    if (!drop_target)
+        return;
+
+    drop_effect = dnd_actions_to_drop_effect(data_offer->source_actions);
+    hr = IDropTarget_DragOver(drop_target, MK_LBUTTON, *(POINTL*)&point, &drop_effect);
+    IDropTarget_Release(drop_target);
+    if (FAILED(hr))
+        return;
+
+    wl_data_offer_set_actions(data_device->dnd_wl_data_offer,
+                              data_offer->source_actions,
+                              data_offer->action);
+    wl_data_offer_accept(data_device->dnd_wl_data_offer,
+                         data_device->dnd_enter_serial,
+                         data_offer->accepted_mime_type);
 }
 
 static void data_device_drop(void *data, struct wl_data_device *wl_data_device)

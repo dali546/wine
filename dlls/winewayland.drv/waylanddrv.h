@@ -667,6 +667,8 @@ BOOL wayland_remote_surface_proxy_dispatch_events(struct wayland_remote_surface_
 
 int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
 void wayland_get_client_rect_in_win_coords(HWND hwnd, RECT *client_rect) DECLSPEC_HIDDEN;
+void dump_pixels(const char *fpattern, int dbgid, unsigned int *pixels, int width, int height,
+                 BOOL alpha, HRGN damage, HRGN win_region) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          USER32 helpers

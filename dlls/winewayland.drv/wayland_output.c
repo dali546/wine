@@ -234,6 +234,11 @@ static void wayland_output_update_physical_coords(struct wayland_output *output)
     output->x = output->logical_x;
     output->y = output->logical_y;
 
+    /* When compositor scaling is used, we treat logical coordinates as
+     * physical. */
+    if (output->wayland->hidpi_scaling == WAYLAND_HIDPI_SCALING_COMPOSITOR)
+        return;
+
     /* Update output->x,y based on other outputs that are to
      * to the left or above. */
     wl_list_for_each(o, &output->wayland->output_list, link)
@@ -293,6 +298,17 @@ static void wayland_output_done(struct wayland_output *output)
 
     TRACE("output->name=%s\n", output->name);
 
+    /* When compositor scaling is used, the current and only native mode
+     * corresponds to the logical width and height. */
+    if (output->wayland->hidpi_scaling == WAYLAND_HIDPI_SCALING_COMPOSITOR)
+    {
+        int32_t current_refresh =
+            output->current_mode ? output->current_mode->refresh : 60000;
+        wayland_output_clear_modes(output);
+        wayland_output_add_mode_all_bpp(output, output->logical_w, output->logical_h,
+                                        current_refresh, TRUE, TRUE);
+    }
+
     wayland_output_add_default_modes(output);
     wayland_output_update_physical_coords(output);
 
@@ -333,6 +349,12 @@ static void output_handle_mode(void *data, struct wl_output *wl_output,
 {
     struct wayland_output *output = data;
 
+    /* When compositor scaling is used, we don't use physical width/height
+     * for modes and the current mode will be set based on logical width
+     * and height (see wayland_output_handle()). */
+    if (output->wayland->hidpi_scaling == WAYLAND_HIDPI_SCALING_COMPOSITOR)
+        return;
+
     wayland_output_add_mode_all_bpp(output, width, height, refresh,
                                     (flags & WL_OUTPUT_MODE_CURRENT),
                                     TRUE);
@@ -353,7 +375,10 @@ static void output_handle_scale(void *data, struct wl_output *wl_output,
 {
     struct wayland_output *output = data;
     TRACE("output=%p scale=%d\n", output, scale);
-    output->scale = scale;
+    /* When compositor scaling is used, we ignore the output scale, to
+     * allow the the compositor to scale us. */
+    if (output->wayland->hidpi_scaling != WAYLAND_HIDPI_SCALING_COMPOSITOR)
+        output->scale = scale;
 }
 
 static const struct wl_output_listener output_listener = {

@@ -87,6 +87,12 @@ enum wayland_pointer_confinement
     WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP,
 };
 
+enum wayland_hidpi_scaling
+{
+    WAYLAND_HIDPI_SCALING_APPLICATION,
+    WAYLAND_HIDPI_SCALING_COMPOSITOR,
+};
+
 /**********************************************************************
  *          Definitions for wayland types
  */
@@ -189,6 +195,7 @@ struct wayland
     int event_notification_pipe[2];
     HWND clipboard_hwnd;
     RECT cursor_clip;
+    enum wayland_hidpi_scaling hidpi_scaling;
 };
 
 struct wayland_output_mode

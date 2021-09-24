@@ -139,6 +139,8 @@ static BOOL process_attach(void)
 
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
 
+    wayland_read_options_from_registry();
+
     if (!wayland_init_set_cursor()) return FALSE;
 
     if (!wayland_process_init()) return FALSE;

@@ -251,6 +251,8 @@ BOOL wayland_init(struct wayland *wayland)
     }
     wl_proxy_set_queue((struct wl_proxy *) wayland->wl_registry, wayland->wl_event_queue);
 
+    wayland->hidpi_scaling = WAYLAND_HIDPI_SCALING_APPLICATION;
+
     wl_list_init(&wayland->output_list);
     wl_list_init(&wayland->toplevel_list);
 

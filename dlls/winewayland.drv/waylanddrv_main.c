@@ -135,6 +135,8 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
      * our initialization. We clear them on error. */
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
 
+    wayland_read_options_from_registry();
+
     if (!wayland_init_set_cursor()) goto err;
 
     if (!wayland_process_init()) goto err;

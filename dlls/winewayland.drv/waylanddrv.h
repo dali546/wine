@@ -51,6 +51,7 @@
 
 extern struct wl_display *process_wl_display;
 extern const struct user_driver_funcs waylanddrv_funcs;
+extern enum wayland_hidpi_scaling option_hidpi_scaling;
 extern BOOL option_use_system_cursors;
 
 /**********************************************************************
@@ -91,6 +92,12 @@ enum wayland_pointer_confinement
     WAYLAND_POINTER_CONFINEMENT_RETAIN_CLIP,
     WAYLAND_POINTER_CONFINEMENT_SYSTEM_CLIP,
     WAYLAND_POINTER_CONFINEMENT_UNSET_CLIP,
+};
+
+enum wayland_hidpi_scaling
+{
+    WAYLAND_HIDPI_SCALING_APPLICATION,
+    WAYLAND_HIDPI_SCALING_COMPOSITOR,
 };
 
 /**********************************************************************

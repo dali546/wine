@@ -607,6 +607,8 @@ int _xkb_keysyms_to_utf8(const xkb_keysym_t *syms, int nsyms, char *utf8, int ut
 
 int wayland_shmfd_create(const char *name, int size);
 void wayland_get_client_rect_in_win_coords(HWND hwnd, RECT *client_rect);
+void dump_pixels(const char *fpattern, int dbgid, unsigned int *pixels, int width, int height,
+                 BOOL alpha, HRGN damage, HRGN win_region);
 
 /**********************************************************************
  *          USER driver functions

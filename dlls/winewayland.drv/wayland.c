@@ -265,6 +265,7 @@ BOOL wayland_init(struct wayland *wayland)
     }
 
     wayland->hidpi_scaling = WAYLAND_HIDPI_SCALING_APPLICATION;
+    wayland_read_options_from_registry(wayland);
 
     wl_list_init(&wayland->output_list);
     wl_list_init(&wayland->toplevel_list);

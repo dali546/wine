@@ -12,6 +12,7 @@ EXTRADLLFLAGS = -mcygwin
 
 C_SRCS = \
 	display.c \
+	options.c \
 	registry.c \
 	wayland.c \
 	wayland_buffer_queue.c \

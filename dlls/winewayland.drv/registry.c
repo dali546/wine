@@ -60,6 +60,50 @@ HKEY reg_open_key_w(HKEY root, const WCHAR *nameW)
     return NtOpenKeyEx(&ret, MAXIMUM_ALLOWED, &attr, 0) ? 0 : ret;
 }
 
+/**********************************************************************
+ *          reg_open_hkcu_key_a
+ *
+ *  Open a registry key under HKCU with the specified ASCII name.
+ */
+HKEY reg_open_hkcu_key_a(const char *name)
+{
+    static HKEY hkcu;
+
+    if (!hkcu)
+    {
+        char buffer[256];
+        DWORD_PTR sid_data[(sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE) / sizeof(DWORD_PTR)];
+        DWORD i, len = sizeof(sid_data);
+        SID *sid;
+
+        if (NtQueryInformationToken(GetCurrentThreadEffectiveToken(), TokenUser, sid_data,
+                                    len, &len))
+        {
+            return 0;
+        }
+
+        sid = ((TOKEN_USER *)sid_data)->User.Sid;
+        len = snprintf(buffer, ARRAY_SIZE(buffer), "\\Registry\\User\\S-%u-%u",
+                       sid->Revision,
+                       MAKELONG(MAKEWORD(sid->IdentifierAuthority.Value[5],
+                                         sid->IdentifierAuthority.Value[4]),
+                                MAKEWORD(sid->IdentifierAuthority.Value[3],
+                                         sid->IdentifierAuthority.Value[2])));
+        if (len >= ARRAY_SIZE(buffer)) return 0;
+
+        for (i = 0; i < sid->SubAuthorityCount; i++)
+        {
+            len += snprintf(buffer + len, ARRAY_SIZE(buffer) - len, "-%u",
+                            sid->SubAuthority[i]);
+            if (len >= ARRAY_SIZE(buffer)) return 0;
+        }
+
+        hkcu = reg_open_key_a(NULL, buffer);
+    }
+
+    return reg_open_key_a(hkcu, name);
+}
+
 static DWORD reg_get_value_info(HKEY hkey, const WCHAR *nameW, ULONG type,
                                 KEY_VALUE_PARTIAL_INFORMATION *info,
                                 ULONG info_size)

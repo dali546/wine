@@ -333,6 +333,7 @@ BOOL wayland_is_process(struct wayland *wayland);
 struct wayland *wayland_process_acquire(void);
 void wayland_process_release(void);
 void wayland_init_display_devices(void);
+void wayland_read_options_from_registry(struct wayland *wayland);
 
 /**********************************************************************
  *          Wayland output

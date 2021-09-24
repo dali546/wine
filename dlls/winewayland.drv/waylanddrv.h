@@ -253,6 +253,7 @@ BOOL wayland_is_process(struct wayland *wayland) DECLSPEC_HIDDEN;
 struct wayland *wayland_process_acquire(void) DECLSPEC_HIDDEN;
 void wayland_process_release(void) DECLSPEC_HIDDEN;
 void wayland_init_display_devices(void) DECLSPEC_HIDDEN;
+void wayland_read_options_from_registry(void) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Wayland mutex
@@ -381,6 +382,7 @@ void wayland_set_cursor_if_current_invalid(HCURSOR hcursor) DECLSPEC_HIDDEN;
 
 HKEY reg_open_key_a(HKEY root, const char *name) DECLSPEC_HIDDEN;
 HKEY reg_open_key_w(HKEY root, const WCHAR *nameW) DECLSPEC_HIDDEN;
+HKEY reg_open_hkcu_key_a(const char *name) DECLSPEC_HIDDEN;
 DWORD reg_get_value_a(HKEY hkey, const char *name, ULONG type, char *buffer,
                       DWORD *buffer_len) DECLSPEC_HIDDEN;
 DWORD reg_get_value_w(HKEY hkey, const WCHAR *nameW, ULONG type, char *buffer,

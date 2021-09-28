@@ -118,6 +118,7 @@ struct wayland_surface
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *xdg_toplevel;
     struct wayland_surface *parent;
+    CRITICAL_SECTION crit;
     struct wayland_surface_configure pending;
     struct wayland_surface_configure current;
     LONG ref;
@@ -214,6 +215,12 @@ struct wayland_surface *wayland_surface_create_toplevel(struct wayland *wayland,
                                                         struct wayland_surface *parent);
 struct wayland_surface *wayland_surface_create_subsurface(struct wayland *wayland,
                                                           struct wayland_surface *parent);
+BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *conf,
+                                             int width, int height,
+                                             enum wayland_configure_flags flags);
+void wayland_surface_commit_buffer(struct wayland_surface *surface,
+                                   struct wayland_shm_buffer *shm_buffer,
+                                   HRGN surface_damage_region);
 void wayland_surface_destroy(struct wayland_surface *surface);
 void wayland_surface_ack_pending_configure(struct wayland_surface *surface);
 void wayland_surface_coords_from_wine(struct wayland_surface *surface,

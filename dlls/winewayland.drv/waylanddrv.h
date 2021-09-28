@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <wayland-client.h>
 #include "xdg-output-unstable-v1-client-protocol.h"
+#include "xdg-shell-client-protocol.h"
 
 #include "windef.h"
 #include "winbase.h"
@@ -49,6 +50,8 @@ struct wayland
     struct wl_event_queue *buffer_wl_event_queue;
     struct wl_registry *wl_registry;
     struct wl_compositor *wl_compositor;
+    struct wl_subcompositor *wl_subcompositor;
+    struct xdg_wm_base *xdg_wm_base;
     struct wl_shm *wl_shm;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
@@ -80,6 +83,17 @@ struct wayland_output
     char *name;
     WCHAR wine_name[128];
     uint32_t global_id;
+};
+
+struct wayland_surface
+{
+    struct wayland *wayland;
+    struct wl_surface *wl_surface;
+    struct wl_subsurface *wl_subsurface;
+    struct xdg_surface *xdg_surface;
+    struct xdg_toplevel *xdg_toplevel;
+    struct wayland_surface *parent;
+    LONG ref;
 };
 
 struct wayland_buffer_queue
@@ -164,6 +178,19 @@ struct wayland_buffer_queue *wayland_buffer_queue_create(struct wayland *wayland
 void wayland_buffer_queue_destroy(struct wayland_buffer_queue *queue);
 void wayland_buffer_queue_add_damage(struct wayland_buffer_queue *queue, HRGN damage);
 struct wayland_shm_buffer *wayland_buffer_queue_acquire_buffer(struct wayland_buffer_queue *queue);
+
+/**********************************************************************
+ *          Wayland surface
+ */
+
+struct wayland_surface *wayland_surface_create_plain(struct wayland *wayland);
+struct wayland_surface *wayland_surface_create_toplevel(struct wayland *wayland,
+                                                        struct wayland_surface *parent);
+struct wayland_surface *wayland_surface_create_subsurface(struct wayland *wayland,
+                                                          struct wayland_surface *parent);
+void wayland_surface_destroy(struct wayland_surface *surface);
+struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
+void wayland_surface_unref(struct wayland_surface *surface);
 
 /**********************************************************************
  *          Wayland SHM buffer

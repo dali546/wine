@@ -118,6 +118,7 @@ struct wayland_surface
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *xdg_toplevel;
     struct wayland_surface *parent;
+    HWND hwnd;
     CRITICAL_SECTION crit;
     struct wayland_surface_configure pending;
     struct wayland_surface_configure current;

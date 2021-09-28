@@ -226,6 +226,12 @@ void wayland_surface_make_subsurface(struct wayland_surface *surface,
                                      struct wayland_surface *parent);
 void wayland_surface_destroy(struct wayland_surface *surface);
 void wayland_surface_ack_pending_configure(struct wayland_surface *surface);
+void wayland_surface_coords_from_wine(struct wayland_surface *surface,
+                                      int wine_x, int wine_y,
+                                      double *wayland_x, double *wayland_y);
+void wayland_surface_coords_rounded_from_wine(struct wayland_surface *surface,
+                                              int wine_x, int wine_y,
+                                              int *wayland_x, int *wayland_y);
 struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
 

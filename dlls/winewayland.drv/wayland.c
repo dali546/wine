@@ -30,6 +30,19 @@ WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 struct wl_display *process_wl_display = NULL;
 
 /**********************************************************************
+ *          xdg_wm_base handling
+ */
+
+static void xdg_wm_base_ping(void *data, struct xdg_wm_base *shell, uint32_t serial)
+{
+    xdg_wm_base_pong(shell, serial);
+}
+
+static const struct xdg_wm_base_listener xdg_wm_base_listener = {
+    xdg_wm_base_ping,
+};
+
+/**********************************************************************
  *          Registry handling
  */
 
@@ -45,6 +58,17 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     {
         wayland->wl_compositor =
             wl_registry_bind(registry, id, &wl_compositor_interface, 4);
+    }
+    else if (strcmp(interface, "wl_subcompositor") == 0)
+    {
+        wayland->wl_subcompositor =
+            wl_registry_bind(registry, id, &wl_subcompositor_interface, 1);
+    }
+    else if (strcmp(interface, "xdg_wm_base") == 0)
+    {
+        wayland->xdg_wm_base = wl_registry_bind(registry, id,
+                &xdg_wm_base_interface, 1);
+        xdg_wm_base_add_listener(wayland->xdg_wm_base, &xdg_wm_base_listener, wayland);
     }
     else if (strcmp(interface, "wl_shm") == 0)
     {
@@ -168,6 +192,12 @@ void wayland_deinit(struct wayland *wayland)
 
     if (wayland->zxdg_output_manager_v1)
         zxdg_output_manager_v1_destroy(wayland->zxdg_output_manager_v1);
+
+    if (wayland->xdg_wm_base)
+        xdg_wm_base_destroy(wayland->xdg_wm_base);
+
+    if (wayland->wl_subcompositor)
+        wl_subcompositor_destroy(wayland->wl_subcompositor);
 
     if (wayland->wl_compositor)
         wl_compositor_destroy(wayland->wl_compositor);

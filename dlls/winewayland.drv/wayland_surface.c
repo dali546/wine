@@ -52,8 +52,14 @@ void wayland_surface_ack_pending_configure(struct wayland_surface *surface)
           surface->pending.serial, surface->pending.width,
           surface->pending.height, surface->pending.configure_flags);
 
+    /* Guard setting current config, so that we only commit acceptable
+     * buffers. Also see wayland_surface_commit_buffer(). */
+    EnterCriticalSection(&surface->crit);
+
     surface->current = surface->pending;
     xdg_surface_ack_configure(surface->xdg_surface, surface->current.serial);
+
+    LeaveCriticalSection(&surface->crit);
 
     memset(&surface->pending, 0, sizeof(surface->pending));
 }
@@ -116,6 +122,9 @@ static struct wayland_surface *wayland_surface_create_common(struct wayland *way
     surface = heap_alloc_zero(sizeof(*surface));
     if (!surface)
         goto err;
+
+    InitializeCriticalSection(&surface->crit);
+    surface->crit.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": wayland_surface");
 
     surface->wayland = wayland;
 
@@ -240,6 +249,117 @@ err:
     return NULL;
 }
 
+static RGNDATA *get_region_data(HRGN region)
+{
+    RGNDATA *data = NULL;
+    DWORD size;
+
+    if (!(size = GetRegionData(region, 0, NULL))) goto err;
+    if (!(data = heap_alloc_zero(size))) goto err;
+
+    if (!GetRegionData(region, size, data)) goto err;
+
+    return data;
+
+err:
+    heap_free(data);
+    return NULL;
+}
+
+/**********************************************************************
+ *          wayland_surface_configure_is_compatible
+ *
+ * Checks whether a wayland_surface_configure object is compatible with the
+ * the provided arguments.
+ *
+ * If flags is zero, only the width and height are checked for compatibility,
+ * otherwise, the configure objects flags must also match the passed flags.
+ */
+BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *conf,
+                                             int width, int height,
+                                             enum wayland_configure_flags flags)
+{
+    BOOL compat_flags = flags ? (flags & conf->configure_flags) : TRUE;
+    BOOL compat_with_max =
+        !(conf->configure_flags & WAYLAND_CONFIGURE_FLAG_MAXIMIZED) ||
+        (width == conf->width && height == conf->height);
+    BOOL compat_with_full =
+        !(conf->configure_flags & WAYLAND_CONFIGURE_FLAG_FULLSCREEN) ||
+        (width <= conf->width && height <= conf->height);
+
+    return compat_flags && compat_with_max && compat_with_full;
+}
+
+/**********************************************************************
+ *          wayland_surface_commit_buffer
+ *
+ * Commits a SHM buffer on a wayland surface.
+ */
+void wayland_surface_commit_buffer(struct wayland_surface *surface,
+                                   struct wayland_shm_buffer *shm_buffer,
+                                   HRGN surface_damage_region)
+{
+    RGNDATA *surface_damage;
+    int wayland_width, wayland_height;
+
+    /* Since multiple threads can commit a buffer to a wayland surface
+     * (e.g., child windows in different threads), we guard this function
+     * to ensure we don't commit buffers that are not acceptable by the
+     * compositor (see below, and also wayland_surface_ack_configure()). */
+    EnterCriticalSection(&surface->crit);
+
+    TRACE("surface=%p (%dx%d) flags=%#x buffer=%p (%dx%d)\n", surface,
+            surface->current.width, surface->current.height,
+            surface->current.configure_flags,
+            shm_buffer, shm_buffer->width, shm_buffer->height);
+
+    wayland_surface_coords_rounded_from_wine(surface,
+                                             shm_buffer->width, shm_buffer->height,
+                                             &wayland_width, &wayland_height);
+
+    /* Maximized surfaces are very strict about the dimensions of buffers
+     * they accept. To avoid wayland protocol errors, drop buffers not matching
+     * the expected dimensions of maximized surfaces. This typically happens
+     * transiently during resizing operations. */
+    if (!wayland_surface_configure_is_compatible(&surface->current,
+                                                 wayland_width,
+                                                 wayland_height,
+                                                 surface->current.configure_flags))
+    {
+        LeaveCriticalSection(&surface->crit);
+        TRACE("surface=%p buffer=%p dropping buffer\n", surface, shm_buffer);
+        shm_buffer->busy = FALSE;
+        return;
+    }
+
+    wl_surface_attach(surface->wl_surface, shm_buffer->wl_buffer, 0, 0);
+
+    /* Add surface damage, i.e., which parts of the surface have changed since
+     * the last surface commit. Note that this is different from the buffer
+     * damage returned by wayland_shm_buffer_get_damage(). */
+    surface_damage = get_region_data(surface_damage_region);
+    if (surface_damage)
+    {
+        RECT *rgn_rect = (RECT *)surface_damage->Buffer;
+        RECT *rgn_rect_end = rgn_rect + surface_damage->rdh.nCount;
+
+        for (;rgn_rect < rgn_rect_end; rgn_rect++)
+        {
+            wl_surface_damage_buffer(surface->wl_surface,
+                                     rgn_rect->left, rgn_rect->top,
+                                     rgn_rect->right - rgn_rect->left,
+                                     rgn_rect->bottom - rgn_rect->top);
+        }
+        heap_free(surface_damage);
+    }
+
+    wl_surface_commit(surface->wl_surface);
+
+    LeaveCriticalSection(&surface->crit);
+
+    wl_display_flush(surface->wayland->wl_display);
+}
+
 /**********************************************************************
  *          wayland_surface_destroy
  *
@@ -278,6 +398,9 @@ void wayland_surface_destroy(struct wayland_surface *surface)
         wayland_surface_unref(surface->parent);
         surface->parent = NULL;
     }
+
+    surface->crit.DebugInfo->Spare[0] = 0;
+    DeleteCriticalSection(&surface->crit);
 
     wl_display_flush(surface->wayland->wl_display);
 

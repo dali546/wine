@@ -124,6 +124,9 @@ struct wayland_surface *wayland_surface_create_plain(struct wayland *wayland)
 
     TRACE("surface=%p\n", surface);
 
+    InitializeCriticalSection(&surface->crit);
+    surface->crit.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": wayland_surface");
+
     surface->wayland = wayland;
 
     surface->wl_surface = wl_compositor_create_surface(wayland->wl_compositor);
@@ -258,6 +261,95 @@ BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *c
     return TRUE;
 }
 
+static RGNDATA *get_region_data(HRGN region)
+{
+    RGNDATA *data = NULL;
+    DWORD size;
+
+    if (!(size = GetRegionData(region, 0, NULL))) goto err;
+    if (!(data = heap_alloc_zero(size))) goto err;
+
+    if (!GetRegionData(region, size, data)) goto err;
+
+    return data;
+
+err:
+    heap_free(data);
+    return NULL;
+}
+
+/**********************************************************************
+ *          wayland_surface_commit_buffer
+ *
+ * Commits a SHM buffer on a wayland surface. Returns whether the
+ * buffer was actually committed.
+ */
+BOOL wayland_surface_commit_buffer(struct wayland_surface *surface,
+                                   struct wayland_shm_buffer *shm_buffer,
+                                   HRGN surface_damage_region)
+{
+    RGNDATA *surface_damage;
+    int wayland_width, wayland_height;
+
+    /* Since multiple threads can commit a buffer to a wayland surface
+     * (e.g., child windows in different threads), we guard this function
+     * to ensure we get complete and atomic buffer commits. */
+    EnterCriticalSection(&surface->crit);
+
+    TRACE("surface=%p (%dx%d) flags=%#x buffer=%p (%dx%d)\n",
+          surface, surface->current.width, surface->current.height,
+          surface->current.configure_flags, shm_buffer,
+          shm_buffer->width, shm_buffer->height);
+
+    wayland_surface_coords_rounded_from_wine(surface,
+                                             shm_buffer->width, shm_buffer->height,
+                                             &wayland_width, &wayland_height);
+
+    /* Certain surface states are very strict about the dimensions of buffers
+     * they accept. To avoid wayland protocol errors, drop buffers not matching
+     * the expected dimensions of such surfaces. This typically happens
+     * transiently during resizing operations. */
+    if (!wayland_surface_configure_is_compatible(&surface->current,
+                                                 wayland_width,
+                                                 wayland_height,
+                                                 surface->current.configure_flags))
+    {
+        LeaveCriticalSection(&surface->crit);
+        TRACE("surface=%p buffer=%p dropping buffer\n", surface, shm_buffer);
+        shm_buffer->busy = FALSE;
+        return FALSE;
+    }
+
+    wl_surface_attach(surface->wl_surface, shm_buffer->wl_buffer, 0, 0);
+
+    /* Add surface damage, i.e., which parts of the surface have changed since
+     * the last surface commit. Note that this is different from the buffer
+     * damage returned by wayland_shm_buffer_get_damage(). */
+    surface_damage = get_region_data(surface_damage_region);
+    if (surface_damage)
+    {
+        RECT *rgn_rect = (RECT *)surface_damage->Buffer;
+        RECT *rgn_rect_end = rgn_rect + surface_damage->rdh.nCount;
+
+        for (;rgn_rect < rgn_rect_end; rgn_rect++)
+        {
+            wl_surface_damage_buffer(surface->wl_surface,
+                                     rgn_rect->left, rgn_rect->top,
+                                     rgn_rect->right - rgn_rect->left,
+                                     rgn_rect->bottom - rgn_rect->top);
+        }
+        heap_free(surface_damage);
+    }
+
+    wl_surface_commit(surface->wl_surface);
+
+    LeaveCriticalSection(&surface->crit);
+
+    wl_display_flush(surface->wayland->wl_display);
+
+    return TRUE;
+}
+
 /**********************************************************************
  *          wayland_surface_destroy
  *
@@ -296,6 +388,9 @@ void wayland_surface_destroy(struct wayland_surface *surface)
         wayland_surface_unref(surface->parent);
         surface->parent = NULL;
     }
+
+    surface->crit.DebugInfo->Spare[0] = 0;
+    DeleteCriticalSection(&surface->crit);
 
     wl_display_flush(surface->wayland->wl_display);
 

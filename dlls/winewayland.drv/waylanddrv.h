@@ -144,6 +144,7 @@ struct wayland_surface
     struct xdg_surface *xdg_surface;
     struct xdg_toplevel *xdg_toplevel;
     struct wayland_surface *parent;
+    struct wayland_mutex mutex;
     struct wayland_surface_configure pending;
     struct wayland_surface_configure current;
     LONG ref;
@@ -224,6 +225,9 @@ void wayland_init_display_devices(void) DECLSPEC_HIDDEN;
  *          Wayland mutex
  */
 
+void wayland_mutex_init(struct wayland_mutex *wayland_mutex, int kind,
+                        const char *name) DECLSPEC_HIDDEN;
+void wayland_mutex_destroy(struct wayland_mutex *wayland_mutex) DECLSPEC_HIDDEN;
 void wayland_mutex_lock(struct wayland_mutex *wayland_mutex) DECLSPEC_HIDDEN;
 void wayland_mutex_unlock(struct wayland_mutex *wayland_mutex) DECLSPEC_HIDDEN;
 
@@ -257,6 +261,9 @@ void wayland_surface_make_subsurface(struct wayland_surface *surface,
 BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *conf,
                                              int width, int height,
                                              enum wayland_configure_flags flags) DECLSPEC_HIDDEN;
+BOOL wayland_surface_commit_buffer(struct wayland_surface *surface,
+                                   struct wayland_shm_buffer *shm_buffer,
+                                   HRGN surface_damage_region) DECLSPEC_HIDDEN;
 void wayland_surface_destroy(struct wayland_surface *surface) DECLSPEC_HIDDEN;
 void wayland_surface_ack_pending_configure(struct wayland_surface *surface) DECLSPEC_HIDDEN;
 void wayland_surface_coords_from_wine(struct wayland_surface *surface,

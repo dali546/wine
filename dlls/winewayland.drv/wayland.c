@@ -50,6 +50,39 @@ static struct wayland_mutex thread_wayland_mutex =
 static struct wl_list thread_wayland_list = {&thread_wayland_list, &thread_wayland_list};
 
 /**********************************************************************
+ *          wayland_mutex_init
+ *
+ * Initialize a wayland_mutex.
+ */
+void wayland_mutex_init(struct wayland_mutex *wayland_mutex, int kind,
+                        const char *name)
+{
+    pthread_mutexattr_t mutexattr;
+
+    pthread_mutexattr_init(&mutexattr);
+    pthread_mutexattr_settype(&mutexattr, kind);
+    pthread_mutex_init(&wayland_mutex->mutex, &mutexattr);
+    pthread_mutexattr_destroy(&mutexattr);
+
+    wayland_mutex->owner_tid = 0;
+    wayland_mutex->lock_count = 0;
+    wayland_mutex->name = name;
+}
+
+/**********************************************************************
+ *          wayland_mutex_destroy
+ *
+ * Destroys a wayland_mutex.
+ */
+void wayland_mutex_destroy(struct wayland_mutex *wayland_mutex)
+{
+    pthread_mutex_destroy(&wayland_mutex->mutex);
+    wayland_mutex->owner_tid = 0;
+    wayland_mutex->lock_count = 0;
+    wayland_mutex->name = NULL;
+}
+
+/**********************************************************************
  *          wayland_mutex_lock
  *
  *  Lock a mutex, emitting error messages in cases of suspected deadlock.

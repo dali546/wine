@@ -354,6 +354,7 @@ void wayland_surface_commit_buffer(struct wayland_surface *surface,
     }
 
     wl_surface_commit(surface->wl_surface);
+    surface->mapped = TRUE;
 
     LeaveCriticalSection(&surface->crit);
 
@@ -405,6 +406,22 @@ void wayland_surface_destroy(struct wayland_surface *surface)
     wl_display_flush(surface->wayland->wl_display);
 
     heap_free(surface);
+}
+
+/**********************************************************************
+ *          wayland_surface_unmap
+ *
+ * Unmaps (i.e., hides) this surface.
+ */
+void wayland_surface_unmap(struct wayland_surface *surface)
+{
+    EnterCriticalSection(&surface->crit);
+
+    wl_surface_attach(surface->wl_surface, NULL, 0, 0);
+    wl_surface_commit(surface->wl_surface);
+    surface->mapped = FALSE;
+
+    LeaveCriticalSection(&surface->crit);
 }
 
 /**********************************************************************

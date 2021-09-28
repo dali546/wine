@@ -16,9 +16,11 @@ C_SRCS = \
 	waylanddrv_main.c \
 	wayland_buffer_queue.c \
 	wayland_shm.c \
+	wayland_surface.c \
 	window.c \
 
 WAYLAND_PROTOCOL_SRCS = \
+	$(WAYLAND_PROTOCOLS_DATADIR)/stable/xdg-shell/xdg-shell.xml \
 	$(WAYLAND_PROTOCOLS_DATADIR)/unstable/xdg-output/xdg-output-unstable-v1.xml \
 
 RC_SRCS = version.rc

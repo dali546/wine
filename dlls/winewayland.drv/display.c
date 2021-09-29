@@ -304,3 +304,150 @@ BOOL WAYLAND_GetCurrentDisplaySettings(LPCWSTR name, LPDEVMODEW devmode)
 
     return ret;
 }
+
+static struct wayland_output_mode *get_matching_output_mode_32bpp(struct wayland_output *output,
+                                                                  LPDEVMODEW devmode)
+{
+    struct wayland_output_mode *output_mode;
+    DEVMODEW full_mode;
+
+    if (output->current_wine_mode)
+        populate_devmode(output->current_wine_mode, &full_mode);
+    else
+        populate_devmode(output->current_mode, &full_mode);
+
+    if (devmode->dmFields & DM_PELSWIDTH)
+        full_mode.dmPelsWidth = devmode->dmPelsWidth;
+    if (devmode->dmFields & DM_PELSHEIGHT)
+        full_mode.dmPelsHeight = devmode->dmPelsHeight;
+    if (devmode->dmFields & DM_BITSPERPEL)
+        full_mode.dmBitsPerPel = devmode->dmBitsPerPel;
+
+    wl_list_for_each(output_mode, &output->mode_list, link)
+    {
+        if (full_mode.dmPelsWidth == output_mode->width &&
+            full_mode.dmPelsHeight == output_mode->height &&
+            output_mode->bpp == 32)
+        {
+            return output_mode;
+        }
+    }
+
+    return NULL;
+}
+
+static BOOL wayland_restore_all_outputs(struct wayland *wayland)
+{
+    struct wayland_output *output;
+
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        struct wayland_output_mode *output_mode = NULL;
+        DEVMODEW devmode;
+        UNICODE_STRING device;
+
+        RtlInitUnicodeString(&device, output->wine_name);
+
+        if (NtUserEnumDisplaySettings(&device, ENUM_REGISTRY_SETTINGS, &devmode, 0))
+            output_mode = get_matching_output_mode_32bpp(output, &devmode);
+        else
+            output_mode = output->current_mode;
+
+        if (!output_mode)
+            return FALSE;
+
+        if (output_mode != output->current_wine_mode)
+        {
+            wayland_output_set_wine_mode(output, output_mode->width,
+                                         output_mode->height);
+        }
+    }
+
+    return TRUE;
+}
+
+/***********************************************************************
+ *		ChangeDisplaySettingsEx  (WAYLAND.@)
+ *
+ */
+LONG WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
+                                     HWND hwnd, DWORD flags, LPVOID lpvoid)
+{
+    LONG ret;
+    struct wayland *wayland = wayland_process_acquire();
+    struct wayland_output *output;
+    struct wayland_output_mode *output_mode;
+
+    TRACE("(%s,%p,%p,0x%08x,%p) %dx%d@%d wayland=%p\n",
+          debugstr_w(devname), devmode, hwnd, flags, lpvoid,
+          devmode ? devmode->dmPelsWidth : -1,
+          devmode ? devmode->dmPelsHeight : -1,
+          devmode ? devmode->dmDisplayFrequency : -1, wayland);
+
+    if (devname && devmode)
+    {
+        DEVMODEW full_mode;
+
+        output = wayland_output_get_by_wine_name(wayland, devname);
+        if (!output)
+        {
+            ret = DISP_CHANGE_BADPARAM;
+            goto out;
+        }
+
+        output_mode = get_matching_output_mode_32bpp(output, devmode);
+        if (!output_mode)
+        {
+            ret = DISP_CHANGE_BADMODE;
+            goto out;
+        }
+
+        populate_devmode(output_mode, &full_mode);
+    }
+
+    /* We don't handle the CDS_UPDATEREGISTRY flag here, it is handled by win32u. */
+
+    if (flags & (CDS_TEST | CDS_NORESET))
+    {
+        ret = DISP_CHANGE_SUCCESSFUL;
+        goto out;
+    }
+
+    if (devname && devmode)
+    {
+        wayland_output_set_wine_mode(output, output_mode->width, output_mode->height);
+    }
+    else
+    {
+        if (!wayland_restore_all_outputs(wayland))
+        {
+            ret = DISP_CHANGE_BADMODE;
+            goto out;
+        }
+    }
+
+    wayland_refresh_display_devices();
+
+    /* Release the wayland process instance lock to avoid potential deadlocks
+     * while notifying other thread instances below. */
+    wayland_process_release();
+
+    wayland_notify_wine_monitor_change();
+    wayland_broadcast_wm_display_change();
+
+    if (devname && devmode)
+    {
+        TRACE("set current wine mode %dx%d wine_scale %f\n",
+              output_mode->width, output_mode->height, output->wine_scale);
+    }
+    else
+    {
+        TRACE("restored all outputs to registry (or native) settings\n");
+    }
+
+    return DISP_CHANGE_SUCCESSFUL;
+
+out:
+    wayland_process_release();
+    return ret;
+}

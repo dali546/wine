@@ -1,5 +1,6 @@
 # USER driver
 
+@ cdecl ChangeDisplaySettingsEx(ptr ptr long long long) WAYLAND_ChangeDisplaySettingsEx
 @ cdecl CreateWindow(long) WAYLAND_CreateWindow
 @ cdecl DestroyWindow(long) WAYLAND_DestroyWindow
 @ cdecl EnumDisplaySettingsEx(ptr long ptr long) WAYLAND_EnumDisplaySettingsEx

@@ -45,6 +45,14 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
+#ifndef EGL_GL_COLORSPACE
+#define EGL_GL_COLORSPACE 0x309D
+#endif
+
+#ifndef EGL_GL_COLORSPACE_SRGB
+#define EGL_GL_COLORSPACE_SRGB 0x3089
+#endif
+
 struct wgl_pixel_format
 {
     EGLConfig config;
@@ -79,6 +87,7 @@ static char wgl_extensions[4096];
 static struct opengl_funcs egl_funcs;
 static struct wgl_pixel_format *pixel_formats;
 static int nb_pixel_formats, nb_onscreen_formats;
+static BOOL has_gl_colorspace;
 
 static struct wl_list gl_drawables = { &gl_drawables, &gl_drawables };
 static struct wl_list gl_contexts = { &gl_contexts, &gl_contexts };
@@ -105,6 +114,7 @@ DECL_FUNCPTR(eglGetDisplay);
 DECL_FUNCPTR(eglGetProcAddress);
 DECL_FUNCPTR(eglInitialize);
 DECL_FUNCPTR(eglMakeCurrent);
+DECL_FUNCPTR(eglQueryString);
 DECL_FUNCPTR(eglSwapBuffers);
 #undef DECL_FUNCPTR
 
@@ -212,12 +222,15 @@ static BOOL wgl_context_make_current(struct wgl_context *ctx, HWND draw_hwnd, HW
 
 static void wayland_gl_drawable_update(struct wayland_gl_drawable *gl)
 {
+    EGLint attribs[] = { EGL_GL_COLORSPACE, EGL_GL_COLORSPACE_SRGB, EGL_NONE };
+
     TRACE("hwnd=%p\n", gl->hwnd);
 
     if (gl->surface || !gl->wayland_surface) goto out;
 
     gl->surface = p_eglCreateWindowSurface(egl_display, pixel_formats[gl->format - 1].config,
-                                           gl->wayland_surface->glvk->wl_egl_window, NULL);
+                                           gl->wayland_surface->glvk->wl_egl_window,
+                                           has_gl_colorspace ? attribs : NULL);
     if (gl->surface)
     {
         struct wgl_context *ctx;
@@ -754,9 +767,28 @@ static void register_extension(const char *ext)
     TRACE("%s\n", ext);
 }
 
-static void init_extensions(void)
+static BOOL has_extension(const char *list, const char *ext)
+{
+    size_t len = strlen(ext);
+    const char *cur = list;
+
+    if (!cur) return FALSE;
+
+    while ((cur = strstr(cur, ext)))
+    {
+        if ((!cur[len] || cur[len] == ' ') && (cur == list || cur[-1] == ' '))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static void init_extensions(int major, int minor)
 {
     void *ptr;
+    const char *egl_exts = p_eglQueryString(egl_display, EGL_EXTENSIONS);
 
     register_extension("WGL_ARB_extensions_string");
     egl_funcs.ext.p_wglGetExtensionsStringARB = wayland_wglGetExtensionsStringARB;
@@ -778,6 +810,12 @@ static void init_extensions(void)
     register_extension("WGL_ARB_create_context");
     register_extension("WGL_ARB_create_context_profile");
     egl_funcs.ext.p_wglCreateContextAttribsARB = wayland_wglCreateContextAttribsARB;
+
+    if ((major == 1 && minor >= 5) || has_extension(egl_exts, "EGL_KHR_gl_colorspace"))
+    {
+        register_extension("WGL_EXT_framebuffer_sRGB");
+        has_gl_colorspace = TRUE;
+    }
 
     /* load standard functions and extensions exported from the OpenGL library */
 
@@ -1166,6 +1204,7 @@ static BOOL egl_init(void)
     LOAD_FUNCPTR(eglGetProcAddress);
     LOAD_FUNCPTR(eglInitialize);
     LOAD_FUNCPTR(eglMakeCurrent);
+    LOAD_FUNCPTR(eglQueryString);
     LOAD_FUNCPTR(eglSwapBuffers);
 #undef LOAD_FUNCPTR
 
@@ -1175,7 +1214,7 @@ static BOOL egl_init(void)
 
     if (!init_pixel_formats()) return FALSE;
 
-    init_extensions();
+    init_extensions(major, minor);
     retval = 1;
     return TRUE;
 }

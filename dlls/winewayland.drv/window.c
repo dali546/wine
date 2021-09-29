@@ -1307,6 +1307,14 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_WAYLAND_SURFACE_OUTPUT_CHANGE:
         handle_wm_wayland_surface_output_change(hwnd);
         break;
+    case WM_WAYLAND_MODE_CHANGE:
+        {
+            struct wayland_output *output =
+                wayland_output_get_by_id(thread_wayland(), wp);
+            if (output)
+                wayland_output_set_wine_mode(output, LOWORD(lp), HIWORD(lp));
+        }
+        break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
     }

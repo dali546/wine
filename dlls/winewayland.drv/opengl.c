@@ -106,6 +106,7 @@ static char wgl_extensions[4096];
 static struct wgl_pixel_format *pixel_formats;
 static int nb_pixel_formats, nb_onscreen_formats;
 static BOOL has_khr_create_context;
+static BOOL has_gl_colorspace;
 
 static struct wayland_mutex gl_object_mutex =
 {
@@ -277,6 +278,7 @@ static BOOL wgl_context_make_current(struct wgl_context *ctx, HWND draw_hwnd, HW
 
 static void wayland_gl_drawable_update(struct wayland_gl_drawable *gl)
 {
+    EGLint attribs[] = { EGL_GL_COLORSPACE, EGL_GL_COLORSPACE_SRGB, EGL_NONE };
     RECT client_rect;
 
     TRACE("hwnd=%p\n", gl->hwnd);
@@ -296,7 +298,8 @@ static void wayland_gl_drawable_update(struct wayland_gl_drawable *gl)
         ERR("Failed to create GBM surface\n");
 
     gl->surface = p_eglCreateWindowSurface(egl_display, pixel_formats[gl->format - 1].config,
-                                           (EGLNativeWindowType) gl->gbm_surface, NULL);
+                                           (EGLNativeWindowType) gl->gbm_surface,
+                                           has_gl_colorspace ? attribs : NULL);
     if (!gl->surface)
         ERR("Failed to create EGL surface\n");
 
@@ -1097,7 +1100,7 @@ static BOOL has_extension(const char *list, const char *ext)
     return FALSE;
 }
 
-static void init_extensions(void)
+static void init_extensions(int major, int minor)
 {
     void *ptr;
     const char *egl_exts = p_eglQueryString(egl_display, EGL_EXTENSIONS);
@@ -1129,6 +1132,12 @@ static void init_extensions(void)
     register_extension("WGL_EXT_swap_control");
     egl_funcs.ext.p_wglSwapIntervalEXT = wayland_wglSwapIntervalEXT;
     egl_funcs.ext.p_wglGetSwapIntervalEXT = wayland_wglGetSwapIntervalEXT;
+
+    if ((major == 1 && minor >= 5) || has_extension(egl_exts, "EGL_KHR_gl_colorspace"))
+    {
+        register_extension("WGL_EXT_framebuffer_sRGB");
+        has_gl_colorspace = TRUE;
+    }
 
     /* load standard functions and extensions exported from the OpenGL library */
 
@@ -1547,7 +1556,7 @@ static BOOL egl_init(void)
 
     if (!init_pixel_formats()) return FALSE;
 
-    init_extensions();
+    init_extensions(egl_version[0], egl_version[1]);
     retval = 1;
     return TRUE;
 }

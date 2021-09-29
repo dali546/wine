@@ -306,6 +306,10 @@ void wayland_notify_wine_monitor_change(void);
 void wayland_update_outputs_from_process(struct wayland *wayland);
 struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
                                                        LPCWSTR wine_name);
+struct wayland_output *wayland_output_get_by_id(struct wayland *wayland,
+                                                uint32_t id);
+void wayland_output_set_wine_mode(struct wayland_output *output,
+                                  int width, int height);
 
 /**********************************************************************
  *          Wayland event dispatch

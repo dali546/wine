@@ -1307,7 +1307,23 @@ done:
 
 static void handle_wm_wayland_monitor_change(struct wayland *wayland)
 {
+    struct wayland_surface *surface, *tmp;
+
     wayland_update_outputs_from_process(wayland);
+
+    /* Update the state of all surfaces tracked by the wayland thread instance,
+     * in case any surface was affected by the monitor changes (e.g., gained or
+     * lost the fullscreen state). We use the safe iteration variant since a
+     * state update may cause the surface to be recreated. */
+    wl_list_for_each_safe(surface, tmp, &wayland->toplevel_list, link)
+    {
+        struct wayland_win_data *data = wayland_win_data_get(surface->hwnd);
+        if (data)
+        {
+            update_wayland_state(data);
+            wayland_win_data_release(data);
+        }
+    }
 }
 
 static LRESULT handle_wm_wayland_configure(HWND hwnd)

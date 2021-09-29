@@ -595,3 +595,35 @@ DWORD CDECL WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handl
 
     return ret;
 }
+
+/**********************************************************************
+ *          wayland_notify_wine_monitor_change
+ *
+ * Notify all wayland instances about a change in the state of wine monitors.
+ * The notification is synchronous, this function returns after all wayland
+ * instances have handled the event, except if it a thread is slow to process
+ * the message, and thus likely to be blocked by this synchronous operation.
+ */
+void wayland_notify_wine_monitor_change(void)
+{
+    struct wayland *w;
+
+    EnterCriticalSection(&thread_wayland_section);
+
+    /* Each thread maintains its own output mode information, so we need to
+     * notify all threads about the wine mode change. We can't guarantee that
+     * all threads will have windows to which we could potentially send the
+     * notification message to, so we use the internal send function to target
+     * the threads directly. We can't use PostThreadMessage since we require
+     * synchronous message handling. */
+    wl_list_for_each(w, &thread_wayland_list, thread_link)
+    {
+        /* Use a timeout of 50ms to avoid blocking indefinitely if the
+         * target thread is not processing (and to avoid deadlocks). */
+        __wine_send_internal_message_timeout(w->process_id, w->thread_id,
+                                             WM_WAYLAND_MONITOR_CHANGE,
+                                             0, 0, 0, 50, NULL);
+    }
+
+    LeaveCriticalSection(&thread_wayland_section);
+}

@@ -1304,6 +1304,27 @@ out:
     wayland_surface_for_hwnd_unlock(wsurface);
 }
 
+static void handle_wm_wayland_monitor_change(struct wayland *wayland)
+{
+    struct wayland_surface *surface, *tmp;
+
+    wayland_update_outputs_from_process(wayland);
+
+    /* Update the state of all surfaces tracked by the wayland thread instance,
+     * in case any surface was affected by the monitor changes (e.g., gained or
+     * lost the fullscreen state). We use the safe iteration variant since a
+     * state update may cause the surface to be recreated. */
+    wl_list_for_each_safe(surface, tmp, &wayland->toplevel_list, link)
+    {
+        struct wayland_win_data *data = wayland_win_data_get(surface->hwnd);
+        if (data)
+        {
+            update_wayland_state(data);
+            wayland_win_data_release(data);
+        }
+    }
+}
+
 /**********************************************************************
  *           WAYLAND_WindowMessage
  */
@@ -1373,6 +1394,9 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_WAYLAND_SURFACE_OUTPUT_CHANGE:
         handle_wm_wayland_surface_output_change(hwnd);
+        break;
+    case WM_WAYLAND_MONITOR_CHANGE:
+        handle_wm_wayland_monitor_change(thread_wayland());
         break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);

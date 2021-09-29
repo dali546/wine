@@ -54,6 +54,7 @@ enum wayland_window_message
     WM_WAYLAND_CONFIGURE = 0x80001003,
     WM_WAYLAND_STATE_UPDATE = 0x80001004,
     WM_WAYLAND_SURFACE_OUTPUT_CHANGE = 0x80001005,
+    WM_WAYLAND_MONITOR_CHANGE = 0x80001006,
 };
 
 enum wayland_configure_flags
@@ -278,6 +279,11 @@ void wayland_output_use_xdg_extension(struct wayland_output *output);
 void wayland_update_outputs_from_process(struct wayland *wayland);
 struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
                                                        LPCWSTR wine_name);
+struct wayland_output *wayland_output_get_by_id(struct wayland *wayland,
+                                                uint32_t id);
+void wayland_output_set_wine_mode(struct wayland_output *output,
+                                  int width, int height);
+void wayland_notify_wine_monitor_change(void);
 
 /**********************************************************************
  *          Wayland event dispatch

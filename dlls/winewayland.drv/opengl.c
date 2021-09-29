@@ -43,10 +43,17 @@ WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
 static void *egl_handle;
 static void *opengl_handle;
+static EGLDisplay egl_display;
+
+#define DECL_FUNCPTR(f) static __typeof__(f) * p_##f = NULL
+DECL_FUNCPTR(eglGetDisplay);
+DECL_FUNCPTR(eglInitialize);
+#undef DECL_FUNCPTR
 
 static BOOL egl_init(void)
 {
     static int retval = -1;
+    EGLint major, minor;
 
     if (retval != -1) return retval;
     retval = 0;
@@ -66,6 +73,18 @@ static BOOL egl_init(void)
             return FALSE;
         }
     }
+
+#define LOAD_FUNCPTR(func) do { \
+        if (!(p_##func = dlsym(egl_handle, #func))) \
+        { ERR("can't find symbol %s\n", #func); return FALSE; }    \
+    } while(0)
+    LOAD_FUNCPTR(eglGetDisplay);
+    LOAD_FUNCPTR(eglInitialize);
+#undef LOAD_FUNCPTR
+
+    egl_display = p_eglGetDisplay((EGLNativeDisplayType) process_wl_display);
+    if (!p_eglInitialize(egl_display, &major, &minor)) return FALSE;
+    TRACE("display %p version %u.%u\n", egl_display, major, minor);
 
     retval = 1;
     return TRUE;

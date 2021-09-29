@@ -9,6 +9,7 @@ C_SRCS = \
 	display.c \
 	dllmain.c \
 	gbm.c \
+	opengl.c \
 	options.c \
 	registry.c \
 	unicode.c \

@@ -327,6 +327,8 @@ void wayland_notify_wine_monitor_change(void) DECLSPEC_HIDDEN;
 void wayland_update_outputs_from_process(struct wayland *wayland) DECLSPEC_HIDDEN;
 struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
                                                        LPCWSTR wine_name) DECLSPEC_HIDDEN;
+struct wayland_output *wayland_output_get_by_id(struct wayland *wayland, uint32_t id) DECLSPEC_HIDDEN;
+void wayland_output_set_wine_mode(struct wayland_output *output, int width, int height) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Wayland event dispatch

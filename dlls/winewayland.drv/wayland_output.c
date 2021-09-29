@@ -521,3 +521,62 @@ struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
 
     return NULL;
 }
+
+/**********************************************************************
+ *          wayland_output_get_by_id
+ *
+ *  Returns the wayland_output with the specified id (or NULL
+ *  if not present).
+ */
+struct wayland_output *wayland_output_get_by_id(struct wayland *wayland,
+                                                uint32_t output_id)
+{
+    struct wayland_output *output;
+
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        if (output->id == output_id)
+            return output;
+    }
+
+    return NULL;
+}
+
+/**********************************************************************
+ *          wayland_output_set_wine_mode
+ *
+ * Set the current wine mode for the specified output.
+ */
+void wayland_output_set_wine_mode(struct wayland_output *output, int width, int height)
+{
+    struct wayland_output_mode *output_mode;
+
+    TRACE("output->name=%s (id=0x%x) width=%d height=%d\n",
+          output->name, output->id, width, height);
+
+    /* We always use 32bpp modes since that's the only one we really
+     * support. */
+    wl_list_for_each(output_mode, &output->mode_list, link)
+    {
+        if (output_mode->width == width && output_mode->height == height &&
+            output_mode->bpp == 32)
+        {
+            output->current_wine_mode = output_mode;
+            break;
+        }
+    }
+
+    if (!output->current_wine_mode || !output->current_mode)
+    {
+        output->wine_scale = 1.0;
+    }
+    else
+    {
+        double scale_x = ((double)output->current_mode->width) /
+                         output->current_wine_mode->width;
+        double scale_y = ((double)output->current_mode->height) /
+                         output->current_wine_mode->height;
+        /* We want to keep the aspect ratio of the target mode. */
+        output->wine_scale = fmin(scale_x, scale_y);
+    }
+}

@@ -121,6 +121,7 @@ static void CDECL WAYLAND_ThreadDetach(void)
 
 static const struct user_driver_funcs waylanddrv_funcs =
 {
+    .pChangeDisplaySettingsEx = WAYLAND_ChangeDisplaySettingsEx,
     .pCreateWindow = WAYLAND_CreateWindow,
     .pDestroyWindow = WAYLAND_DestroyWindow,
     .pEnumDisplaySettingsEx = WAYLAND_EnumDisplaySettingsEx,

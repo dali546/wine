@@ -10,6 +10,7 @@ C_SRCS = \
 	dllmain.c \
 	gbm.c \
 	gdi.c \
+	opengl.c \
 	wayland.c \
 	wayland_buffer_queue.c \
 	wayland_cursor.c \

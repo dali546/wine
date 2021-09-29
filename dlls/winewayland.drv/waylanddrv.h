@@ -481,6 +481,8 @@ int wayland_shmfd_create(const char *name, int size);
  *          USER driver functions
  */
 
+extern LONG WAYLAND_ChangeDisplaySettingsEx(LPCWSTR devname, LPDEVMODEW devmode,
+                                            HWND hwnd, DWORD flags, LPVOID lpvoid) DECLSPEC_HIDDEN;
 extern BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
 extern void WAYLAND_DestroyWindow(HWND hwnd) DECLSPEC_HIDDEN;
 extern BOOL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags) DECLSPEC_HIDDEN;

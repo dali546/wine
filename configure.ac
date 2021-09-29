@@ -1303,6 +1303,9 @@ then
         [AC_CHECK_HEADERS([wayland-egl.h])
          AC_CHECK_LIB(wayland-egl,wl_egl_window_create,[:],
                       [WAYLAND_EGL_LIBS=""],[$WAYLAND_EGL_LIBS])])
+    WINE_CHECK_SONAME(EGL,eglGetProcAddress)
+    WINE_CHECK_SONAME(GL,glFlush)
+    WINE_CHECK_SONAME(GLESv2,glFlush)
 fi
 WINE_NOTICE_WITH(wayland, [test -z "$WAYLAND_CLIENT_LIBS" ||
                            test -z "$WAYLAND_PROTOCOLS_DATADIR" ||

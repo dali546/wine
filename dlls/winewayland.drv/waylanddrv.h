@@ -412,6 +412,7 @@ void wayland_set_cursor_if_current_invalid(HCURSOR hcursor);
 
 void wayland_update_gl_drawable_surface(HWND hwnd,
                                         struct wayland_surface *wayland_surface);
+void wayland_destroy_gl_drawable(HWND hwnd);
 
 /**********************************************************************
  *          XKB helpers

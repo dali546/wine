@@ -412,6 +412,13 @@ HCURSOR wayland_invalidate_set_cursor(void);
 void wayland_set_cursor_if_current_invalid(HCURSOR hcursor);
 
 /**********************************************************************
+ *          OpenGL support
+ */
+
+void wayland_update_gl_drawable_surface(HWND hwnd,
+                                        struct wayland_surface *wayland_surface);
+
+/**********************************************************************
  *          XKB helpers
  */
 xkb_layout_index_t _xkb_state_get_active_layout(struct xkb_state *xkb_state);

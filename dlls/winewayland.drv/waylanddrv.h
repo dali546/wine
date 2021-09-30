@@ -548,6 +548,12 @@ void wayland_set_cursor_if_current_invalid(HCURSOR hcursor) DECLSPEC_HIDDEN;
 BOOL wayland_gbm_init(void) DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          OpenGL support
+ */
+
+void wayland_update_gl_drawable_surface(HWND hwnd, struct wayland_surface *wayland_surface) DECLSPEC_HIDDEN;
+
+/**********************************************************************
  *          Registry helpers
  */
 

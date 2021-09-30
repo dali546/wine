@@ -491,5 +491,6 @@ extern BOOL CDECL WAYLAND_CreateDC(PHYSDEV *pdev, LPCWSTR device,
 extern BOOL CDECL WAYLAND_CreateCompatibleDC(PHYSDEV orig, PHYSDEV *pdev) DECLSPEC_HIDDEN;
 extern BOOL CDECL WAYLAND_CreateCompatibleDC(PHYSDEV orig, PHYSDEV *pdev) DECLSPEC_HIDDEN;
 extern BOOL CDECL WAYLAND_DeleteDC(PHYSDEV dev) DECLSPEC_HIDDEN;
+extern struct opengl_funcs * CDECL WAYLAND_wine_get_wgl_driver(PHYSDEV dev, UINT version) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_WAYLANDDRV_H */

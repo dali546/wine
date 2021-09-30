@@ -421,6 +421,12 @@ xkb_layout_index_t _xkb_state_get_active_layout(struct xkb_state *xkb_state);
 int _xkb_keysyms_to_utf8(const xkb_keysym_t *syms, int nsyms, char *utf8, int utf8_size);
 
 /**********************************************************************
+ *          Misc. helpers
+ */
+
+void wayland_get_client_rect_in_win_coords(HWND hwnd, RECT *client_rect);
+
+/**********************************************************************
  *          USER driver functions
  */
 

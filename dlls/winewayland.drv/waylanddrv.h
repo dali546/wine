@@ -483,6 +483,7 @@ int _xkb_keysyms_to_utf8(const xkb_keysym_t *syms, int nsyms, char *utf8, int ut
  */
 
 int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
+void wayland_get_client_rect_in_win_coords(HWND hwnd, RECT *client_rect) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          USER32 helpers

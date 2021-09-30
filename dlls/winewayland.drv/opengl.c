@@ -208,7 +208,7 @@ static void wayland_gl_drawable_clear_buffers(struct wayland_gl_drawable *gl)
         wayland_gl_buffer_destroy(gl_buffer);
 }
 
-static void wayland_destroy_gl_drawable(HWND hwnd)
+void wayland_destroy_gl_drawable(HWND hwnd)
 {
     struct wayland_gl_drawable *gl;
 
@@ -1719,6 +1719,10 @@ struct opengl_funcs *WAYLAND_wine_get_wgl_driver(UINT version)
 }
 
 void wayland_update_gl_drawable_surface(HWND hwnd, struct wayland_surface *wayland_surface)
+{
+}
+
+void wayland_destroy_gl_drawable(HWND hwnd)
 {
 }
 

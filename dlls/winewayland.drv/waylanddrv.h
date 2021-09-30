@@ -422,6 +422,8 @@ void wayland_set_cursor_if_current_invalid(HCURSOR hcursor);
  */
 
 struct opengl_funcs *wayland_get_wgl_driver(UINT version);
+void wayland_update_gl_drawable_surface(HWND hwnd,
+                                        struct wayland_surface *wayland_surface);
 
 /**********************************************************************
  *          XKB helpers

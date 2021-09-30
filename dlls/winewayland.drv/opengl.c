@@ -147,7 +147,7 @@ static struct wayland_gl_drawable *wayland_gl_drawable_create(HWND hwnd, int for
     return gl;
 }
 
-static void wayland_destroy_gl_drawable(HWND hwnd)
+void wayland_destroy_gl_drawable(HWND hwnd)
 {
     struct wayland_gl_drawable *gl;
 
@@ -1330,6 +1330,10 @@ static struct opengl_funcs *wayland_get_wgl_driver(UINT version)
 
 void wayland_update_gl_drawable_surface(HWND hwnd,
                                         struct wayland_surface *wayland_surface)
+{
+}
+
+void wayland_destroy_gl_drawable(HWND hwnd)
 {
 }
 

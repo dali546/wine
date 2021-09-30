@@ -361,7 +361,7 @@ static void wayland_win_data_update_wayland_surface(struct wayland_win_data *dat
     /* Only create wayland surfaces for toplevel windows. Let Wine core handle
      * the drawing of other windows in their corresponding top level window
      * surface. */
-    if (data->parent) return;
+    if (data->parent) goto out;
 
     effective_parent_hwnd = wayland_win_data_get_effective_parent(data);
     parent_surface = NULL;
@@ -388,6 +388,9 @@ static void wayland_win_data_update_wayland_surface(struct wayland_win_data *dat
 
     if (data->wayland_surface)
         data->wayland_surface->hwnd = data->hwnd;
+
+out:
+    wayland_update_gl_drawable_surface(data->hwnd, data->wayland_surface);
 }
 
 static void wayland_win_data_update_wayland_surface_state(struct wayland_win_data *data)

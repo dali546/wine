@@ -1433,3 +1433,26 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     return 0;
 }
+
+/*****************************************************************************
+ *           wayland_get_client_rect_in_win_coords
+ */
+void wayland_get_client_rect_in_win_coords(HWND hwnd, RECT *client_rect)
+{
+    RECT window_rect;
+    POINT origin = {0, 0};
+
+    if (!ClientToScreen(hwnd, &origin)) goto err;
+    if (!GetWindowRect(hwnd, &window_rect)) goto err;
+    if (!GetClientRect(hwnd, client_rect)) goto err;
+
+    OffsetRect(client_rect,
+               origin.x - window_rect.left,
+               origin.y - window_rect.top);
+
+    return;
+
+err:
+    ERR("Failed to get client rect for hwnd %p", hwnd);
+    SetRectEmpty(client_rect);
+}

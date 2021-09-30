@@ -546,6 +546,12 @@ BOOL wayland_gbm_init(void) DECLSPEC_HIDDEN;
 dev_t wayland_gbm_get_render_dev(void) DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          OpenGL support
+ */
+
+void wayland_update_gl_drawable_surface(HWND hwnd, struct wayland_surface *wayland_surface) DECLSPEC_HIDDEN;
+
+/**********************************************************************
  *          Registry helpers
  */
 

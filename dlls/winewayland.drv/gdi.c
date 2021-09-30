@@ -89,11 +89,28 @@ static BOOL CDECL WAYLAND_DeleteDC(PHYSDEV dev)
     return TRUE;
 }
 
+/**********************************************************************
+ *           WAYLAND_wine_get_wgl_driver
+ */
+static struct opengl_funcs * CDECL WAYLAND_wine_get_wgl_driver(PHYSDEV dev, UINT version)
+{
+    struct opengl_funcs *ret;
+
+    if (!(ret = wayland_get_wgl_driver(version)))
+    {
+        dev = GET_NEXT_PHYSDEV(dev, wine_get_wgl_driver);
+        ret = dev->funcs->wine_get_wgl_driver(dev, version);
+    }
+
+    return ret;
+}
+
 static const struct gdi_dc_funcs wayland_gdi_dc_funcs =
 {
     .pCreateDC = WAYLAND_CreateDC,
     .pCreateCompatibleDC = WAYLAND_CreateCompatibleDC,
     .pDeleteDC = WAYLAND_DeleteDC,
+    .wine_get_wgl_driver = WAYLAND_wine_get_wgl_driver,
     .priority = GDI_PRIORITY_GRAPHICS_DRV
 };
 

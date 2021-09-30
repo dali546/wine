@@ -82,3 +82,19 @@ BOOL CDECL WAYLAND_DeleteDC(PHYSDEV dev)
     free(physDev);
     return TRUE;
 }
+
+/**********************************************************************
+ *           WAYLAND_wine_get_wgl_driver
+ */
+struct opengl_funcs * CDECL WAYLAND_wine_get_wgl_driver(PHYSDEV dev, UINT version)
+{
+    struct opengl_funcs *ret;
+
+    if (!(ret = wayland_get_wgl_driver(version)))
+    {
+        dev = GET_NEXT_PHYSDEV(dev, wine_get_wgl_driver);
+        ret = dev->funcs->wine_get_wgl_driver(dev, version);
+    }
+
+    return ret;
+}

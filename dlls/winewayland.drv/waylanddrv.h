@@ -511,6 +511,7 @@ BOOL wayland_gbm_init(void);
 
 void wayland_update_gl_drawable_surface(HWND hwnd,
                                         struct wayland_surface *wayland_surface);
+void wayland_destroy_gl_drawable(HWND hwnd);
 
 /**********************************************************************
  *          XKB helpers

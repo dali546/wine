@@ -550,6 +550,7 @@ dev_t wayland_gbm_get_render_dev(void) DECLSPEC_HIDDEN;
  */
 
 void wayland_update_gl_drawable_surface(HWND hwnd, struct wayland_surface *wayland_surface) DECLSPEC_HIDDEN;
+void wayland_destroy_gl_drawable(HWND hwnd) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Registry helpers

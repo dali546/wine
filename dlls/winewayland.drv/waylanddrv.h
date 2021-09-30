@@ -497,6 +497,7 @@ size_t ascii_to_unicode_z(WCHAR *dst, size_t dst_max_chars,
                           const char *src, size_t src_max_chars) DECLSPEC_HIDDEN;
 LONG unicode_z_to_long(LPCWSTR s, LPWSTR *end, INT base) DECLSPEC_HIDDEN;
 int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
+void wayland_get_client_rect_in_win_coords(HWND hwnd, RECT *client_rect) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          USER32 helpers

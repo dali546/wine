@@ -404,6 +404,7 @@ void wayland_invalidate_set_cursor(void);
  *          OpenGL support
  */
 
+struct opengl_funcs *wayland_get_wgl_driver(UINT version);
 void wayland_update_gl_drawable_surface(HWND hwnd,
                                         struct wayland_surface *wayland_surface);
 void wayland_destroy_gl_drawable(HWND hwnd);

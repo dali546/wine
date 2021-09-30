@@ -657,6 +657,7 @@ void CDECL WAYLAND_DestroyWindow(HWND hwnd)
     TRACE("%p\n", hwnd);
 
     if (!(data = wayland_win_data_get(hwnd))) return;
+    wayland_destroy_gl_drawable(hwnd);
     wayland_win_data_destroy(data);
 }
 

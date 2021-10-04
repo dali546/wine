@@ -354,3 +354,23 @@ void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT swp_flags
 
     wayland_win_data_release(data);
 }
+
+/**********************************************************************
+ *           WAYLAND_WindowMessage
+ */
+LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    TRACE("msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
+
+    switch (msg)
+    {
+    case WM_WAYLAND_SET_CURSOR:
+        wayland_pointer_update_cursor_from_win32(&thread_wayland()->pointer,
+                                                 (HCURSOR)lp);
+        break;
+    default:
+        FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
+    }
+
+    return 0;
+}

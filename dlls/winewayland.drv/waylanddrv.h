@@ -52,12 +52,25 @@ enum wayland_configure_flags
  *          Definitions for wayland types
  */
 
+struct wayland_surface;
+struct wayland_shm_buffer;
+
+struct wayland_cursor
+{
+    struct wayland_shm_buffer *shm_buffer;
+    int hotspot_x;
+    int hotspot_y;
+};
+
 struct wayland_pointer
 {
     struct wayland *wayland;
     struct wl_pointer *wl_pointer;
     struct wayland_surface *focused_surface;
+    struct wl_surface *cursor_wl_surface;
     uint32_t enter_serial;
+    struct wayland_cursor *cursor;
+    HCURSOR hcursor;
 };
 
 struct wayland
@@ -282,11 +295,14 @@ void wayland_window_surface_update_wayland_surface(struct window_surface *surfac
                                                    struct wayland_surface *wayland_surface);
 
 /**********************************************************************
- *          Wayland Pointer
+ *          Wayland Pointer/Cursor
  */
 
 void wayland_pointer_init(struct wayland_pointer *pointer, struct wayland *wayland,
                           struct wl_pointer *wl_pointer);
 void wayland_pointer_deinit(struct wayland_pointer *pointer);
+void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor);
+BOOL wayland_init_set_cursor(void);
+void wayland_invalidate_set_cursor(void);
 
 #endif /* __WINE_WAYLANDDRV_H */

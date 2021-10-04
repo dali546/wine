@@ -45,6 +45,7 @@ extern struct wl_display *process_wl_display;
 enum wayland_window_message
 {
     WM_WAYLAND_BROADCAST_DISPLAY_CHANGE = 0x80001000,
+    WM_WAYLAND_SET_CURSOR = 0x80001001,
 };
 
 enum wayland_surface_role
@@ -66,12 +67,25 @@ enum wayland_configure_flags
  *          Definitions for wayland types
  */
 
+struct wayland_surface;
+struct wayland_shm_buffer;
+
+struct wayland_cursor
+{
+    struct wayland_shm_buffer *shm_buffer;
+    int hotspot_x;
+    int hotspot_y;
+};
+
 struct wayland_pointer
 {
     struct wayland *wayland;
     struct wl_pointer *wl_pointer;
     struct wayland_surface *focused_surface;
+    struct wl_surface *cursor_wl_surface;
     uint32_t enter_serial;
+    struct wayland_cursor *cursor;
+    HCURSOR hcursor;
 };
 
 struct wayland
@@ -302,12 +316,18 @@ void wayland_window_surface_update_wayland_surface(struct window_surface *surfac
                                                    struct wayland_surface *wayland_surface);
 
 /**********************************************************************
- *          Wayland Pointer
+ *          Wayland Pointer/Cursor
  */
 
 void wayland_pointer_init(struct wayland_pointer *pointer, struct wayland *wayland,
                           struct wl_pointer *wl_pointer);
 void wayland_pointer_deinit(struct wayland_pointer *pointer);
+void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor);
+void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
+                                              HCURSOR handle);
+BOOL wayland_init_set_cursor(void);
+HCURSOR wayland_invalidate_set_cursor(void);
+void wayland_set_cursor_if_current_invalid(HCURSOR hcursor);
 
 /**********************************************************************
  *          USER driver functions
@@ -318,6 +338,7 @@ extern void CDECL WAYLAND_DestroyWindow(HWND hwnd) DECLSPEC_HIDDEN;
 extern BOOL CDECL WAYLAND_EnumDisplaySettingsEx(LPCWSTR name, DWORD n, LPDEVMODEW devmode, DWORD flags) DECLSPEC_HIDDEN;
 extern DWORD CDECL WAYLAND_MsgWaitForMultipleObjectsEx(DWORD count, const HANDLE *handles,
                                                        DWORD timeout, DWORD mask, DWORD flags) DECLSPEC_HIDDEN;
+extern void CDECL WAYLAND_SetCursor(HCURSOR hcursor) DECLSPEC_HIDDEN;
 extern void CDECL WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                                BOOL force, void *param) DECLSPEC_HIDDEN;
 extern LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;

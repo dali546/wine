@@ -519,5 +519,6 @@ extern BOOL CDECL WAYLAND_CreateCompatibleDC(PHYSDEV orig, PHYSDEV *pdev) DECLSP
 extern BOOL CDECL WAYLAND_CreateCompatibleDC(PHYSDEV orig, PHYSDEV *pdev) DECLSPEC_HIDDEN;
 extern BOOL CDECL WAYLAND_DeleteDC(PHYSDEV dev) DECLSPEC_HIDDEN;
 extern struct opengl_funcs * CDECL WAYLAND_wine_get_wgl_driver(PHYSDEV dev, UINT version) DECLSPEC_HIDDEN;
+extern const struct vulkan_funcs * CDECL WAYLAND_wine_get_vulkan_driver(PHYSDEV dev, UINT version) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_WAYLANDDRV_H */

@@ -125,6 +125,7 @@ const struct user_driver_funcs waylanddrv_funcs =
     .dc_funcs.pCreateCompatibleDC = WAYLAND_CreateCompatibleDC,
     .dc_funcs.pDeleteDC = WAYLAND_DeleteDC,
     .dc_funcs.wine_get_wgl_driver = WAYLAND_wine_get_wgl_driver,
+    .dc_funcs.wine_get_vulkan_driver = WAYLAND_wine_get_vulkan_driver,
     .dc_funcs.priority = GDI_PRIORITY_GRAPHICS_DRV,
 
     .pChangeDisplaySettingsEx = WAYLAND_ChangeDisplaySettingsEx,

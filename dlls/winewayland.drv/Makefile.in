@@ -15,6 +15,7 @@ C_SRCS = \
 	wayland_output.c \
 	waylanddrv_main.c \
 	wayland_buffer_queue.c \
+	wayland_pointer.c \
 	wayland_shm.c \
 	wayland_surface.c \
 	window.c \

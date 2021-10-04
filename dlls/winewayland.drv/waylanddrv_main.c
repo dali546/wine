@@ -118,6 +118,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
     .pDestroyWindow = WAYLAND_DestroyWindow,
     .pGetCurrentDisplaySettings = WAYLAND_GetCurrentDisplaySettings,
     .pMsgWaitForMultipleObjectsEx = WAYLAND_MsgWaitForMultipleObjectsEx,
+    .pSetCursor = WAYLAND_SetCursor,
     .pThreadDetach = WAYLAND_ThreadDetach,
     .pUpdateDisplayDevices = WAYLAND_UpdateDisplayDevices,
     .pWindowMessage = WAYLAND_WindowMessage,
@@ -128,6 +129,8 @@ static const struct user_driver_funcs waylanddrv_funcs =
 static NTSTATUS waylanddrv_unix_init(void *arg)
 {
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
+
+    if (!wayland_init_set_cursor()) return STATUS_UNSUCCESSFUL;
 
     if (!wayland_process_init()) return STATUS_UNSUCCESSFUL;
 

@@ -368,6 +368,10 @@ LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         SendMessageTimeoutW(HWND_BROADCAST, WM_DISPLAYCHANGE, wp, lp,
                             SMTO_ABORTIFHUNG, 2000, NULL);
         break;
+    case WM_WAYLAND_SET_CURSOR:
+        wayland_pointer_update_cursor_from_win32(&thread_wayland()->pointer,
+                                                 (HCURSOR)lp);
+        break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
     }

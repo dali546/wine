@@ -84,6 +84,9 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
         TRACE("surface=%p hwnd=%p\n", wayland_surface, wayland_surface->hwnd);
         wayland->pointer.focused_surface = wayland_surface;
         wayland->pointer.enter_serial = serial;
+        /* Invalidate the set cursor cache, so that next update is
+         * unconditionally applied. */
+        wayland_invalidate_set_cursor();
         /* Handle the enter as a motion, to account for cases where the
          * window first appears beneath the pointer and won't get a separate
          * motion event. */
@@ -209,12 +212,20 @@ void wayland_pointer_init(struct wayland_pointer *pointer, struct wayland *wayla
     wayland->pointer.wayland = wayland;
     wayland->pointer.wl_pointer = wl_pointer;
     wl_pointer_add_listener(wayland->pointer.wl_pointer, &pointer_listener, wayland);
+    wayland->pointer.cursor_wl_surface =
+        wl_compositor_create_surface(wayland->wl_compositor);
 }
 
 void wayland_pointer_deinit(struct wayland_pointer *pointer)
 {
     if (pointer->wl_pointer)
         wl_pointer_destroy(pointer->wl_pointer);
+
+    if (pointer->cursor_wl_surface)
+        wl_surface_destroy(pointer->cursor_wl_surface);
+
+    if (pointer->cursor)
+        wayland_cursor_destroy(pointer->cursor);
 
     memset(pointer, 0, sizeof(*pointer));
 }

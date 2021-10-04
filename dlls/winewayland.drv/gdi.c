@@ -98,3 +98,19 @@ struct opengl_funcs * CDECL WAYLAND_wine_get_wgl_driver(PHYSDEV dev, UINT versio
 
     return ret;
 }
+
+/**********************************************************************
+ *           WAYLAND_wine_get_vulkan_driver
+ */
+const struct vulkan_funcs * CDECL WAYLAND_wine_get_vulkan_driver(PHYSDEV dev, UINT version)
+{
+    const struct vulkan_funcs *ret;
+
+    if (!(ret = wayland_get_vulkan_driver(version)))
+    {
+        dev = GET_NEXT_PHYSDEV(dev, wine_get_vulkan_driver);
+        ret = dev->funcs->wine_get_vulkan_driver(dev, version);
+    }
+
+    return ret;
+}

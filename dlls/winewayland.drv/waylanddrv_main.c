@@ -128,6 +128,8 @@ static BOOL process_attach(void)
 
     if ((thread_data_tls_index = TlsAlloc()) == TLS_OUT_OF_INDEXES) return FALSE;
 
+    if (!wayland_init_set_cursor()) return FALSE;
+
     if (!wayland_process_init()) return FALSE;
 
     /* All reads of wayland events happen from a dedicated thread. */

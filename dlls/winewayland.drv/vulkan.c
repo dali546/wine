@@ -938,3 +938,11 @@ void wayland_invalidate_vulkan_objects(HWND hwnd)
 }
 
 #endif /* SONAME_LIBVULKAN */
+
+/**********************************************************************
+ *           WAYLAND_wine_get_vulkan_driver
+ */
+const struct vulkan_funcs * CDECL WAYLAND_wine_get_vulkan_driver(UINT version)
+{
+    return wayland_get_vulkan_driver(version);
+}

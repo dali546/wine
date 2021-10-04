@@ -150,6 +150,7 @@ const struct user_driver_funcs waylanddrv_funcs =
     .pWindowMessage = WAYLAND_WindowMessage,
     .pWindowPosChanged = WAYLAND_WindowPosChanged,
     .pWindowPosChanging = WAYLAND_WindowPosChanging,
+    .pwine_get_vulkan_driver = WAYLAND_wine_get_vulkan_driver,
 };
 
 /***********************************************************************

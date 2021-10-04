@@ -520,6 +520,7 @@ extern void CDECL WAYLAND_WindowPosChanged(HWND hwnd, HWND insert_after, UINT sw
 extern BOOL CDECL WAYLAND_WindowPosChanging(HWND hwnd, HWND insert_after, UINT swp_flags,
                                             const RECT *window_rect, const RECT *client_rect,
                                             RECT *visible_rect, struct window_surface **surface) DECLSPEC_HIDDEN;
+extern const struct vulkan_funcs * CDECL WAYLAND_wine_get_vulkan_driver(UINT version) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          GDI driver functions

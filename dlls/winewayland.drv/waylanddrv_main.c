@@ -125,6 +125,7 @@ static const struct user_driver_funcs waylanddrv_funcs =
     .pDestroyWindow = WAYLAND_DestroyWindow,
     .pEnumDisplaySettingsEx = WAYLAND_EnumDisplaySettingsEx,
     .pMsgWaitForMultipleObjectsEx = WAYLAND_MsgWaitForMultipleObjectsEx,
+    .pSetCursor = WAYLAND_SetCursor,
     .pThreadDetach = WAYLAND_ThreadDetach,
     .pWindowMessage = WAYLAND_WindowMessage,
     .pWindowPosChanged = WAYLAND_WindowPosChanged,
@@ -139,6 +140,8 @@ static BOOL process_attach(void)
     DWORD id;
 
     if ((thread_data_tls_index = TlsAlloc()) == TLS_OUT_OF_INDEXES) return FALSE;
+
+    if (!wayland_init_set_cursor()) return FALSE;
 
     if (!wayland_process_init()) return FALSE;
 

@@ -354,6 +354,10 @@ static void wayland_win_data_update_wayland_surface(struct wayland_win_data *dat
 
     wayland = thread_init_wayland();
 
+    /* Force client to recreate Vulkan objects so that we use the
+     * updated backing surface in our internal Vulkan representations. */
+    wayland_invalidate_vulkan_objects(data->hwnd);
+
     if (data->wayland_surface)
     {
         wayland_surface_unref(data->wayland_surface);
@@ -643,6 +647,7 @@ void CDECL WAYLAND_DestroyWindow(HWND hwnd)
 
     if (!(data = wayland_win_data_get(hwnd))) return;
     wayland_destroy_gl_drawable(hwnd);
+    wayland_invalidate_vulkan_objects(hwnd);
     wayland_win_data_destroy(data);
 }
 

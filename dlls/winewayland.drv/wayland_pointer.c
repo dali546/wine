@@ -72,6 +72,15 @@ static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
     pointer_handle_motion_internal(data, pointer, time, sx, sy);
 }
 
+static void CALLBACK set_cursor_if_current_invalid(HWND hwnd, UINT msg,
+                                                   UINT_PTR timer_id,
+                                                   DWORD elapsed)
+{
+    TRACE("hwnd=%p\n", hwnd);
+    KillTimer(hwnd, timer_id);
+    wayland_set_cursor_if_current_invalid((HCURSOR)timer_id);
+}
+
 static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
                                  uint32_t serial, struct wl_surface *surface,
                                  wl_fixed_t sx, wl_fixed_t sy)
@@ -86,9 +95,18 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
     if (wayland_surface && wayland_surface->hwnd &&
         wayland_surface->wayland == wayland)
     {
+        HCURSOR hcursor;
         TRACE("surface=%p hwnd=%p\n", wayland_surface, wayland_surface->hwnd);
         wayland->pointer.focused_surface = wayland_surface;
         wayland->pointer.enter_serial = serial;
+        /* Invalidate the set cursor cache, so that next update is
+         * unconditionally applied. */
+        hcursor = wayland_invalidate_set_cursor();
+        /* Schedule a cursor update, to ensure the current cursor is applied on
+         * this surface, but only if the application hasn't updated the cursor
+         * in the meantime. */
+        SetTimer(wayland_surface->hwnd, (UINT_PTR)hcursor, USER_TIMER_MINIMUM,
+                 set_cursor_if_current_invalid);
         /* Handle the enter as a motion, to account for cases where the
          * window first appears beneath the pointer and won't get a separate
          * motion event. */
@@ -214,12 +232,20 @@ void wayland_pointer_init(struct wayland_pointer *pointer, struct wayland *wayla
     wayland->pointer.wayland = wayland;
     wayland->pointer.wl_pointer = wl_pointer;
     wl_pointer_add_listener(wayland->pointer.wl_pointer, &pointer_listener, wayland);
+    wayland->pointer.cursor_wl_surface =
+        wl_compositor_create_surface(wayland->wl_compositor);
 }
 
 void wayland_pointer_deinit(struct wayland_pointer *pointer)
 {
     if (pointer->wl_pointer)
         wl_pointer_destroy(pointer->wl_pointer);
+
+    if (pointer->cursor_wl_surface)
+        wl_surface_destroy(pointer->cursor_wl_surface);
+
+    if (pointer->cursor)
+        wayland_cursor_destroy(pointer->cursor);
 
     memset(pointer, 0, sizeof(*pointer));
 }

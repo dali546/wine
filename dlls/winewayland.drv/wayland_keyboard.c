@@ -215,7 +215,7 @@ static void send_keyboard_input(HWND hwnd, WORD vkey, WORD scan, DWORD flags)
     input.u.ki.time        = 0;
     input.u.ki.dwExtraInfo = 0;
 
-    __wine_send_input(hwnd, &input, NULL);
+    __wine_send_input(hwnd, &input);
 }
 
 static WCHAR dead_xkb_keysym_to_wchar(xkb_keysym_t xkb_keysym)

@@ -882,8 +882,7 @@ static struct wayland_output *wayland_surface_get_main_output(
     HMONITOR hmonitor;
     MONITORINFOEXW mi;
 
-    if (surface->main_output)
-        return surface->main_output;
+    return surface->main_output;
 
     hmonitor = MonitorFromWindow(surface->hwnd, MONITOR_DEFAULTTONULL);
     if (hmonitor)

@@ -189,6 +189,7 @@ struct wayland_surface
     LONG ref;
     struct wl_list output_ref_list;
     struct wayland_output *main_output;
+    struct wayland_output *wine_output;
     BOOL drawing_allowed;
     struct wl_list child_list;
 };
@@ -327,6 +328,8 @@ struct wayland_surface *wayland_surface_ref(struct wayland_surface *surface);
 void wayland_surface_unref(struct wayland_surface *surface);
 void wayland_surface_leave_output(struct wayland_surface *surface,
                                   struct wayland_output *output);
+void wayland_surface_set_wine_output(struct wayland_surface *surface,
+                                     struct wayland_output *output);
 
 /**********************************************************************
  *          Wayland SHM buffer

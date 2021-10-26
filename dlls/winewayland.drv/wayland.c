@@ -173,7 +173,11 @@ static void registry_handle_global_remove(void *data, struct wl_registry *regist
             /* Remove the output from toplevels, as some compositors don't send
              * a leave event if the output is disconnected. */
             wl_list_for_each(surface, &wayland->toplevel_list, link)
+            {
                 wayland_surface_leave_output(surface, output);
+                if (surface->wine_output == output)
+                    wayland_surface_set_wine_output(surface, NULL);
+            }
 
             wayland_output_destroy(output);
             wayland_init_display_devices(wayland);

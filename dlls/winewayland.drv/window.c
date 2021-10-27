@@ -368,6 +368,23 @@ static void wayland_win_data_update_wayland_surface(struct wayland_win_data *dat
 
     if (data->wayland_surface)
     {
+        struct wayland_surface *child;
+
+        /* Dependent Wayland surfaces (either subsurfaces or xdg children)
+         * require an update, so that they point to the updated surface.
+         * TODO: Ensure that an update is eventually triggered. */
+        EnterCriticalSection(&data->wayland_surface->crit);
+        wl_list_for_each(child, &data->wayland_surface->child_list, link)
+        {
+            struct wayland_win_data *child_data;
+            if ((child_data = wayland_win_data_get(child->hwnd)))
+            {
+                child_data->wayland_surface_needs_update = TRUE;
+                wayland_win_data_release(child_data);
+            }
+        }
+        LeaveCriticalSection(&data->wayland_surface->crit);
+
         wayland_surface_unref(data->wayland_surface);
         data->wayland_surface = NULL;
     }

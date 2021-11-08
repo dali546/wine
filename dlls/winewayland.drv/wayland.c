@@ -23,10 +23,22 @@
 #include "waylanddrv.h"
 
 #include "wine/debug.h"
+#include "wine/heap.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
 struct wl_display *process_wl_display = NULL;
+static struct wayland *process_wayland = NULL;
+CRITICAL_SECTION process_wayland_section;
+static CRITICAL_SECTION_DEBUG process_wayland_critsect_debug =
+{
+    0, 0, &process_wayland_section,
+    { &process_wayland_critsect_debug.ProcessLocksList,
+      &process_wayland_critsect_debug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": process_wayland_section") }
+};
+CRITICAL_SECTION process_wayland_section = { &process_wayland_critsect_debug,
+                                             -1, 0, 0, 0, 0 };
 
 /**********************************************************************
  *          Registry handling
@@ -137,5 +149,43 @@ void wayland_deinit(struct wayland *wayland)
 BOOL wayland_process_init(void)
 {
     process_wl_display = wl_display_connect(NULL);
-    return process_wl_display != NULL;
+    if (!process_wl_display)
+        return FALSE;
+
+    process_wayland = heap_alloc_zero(sizeof(*process_wayland));
+    if (!process_wayland)
+        return FALSE;
+
+    return wayland_init(process_wayland);
+}
+
+/**********************************************************************
+ *          wayland_is_process
+ *
+ *  Checks whether a wayland instance is the per-process one.
+ */
+BOOL wayland_is_process(struct wayland *wayland)
+{
+    return wayland == process_wayland;
+}
+
+/**********************************************************************
+ *          wayland_process_acquire
+ *
+ *  Acquires the per-process wayland instance.
+ */
+struct wayland *wayland_process_acquire(void)
+{
+    EnterCriticalSection(&process_wayland_section);
+    return process_wayland;
+}
+
+/**********************************************************************
+ *          wayland_process_release
+ *
+ *  Releases the per-process wayland instance.
+ */
+void wayland_process_release(void)
+{
+    LeaveCriticalSection(&process_wayland_section);
 }

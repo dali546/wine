@@ -32,6 +32,7 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
+static const WCHAR adapter_name_fmtW[] = {'\\','\\','.','\\','D','I','S','P','L','A','Y','%','d',0};
 static BOOL force_display_devices_refresh;
 
 static void wayland_refresh_display_devices(void)
@@ -165,6 +166,17 @@ void CDECL WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_
         wayland_add_adapter(device_manager, param, output_id);
         wayland_add_monitor(device_manager, param, output);
 
+        output_id++;
+    }
+
+    /* Set wine name in wayland_output so that we can look it up. */
+    output_id = 0;
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        snprintfW(output->wine_name, ARRAY_SIZE(output->wine_name),
+                  adapter_name_fmtW, output_id + 1);
+        TRACE("name=%s wine_name=%s\n",
+              output->name, wine_dbgstr_w(output->wine_name));
         output_id++;
     }
 

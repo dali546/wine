@@ -493,6 +493,16 @@ static void wayland_init_display_devices_internal(struct wayland *wayland)
         output_index++;
     }
 
+    /* Set wine name in wayland_output so that we can look it up. */
+    output_index = 0;
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        snprintfW(output->wine_name, ARRAY_SIZE(output->wine_name),
+                  adapter_name_fmtW, output_index + 1);
+        TRACE("name=%s wine_name=%s\n", output->name, wine_dbgstr_w(output->wine_name));
+        output_index++;
+    }
+
 done:
     cleanup_devices();
     SetupDiDestroyDeviceInfoList(monitor_devinfo);

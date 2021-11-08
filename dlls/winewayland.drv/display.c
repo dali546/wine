@@ -220,6 +220,20 @@ BOOL WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manage
         output_id++;
     }
 
+    /* Set wine name in wayland_output so that we can look it up. */
+    output_id = 0;
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        char buf[16];
+        int len;
+        len = snprintf(buf, sizeof(buf), "\\\\.\\DISPLAY%d", output_id + 1);
+        if (len > sizeof(buf)) len = sizeof(buf);
+        ascii_to_unicode_z(output->wine_name, ARRAY_SIZE(output->wine_name), buf, len);
+        TRACE("name=%s wine_name=%s\n",
+              output->name, wine_dbgstr_w(output->wine_name));
+        output_id++;
+    }
+
     wayland_process_release();
 
     return TRUE;

@@ -75,6 +75,9 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
 BOOL wayland_process_init(void);
 BOOL wayland_init(struct wayland *wayland);
 void wayland_deinit(struct wayland *wayland);
+BOOL wayland_is_process(struct wayland *wayland);
+struct wayland *wayland_process_acquire(void);
+void wayland_process_release(void);
 
 /**********************************************************************
  *          USER driver functions

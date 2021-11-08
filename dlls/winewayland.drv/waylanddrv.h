@@ -88,6 +88,9 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
 BOOL wayland_process_init(void) DECLSPEC_HIDDEN;
 BOOL wayland_init(struct wayland *wayland) DECLSPEC_HIDDEN;
 void wayland_deinit(struct wayland *wayland) DECLSPEC_HIDDEN;
+BOOL wayland_is_process(struct wayland *wayland) DECLSPEC_HIDDEN;
+struct wayland *wayland_process_acquire(void) DECLSPEC_HIDDEN;
+void wayland_process_release(void) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Wayland mutex

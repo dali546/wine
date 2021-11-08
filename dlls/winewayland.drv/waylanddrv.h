@@ -95,6 +95,7 @@ struct wayland_output
     int x, y;  /* position in native pixel coordinate space */
     int scale; /* wayland output scale factor for hidpi */
     char *name;
+    WCHAR wine_name[128];
     uint32_t global_id;
 };
 
@@ -147,6 +148,9 @@ void wayland_mutex_unlock(struct wayland_mutex *wayland_mutex);
 BOOL wayland_output_create(struct wayland *wayland, uint32_t id, uint32_t version);
 void wayland_output_destroy(struct wayland_output *output);
 void wayland_output_use_xdg_extension(struct wayland_output *output);
+void wayland_update_outputs_from_process(struct wayland *wayland);
+struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
+                                                       LPCWSTR wine_name);
 
 /**********************************************************************
  *          USER driver functions

@@ -24,9 +24,16 @@
 
 #include "wine/debug.h"
 
+#include <stdlib.h>
+
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
 struct wl_display *process_wl_display = NULL;
+static struct wayland *process_wayland = NULL;
+static struct wayland_mutex process_wayland_mutex =
+{
+    PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP, 0, __FILE__ ": process_wayland_mutex"
+};
 
 /**********************************************************************
  *          Registry handling
@@ -147,5 +154,43 @@ void wayland_deinit(struct wayland *wayland)
 BOOL wayland_process_init(void)
 {
     process_wl_display = wl_display_connect(NULL);
-    return process_wl_display != NULL;
+    if (!process_wl_display)
+        return FALSE;
+
+    process_wayland = calloc(1, sizeof(*process_wayland));
+    if (!process_wayland)
+        return FALSE;
+
+    return wayland_init(process_wayland);
+}
+
+/**********************************************************************
+ *          wayland_is_process
+ *
+ *  Checks whether a wayland instance is the per-process one.
+ */
+BOOL wayland_is_process(struct wayland *wayland)
+{
+    return wayland == process_wayland;
+}
+
+/**********************************************************************
+ *          wayland_process_acquire
+ *
+ *  Acquires the per-process wayland instance.
+ */
+struct wayland *wayland_process_acquire(void)
+{
+    wayland_mutex_lock(&process_wayland_mutex);
+    return process_wayland;
+}
+
+/**********************************************************************
+ *          wayland_process_release
+ *
+ *  Releases the per-process wayland instance.
+ */
+void wayland_process_release(void)
+{
+    wayland_mutex_unlock(&process_wayland_mutex);
 }

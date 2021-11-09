@@ -38,6 +38,15 @@
 extern struct wl_display *process_wl_display;
 
 /**********************************************************************
+  *          Internal messages and data
+  */
+
+enum wayland_window_message
+{
+    WM_WAYLAND_BROADCAST_DISPLAY_CHANGE = 0x80001000,
+};
+
+/**********************************************************************
  *          Definitions for wayland types
  */
 

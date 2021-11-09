@@ -42,9 +42,41 @@ static void wayland_refresh_display_devices(void)
     NtUserGetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &num_path, &num_mode);
 }
 
+static void wayland_broadcast_wm_display_change(void)
+{
+    struct wayland_output *output;
+    struct wayland *wayland = wayland_process_acquire();
+
+    /* During thread wayland initialization we will get our initial output
+     * information and init the display devices. There is no need to send out
+     * WM_DISPLAYCHANGE in this case, since this is the initial display state.
+     * Additionally, thread initialization may occur in a context that has
+     * acquired the internal Wine user32 lock, and sending messages would lead
+     * to an internal user32 lock error. */
+    if (wayland->initialized)
+    {
+        /* The first valid output is the primary. */
+        wl_list_for_each(output, &wayland->output_list, link)
+        {
+            int width, height;
+            if (!output->current_mode) continue;
+            width = output->current_mode->width;
+            height = output->current_mode->height;
+            wayland_process_release();
+
+            SendMessageW(GetDesktopWindow(), WM_WAYLAND_BROADCAST_DISPLAY_CHANGE,
+                         32, MAKELPARAM(width, height));
+            return;
+        }
+    }
+
+    wayland_process_release();
+}
+
 void wayland_init_display_devices()
 {
     wayland_refresh_display_devices();
+    wayland_broadcast_wm_display_change();
 }
 
 static void wayland_add_gpu(const struct gdi_device_manager *device_manager,

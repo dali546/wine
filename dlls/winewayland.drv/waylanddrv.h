@@ -157,5 +157,6 @@ void wayland_output_use_xdg_extension(struct wayland_output *output) DECLSPEC_HI
  */
 
 BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
+LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_WAYLANDDRV_H */

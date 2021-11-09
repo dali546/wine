@@ -47,3 +47,19 @@ BOOL CDECL WAYLAND_CreateWindow(HWND hwnd)
 
     return TRUE;
 }
+
+/**********************************************************************
+ *           WAYLAND_WindowMessage
+ */
+LRESULT CDECL WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    TRACE("msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
+
+    switch (msg)
+    {
+    default:
+        FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
+    }
+
+    return 0;
+}

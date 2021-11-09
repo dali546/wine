@@ -61,6 +61,19 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     switch (msg)
     {
+    case WM_WAYLAND_BROADCAST_DISPLAY_CHANGE:
+        {
+            RECT virtual_rect = NtUserGetVirtualScreenRect();
+            RECT primary_rect = NtUserGetPrimaryMonitorRect();
+            NtUserSetWindowPos(hwnd, 0, virtual_rect.left, virtual_rect.top,
+                               virtual_rect.right - virtual_rect.left,
+                               virtual_rect.bottom - virtual_rect.top,
+                               SWP_NOZORDER | SWP_NOACTIVATE | SWP_DEFERERASE );
+            send_message_timeout(HWND_BROADCAST, WM_DISPLAYCHANGE, 32,
+                                 MAKELPARAM(primary_rect.right, primary_rect.bottom),
+                                 SMTO_ABORTIFHUNG, 2000, NULL);
+        }
+        break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
     }

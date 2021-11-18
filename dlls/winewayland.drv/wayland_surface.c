@@ -136,7 +136,8 @@ struct wayland_surface *wayland_surface_create_plain(struct wayland *wayland)
         goto err;
 
     wl_surface_set_user_data(surface->wl_surface, surface);
-    surface->drawing_allowed = TRUE;
+    /* Plain surfaces are unmappable, so don't draw on them. */
+    surface->drawing_allowed = FALSE;
 
     surface->ref = 1;
     surface->role = WAYLAND_SURFACE_ROLE_NONE;
@@ -161,6 +162,8 @@ void wayland_surface_make_toplevel(struct wayland_surface *surface,
     struct wayland *wayland = surface->wayland;
 
     TRACE("surface=%p parent=%p\n", surface, parent);
+
+    surface->drawing_allowed = TRUE;
 
     surface->xdg_surface =
         xdg_wm_base_get_xdg_surface(wayland->xdg_wm_base, surface->wl_surface);
@@ -208,6 +211,8 @@ void wayland_surface_make_subsurface(struct wayland_surface *surface,
 
     TRACE("surface=%p parent=%p\n", surface, parent);
 
+    surface->drawing_allowed = TRUE;
+
     surface->parent = wayland_surface_ref(parent);
     surface->wl_subsurface =
         wl_subcompositor_get_subsurface(wayland->wl_subcompositor,
@@ -239,6 +244,8 @@ err:
 void wayland_surface_clear_role(struct wayland_surface *surface)
 {
     TRACE("surface=%p hwnd=%p\n", surface, surface->hwnd);
+
+    surface->drawing_allowed = FALSE;
 
     if (surface->xdg_toplevel)
     {

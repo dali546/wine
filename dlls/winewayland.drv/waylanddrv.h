@@ -224,6 +224,9 @@ void wayland_surface_make_toplevel(struct wayland_surface *surface,
                                    struct wayland_surface *parent);
 void wayland_surface_make_subsurface(struct wayland_surface *surface,
                                      struct wayland_surface *parent);
+BOOL wayland_surface_configure_is_compatible(struct wayland_surface_configure *conf,
+                                             int width, int height,
+                                             enum wayland_configure_flags flags);
 void wayland_surface_destroy(struct wayland_surface *surface);
 void wayland_surface_ack_pending_configure(struct wayland_surface *surface);
 void wayland_surface_coords_from_wine(struct wayland_surface *surface,

@@ -156,6 +156,9 @@ struct wayland_surface *wayland_surface_create_plain(struct wayland *wayland)
     if (!surface)
         goto err;
 
+    /* Plain surfaces are unmappable, so don't draw on them. */
+    surface->drawing_allowed = FALSE;
+
     wl_surface_commit(surface->wl_surface);
 
     return surface;

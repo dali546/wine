@@ -207,6 +207,7 @@ static inline xkb_keycode_t linux_input_keycode_to_xkb(uint32_t key)
 static void send_keyboard_input(HWND hwnd, WORD vkey, WORD scan, DWORD flags)
 {
     INPUT input;
+    RAWINPUT rawinput;
 
     input.type             = INPUT_KEYBOARD;
     input.u.ki.wVk         = vkey;
@@ -215,7 +216,7 @@ static void send_keyboard_input(HWND hwnd, WORD vkey, WORD scan, DWORD flags)
     input.u.ki.time        = 0;
     input.u.ki.dwExtraInfo = 0;
 
-    __wine_send_input(hwnd, &input, NULL);
+    __wine_send_input(hwnd, &input, &rawinput);
 }
 
 static WCHAR dead_xkb_keysym_to_wchar(xkb_keysym_t xkb_keysym)

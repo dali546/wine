@@ -46,6 +46,7 @@ static void pointer_handle_motion_internal(void *data, struct wl_pointer *pointe
                         wayland->pointer.focused_surface->hwnd : 0;
     INPUT input = {0};
     int screen_x, screen_y;
+    RAWINPUT rawinput;
 
     if (!focused_hwnd)
         return;
@@ -68,7 +69,7 @@ static void pointer_handle_motion_internal(void *data, struct wl_pointer *pointe
     wayland->last_dispatch_mask |= QS_MOUSEMOVE;
     wayland->last_event_type = INPUT_MOUSE;
 
-    __wine_send_input(focused_hwnd, &input, NULL);
+    __wine_send_input(focused_hwnd, &input, &rawinput);
 }
 
 static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
@@ -149,6 +150,7 @@ static void pointer_handle_button(void *data, struct wl_pointer *wl_pointer,
     HWND focused_hwnd = wayland->pointer.focused_surface ?
                         wayland->pointer.focused_surface->hwnd : 0;
     INPUT input = {0};
+    RAWINPUT rawinput;
 
     if (!focused_hwnd)
         return;
@@ -176,7 +178,7 @@ static void pointer_handle_button(void *data, struct wl_pointer *wl_pointer,
     else
         wayland->last_button_serial = 0;
 
-    __wine_send_input(focused_hwnd, &input, NULL);
+    __wine_send_input(focused_hwnd, &input, &rawinput);
 }
 
 static void pointer_handle_axis(void *data, struct wl_pointer *wl_pointer,
@@ -205,6 +207,7 @@ static void pointer_handle_axis_discrete(void *data, struct wl_pointer *wl_point
     HWND focused_hwnd = wayland->pointer.focused_surface ?
                         wayland->pointer.focused_surface->hwnd : 0;
     INPUT input = {0};
+    RAWINPUT rawinput;
 
     if (!focused_hwnd)
         return;
@@ -229,7 +232,7 @@ static void pointer_handle_axis_discrete(void *data, struct wl_pointer *wl_point
     wayland->last_dispatch_mask |= QS_MOUSEBUTTON;
     wayland->last_event_type = INPUT_MOUSE;
 
-    __wine_send_input(focused_hwnd, &input, NULL);
+    __wine_send_input(focused_hwnd, &input, &rawinput);
 }
 
 static const struct wl_pointer_listener pointer_listener = {
@@ -258,6 +261,7 @@ static void relative_pointer_handle_motion(void *data,
                         wayland->pointer.focused_surface->hwnd : 0;
     int wine_dx, wine_dy;
     INPUT input = {0};
+    RAWINPUT rawinput;
 
     if (!focused_hwnd)
         return;
@@ -278,7 +282,7 @@ static void relative_pointer_handle_motion(void *data,
     wayland->last_dispatch_mask |= QS_MOUSEMOVE;
     wayland->last_event_type = INPUT_MOUSE;
 
-    __wine_send_input(focused_hwnd, &input, NULL);
+    __wine_send_input(focused_hwnd, &input, &rawinput);
 }
 
 static const struct zwp_relative_pointer_v1_listener zwp_relative_pointer_v1_listener = {

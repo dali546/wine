@@ -52,6 +52,7 @@
 extern struct wl_display *process_wl_display;
 extern const struct user_driver_funcs waylanddrv_funcs;
 extern enum wayland_hidpi_scaling option_hidpi_scaling;
+extern BOOL option_show_systray;
 extern BOOL option_use_system_cursors;
 
 /**********************************************************************

@@ -39,6 +39,7 @@
  */
 
 enum wayland_hidpi_scaling option_hidpi_scaling = WAYLAND_HIDPI_SCALING_APPLICATION;
+BOOL option_show_systray = TRUE;
 BOOL option_use_system_cursors = TRUE;
 
 /***********************************************************************
@@ -96,6 +97,9 @@ void wayland_read_options_from_registry(void)
         else if (!strcasecmp(buffer, "Compositor"))
             option_hidpi_scaling = WAYLAND_HIDPI_SCALING_COMPOSITOR;
     }
+
+    if (!get_config_key(hkey, appkey, "ShowSystray", RRF_RT_REG_SZ, buffer, sizeof(buffer)))
+        option_show_systray = IS_OPTION_TRUE(buffer[0]);
 
     if (!get_config_key(hkey, appkey, "UseSystemCursors", RRF_RT_REG_SZ, buffer, sizeof(buffer)))
         option_use_system_cursors = IS_OPTION_TRUE(buffer[0]);

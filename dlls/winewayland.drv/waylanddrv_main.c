@@ -195,6 +195,7 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
     pthread_create(&thread, NULL, wayland_read_thread, NULL);
 
     params->unix_call = waylanddrv_unix_call;
+    params->option_show_systray = option_show_systray;
 
     return 0;
 }

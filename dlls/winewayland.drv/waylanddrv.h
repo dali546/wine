@@ -54,6 +54,7 @@ extern struct wl_display *process_wl_display;
 extern struct gbm_device *process_gbm_device;
 extern char *option_drm_device;
 extern enum wayland_hidpi_scaling option_hidpi_scaling;
+extern BOOL option_show_systray;
 extern BOOL option_use_system_cursors;
 
 /**********************************************************************

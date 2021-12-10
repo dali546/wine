@@ -22,6 +22,7 @@
 
 static unixlib_handle_t waylanddrv_handle;
 NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *params);
+BOOL option_show_systray;
 
 static NTSTATUS WINAPI waylanddrv_client_load_cursor(void *arg, ULONG size)
 {
@@ -63,6 +64,7 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
         return FALSE;
 
     waylanddrv_unix_call = init_params.unix_call;
+    option_show_systray = init_params.option_show_systray;
 
     return TRUE;
 }

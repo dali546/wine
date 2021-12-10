@@ -40,6 +40,7 @@ WINE_DECLARE_DEBUG_CHANNEL(winediag);
 char *process_name = NULL;
 char *option_drm_device = NULL;
 enum wayland_hidpi_scaling option_hidpi_scaling = WAYLAND_HIDPI_SCALING_APPLICATION;
+BOOL option_show_systray = TRUE;
 BOOL option_use_system_cursors = TRUE;
 
 #define IS_OPTION_TRUE(ch) \
@@ -305,6 +306,9 @@ static void wayland_read_options_from_registry(void)
             option_hidpi_scaling = WAYLAND_HIDPI_SCALING_COMPOSITOR;
     }
 
+    if (!get_config_key(hkey, appkey, "ShowSystray", REG_SZ, buffer, sizeof(buffer)))
+        option_show_systray = IS_OPTION_TRUE(buffer[0]);
+
     if (!get_config_key(hkey, appkey, "UseSystemCursors", REG_SZ, buffer, sizeof(buffer)))
         option_use_system_cursors = IS_OPTION_TRUE(buffer[0]);
 
@@ -463,6 +467,8 @@ static void wayland_init_process_name(void)
 
 static NTSTATUS waylanddrv_unix_init(void *arg)
 {
+    struct waylanddrv_unix_init_params *params = arg;
+
     /* Set the user driver functions now so that they are available during
      * our initialization. We clear them on error. */
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
@@ -476,6 +482,8 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
     if (!wayland_init_set_cursor()) goto err;
 
     if (!wayland_process_init()) goto err;
+
+    params->option_show_systray = option_show_systray;
 
     return 0;
 

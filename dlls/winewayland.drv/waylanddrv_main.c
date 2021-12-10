@@ -159,6 +159,8 @@ const struct user_driver_funcs waylanddrv_funcs =
 
 static NTSTATUS waylanddrv_unix_init(void *arg)
 {
+    struct waylanddrv_unix_init_params *params = arg;
+
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
 
     wayland_read_options_from_registry();
@@ -168,6 +170,8 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
     if (!wayland_init_set_cursor()) return STATUS_UNSUCCESSFUL;
 
     if (!wayland_process_init()) return STATUS_UNSUCCESSFUL;
+
+    params->option_show_systray = option_show_systray;
 
     return 0;
 }

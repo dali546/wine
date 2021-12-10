@@ -161,6 +161,8 @@ static const struct user_driver_funcs null_funcs = { 0 };
 
 static NTSTATUS waylanddrv_unix_init(void *arg)
 {
+    struct waylanddrv_unix_init_params *params = arg;
+
     /* Set the user driver functions now so that they are available during
      * our initialization. We clear them on error. */
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
@@ -172,6 +174,8 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
     if (!wayland_init_set_cursor()) goto err;
 
     if (!wayland_process_init()) goto err;
+
+    params->option_show_systray = option_show_systray;
 
     return 0;
 

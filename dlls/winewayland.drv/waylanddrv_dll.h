@@ -29,6 +29,7 @@
 
 extern unixlib_handle_t waylanddrv_handle DECLSPEC_HIDDEN;
 #define WAYLANDDRV_UNIX_CALL(func, params) __wine_unix_call(waylanddrv_handle, waylanddrv_unix_func_ ## func, params)
+extern BOOL option_show_systray DECLSPEC_HIDDEN;
 
 NTSTATUS WINAPI waylanddrv_client_create_clipboard_window(void *arg, ULONG size);
 NTSTATUS WINAPI waylanddrv_client_dnd(void *params, ULONG size);

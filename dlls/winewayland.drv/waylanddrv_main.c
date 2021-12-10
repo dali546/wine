@@ -182,6 +182,7 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
     if (!wayland_process_init()) return STATUS_UNSUCCESSFUL;
 
     params->unix_call = waylanddrv_unix_call;
+    params->option_show_systray = option_show_systray;
 
     return 0;
 }

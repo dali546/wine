@@ -22,6 +22,7 @@
 
 static unixlib_handle_t waylanddrv_handle;
 NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *params);
+BOOL option_show_systray;
 
 typedef NTSTATUS (WINAPI *kernel_callback)(void *params, ULONG size);
 static const kernel_callback kernel_callbacks[] =
@@ -65,6 +66,7 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
         return FALSE;
 
     waylanddrv_unix_call = init_params.unix_call;
+    option_show_systray = init_params.option_show_systray;
 
     /* Read wayland events from a dedicated thread. */
     CreateThread(NULL, 0, wayland_read_events_thread, NULL, 0, &tid);

@@ -31,6 +31,11 @@
 #include "winreg.h"
 #include "winuser.h"
 
+#define IS_OPTION_TRUE(ch) \
+    ((ch) == 'y' || (ch) == 'Y' || (ch) == 't' || (ch) == 'T' || (ch) == '1')
+
+extern BOOL show_systray;
+
 /***********************************************************************
  *		get_config_key
  *
@@ -86,6 +91,9 @@ void wayland_read_options_from_registry(struct wayland *wayland)
         else if (!strcasecmp(buffer, "Compositor"))
             wayland->hidpi_scaling = WAYLAND_HIDPI_SCALING_COMPOSITOR;
     }
+
+    if (!get_config_key(hkey, appkey, "ShowSystray", RRF_RT_REG_SZ, buffer, sizeof(buffer)))
+        show_systray = IS_OPTION_TRUE(buffer[0]);
 
     if (appkey) RegCloseKey(appkey);
     if (hkey) RegCloseKey(hkey);

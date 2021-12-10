@@ -30,6 +30,7 @@
 /* FIXME: Use __wine_unix_call instead */
 extern NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *params) DECLSPEC_HIDDEN;
 #define WAYLANDDRV_UNIX_CALL(func, params) waylanddrv_unix_call(waylanddrv_unix_func_ ## func, params)
+extern BOOL option_show_systray DECLSPEC_HIDDEN;
 
 NTSTATUS WINAPI waylanddrv_client_create_clipboard_window(void *arg, ULONG size);
 NTSTATUS WINAPI waylanddrv_client_dnd(void *params, ULONG size);

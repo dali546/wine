@@ -25,6 +25,7 @@
 # error You must include config.h to use this header
 #endif
 
+#include <pthread.h>
 #include <stdarg.h>
 #include <wayland-client.h>
 
@@ -36,6 +37,18 @@
  */
 
 extern struct wl_display *process_wl_display;
+
+/**********************************************************************
+ *          Definitions for wayland types
+ */
+
+struct wayland_mutex
+{
+    pthread_mutex_t mutex;
+    DWORD owner_tid;
+    int lock_count;
+    const char *name;
+};
 
 /**********************************************************************
  *          Wayland thread data
@@ -61,5 +74,15 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
  */
 
 BOOL wayland_process_init(void);
+
+/**********************************************************************
+ *          Wayland mutex
+ */
+
+void wayland_mutex_init(struct wayland_mutex *wayland_mutex, int kind,
+                        const char *name);
+void wayland_mutex_destroy(struct wayland_mutex *wayland_mutex);
+void wayland_mutex_lock(struct wayland_mutex *wayland_mutex);
+void wayland_mutex_unlock(struct wayland_mutex *wayland_mutex);
 
 #endif /* __WINE_WAYLANDDRV_H */

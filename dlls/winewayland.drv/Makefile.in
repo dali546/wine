@@ -2,7 +2,7 @@ EXTRADEFS = -DWINE_NO_LONG_TYPES
 MODULE = winewayland.drv
 UNIXLIB = winewayland.so
 EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS)
-EXTRALIBS = -lwin32u $(WAYLAND_CLIENT_LIBS)
+EXTRALIBS = -lwin32u $(WAYLAND_CLIENT_LIBS) $(PTHREAD_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRACFLAGS = -std=c11 -Wno-declaration-after-statement
 CPPFLAGS = -std=c11 -Wno-declaration-after-statement
@@ -11,6 +11,7 @@ EXTRACROSSCFLAGS = -std=c11 -Wno-declaration-after-statement
 C_SRCS = \
 	dllmain.c \
 	wayland.c \
+	wayland_mutex.c \
 	waylanddrv_main.c \
 
 RC_SRCS = version.rc

@@ -45,6 +45,14 @@ extern struct wl_display *process_wl_display DECLSPEC_HIDDEN;
  *          Definitions for wayland types
  */
 
+struct wayland_mutex
+{
+    pthread_mutex_t mutex;
+    UINT owner_tid;
+    int lock_count;
+    const char *name;
+};
+
 struct wayland
 {
     struct wl_list thread_link;
@@ -80,6 +88,13 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
 BOOL wayland_process_init(void) DECLSPEC_HIDDEN;
 BOOL wayland_init(struct wayland *wayland) DECLSPEC_HIDDEN;
 void wayland_deinit(struct wayland *wayland) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          Wayland mutex
+ */
+
+void wayland_mutex_lock(struct wayland_mutex *wayland_mutex) DECLSPEC_HIDDEN;
+void wayland_mutex_unlock(struct wayland_mutex *wayland_mutex) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          USER driver functions

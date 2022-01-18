@@ -28,12 +28,87 @@
 
 #include "wine/debug.h"
 
+#include <errno.h>
+#include <stdlib.h>
+#include <time.h>
+
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
 struct wl_display *process_wl_display = NULL;
 
-static pthread_mutex_t thread_wayland_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+static struct wayland_mutex thread_wayland_mutex =
+{
+    PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP, 0, 0, __FILE__ ": thread_wayland_mutex"
+};
 static struct wl_list thread_wayland_list = {&thread_wayland_list, &thread_wayland_list};
+
+/**********************************************************************
+ *          wayland_mutex_lock
+ *
+ *  Lock a mutex, emitting error messages in cases of suspected deadlock.
+ *  In case of an unrecoverable error abort to ensure the program doesn't
+ *  continue with an inconsistent state.
+ */
+void wayland_mutex_lock(struct wayland_mutex *wayland_mutex)
+{
+    UINT tid = GetCurrentThreadId();
+    struct timespec timeout;
+    int err;
+
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_sec += 5;
+
+    while (TRUE)
+    {
+        err = pthread_mutex_timedlock(&wayland_mutex->mutex, &timeout);
+        if (!err) break;
+
+        if (err == ETIMEDOUT)
+        {
+            ERR("mutex %p %s lock timed out in thread %04x, blocked by %04x, retrying (60 sec)\n",
+                wayland_mutex, wayland_mutex->name, tid, wayland_mutex->owner_tid);
+            clock_gettime(CLOCK_REALTIME, &timeout);
+            timeout.tv_sec += 60;
+        }
+        else
+        {
+            ERR("error locking mutex %p %s errno=%d, aborting\n",
+                wayland_mutex, wayland_mutex->name, errno);
+            abort();
+        }
+    }
+
+    wayland_mutex->owner_tid = tid;
+    wayland_mutex->lock_count++;
+}
+
+/**********************************************************************
+ *          wayland_mutex_unlock
+ *
+ *  Unlock a mutex.
+ */
+void wayland_mutex_unlock(struct wayland_mutex *wayland_mutex)
+{
+    int err;
+
+    wayland_mutex->lock_count--;
+
+    if (wayland_mutex->lock_count == 0)
+    {
+        wayland_mutex->owner_tid = 0;
+    }
+    else if (wayland_mutex->lock_count < 0)
+    {
+        ERR("mutex %p %s lock_count is %d < 0\n",
+             wayland_mutex, wayland_mutex->name, wayland_mutex->lock_count);
+    }
+
+    if ((err = pthread_mutex_unlock(&wayland_mutex->mutex)))
+    {
+        ERR("failed to unlock mutex %p %s errno=%d\n",
+            wayland_mutex, wayland_mutex->name, err);
+    }
+}
 
 /**********************************************************************
  *          Registry handling
@@ -120,9 +195,9 @@ BOOL wayland_init(struct wayland *wayland)
     wl_display_roundtrip_queue(wayland->wl_display, wayland->wl_event_queue);
 
     /* Keep a list of all thread wayland instances. */
-    pthread_mutex_lock(&thread_wayland_mutex);
+    wayland_mutex_lock(&thread_wayland_mutex);
     wl_list_insert(&thread_wayland_list, &wayland->thread_link);
-    pthread_mutex_unlock(&thread_wayland_mutex);
+    wayland_mutex_unlock(&thread_wayland_mutex);
 
     wayland->initialized = TRUE;
 
@@ -138,9 +213,9 @@ void wayland_deinit(struct wayland *wayland)
 {
     TRACE("%p\n", wayland);
 
-    pthread_mutex_lock(&thread_wayland_mutex);
+    wayland_mutex_lock(&thread_wayland_mutex);
     wl_list_remove(&wayland->thread_link);
-    pthread_mutex_unlock(&thread_wayland_mutex);
+    wayland_mutex_unlock(&thread_wayland_mutex);
 
     if (wayland->wl_compositor)
         wl_compositor_destroy(wayland->wl_compositor);

@@ -45,6 +45,15 @@
 extern struct wl_display *process_wl_display DECLSPEC_HIDDEN;
 
 /**********************************************************************
+  *          Internal messages and data
+  */
+
+enum wayland_window_message
+{
+    WM_WAYLAND_MONITOR_CHANGE = 0x80001000,
+};
+
+/**********************************************************************
  *          Definitions for wayland types
  */
 
@@ -114,6 +123,13 @@ static inline struct wayland_thread_data *wayland_thread_data(void)
     return (struct wayland_thread_data *)(UINT_PTR)NtUserGetThreadInfo()->driver_data;
 }
 
+static inline struct wayland *thread_wayland(void)
+{
+    struct wayland_thread_data *data = wayland_thread_data();
+    if (!data) return NULL;
+    return &data->wayland;
+}
+
 /**********************************************************************
  *          Wayland initialization
  */
@@ -140,6 +156,7 @@ void wayland_mutex_unlock(struct wayland_mutex *wayland_mutex) DECLSPEC_HIDDEN;
 BOOL wayland_output_create(struct wayland *wayland, uint32_t id, uint32_t version) DECLSPEC_HIDDEN;
 void wayland_output_destroy(struct wayland_output *output) DECLSPEC_HIDDEN;
 void wayland_output_use_xdg_extension(struct wayland_output *output) DECLSPEC_HIDDEN;
+void wayland_notify_wine_monitor_change(void) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          USER32 helpers

@@ -45,6 +45,7 @@ extern struct wl_display *process_wl_display;
 enum wayland_window_message
 {
     WM_WAYLAND_BROADCAST_DISPLAY_CHANGE = 0x80001000,
+    WM_WAYLAND_MONITOR_CHANGE,
 };
 
 /**********************************************************************
@@ -160,6 +161,7 @@ void wayland_mutex_unlock(struct wayland_mutex *wayland_mutex);
 BOOL wayland_output_create(struct wayland *wayland, uint32_t id, uint32_t version);
 void wayland_output_destroy(struct wayland_output *output);
 void wayland_output_use_xdg_extension(struct wayland_output *output);
+void wayland_notify_wine_monitor_change(void);
 
 /**********************************************************************
  *          USER driver functions

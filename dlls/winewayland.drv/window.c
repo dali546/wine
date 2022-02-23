@@ -52,6 +52,10 @@ BOOL WAYLAND_CreateWindow(HWND hwnd)
     return TRUE;
 }
 
+static void handle_wm_wayland_monitor_change(struct wayland *wayland)
+{
+}
+
 /**********************************************************************
  *           WAYLAND_WindowMessage
  */
@@ -64,6 +68,9 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_WAYLAND_BROADCAST_DISPLAY_CHANGE:
         send_message_timeout(HWND_BROADCAST, WM_DISPLAYCHANGE, wp, lp,
                              SMTO_ABORTIFHUNG, 2000, NULL);
+        break;
+    case WM_WAYLAND_MONITOR_CHANGE:
+        handle_wm_wayland_monitor_change(thread_wayland());
         break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);

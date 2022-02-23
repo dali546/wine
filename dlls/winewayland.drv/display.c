@@ -61,6 +61,7 @@ static void wayland_broadcast_wm_display_change(void)
 void wayland_init_display_devices()
 {
     wayland_refresh_display_devices();
+    wayland_notify_wine_monitor_change();
     wayland_broadcast_wm_display_change();
 }
 

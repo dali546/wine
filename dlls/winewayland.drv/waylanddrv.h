@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <stdarg.h>
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -42,6 +43,7 @@
  */
 
 extern struct wl_display *process_wl_display;
+extern BOOL option_use_system_cursors;
 
 /**********************************************************************
   *          Internal messages and data
@@ -86,6 +88,7 @@ struct wayland_mutex
 
 struct wayland_cursor
 {
+    BOOL owns_wl_buffer;
     struct wl_buffer *wl_buffer;
     int width;
     int height;
@@ -372,6 +375,7 @@ void wayland_pointer_init(struct wayland_pointer *pointer, struct wayland *wayla
                           struct wl_pointer *wl_pointer);
 void wayland_pointer_deinit(struct wayland_pointer *pointer);
 void wayland_cursor_destroy(struct wayland_cursor *wayland_cursor);
+void wayland_cursor_theme_init(struct wayland *wayland);
 void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
                                               HCURSOR handle);
 BOOL wayland_init_set_cursor(void);

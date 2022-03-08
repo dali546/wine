@@ -30,6 +30,15 @@
 
 #include "winuser.h"
 
+#define IS_OPTION_TRUE(ch) \
+    ((ch) == 'y' || (ch) == 'Y' || (ch) == 't' || (ch) == 'T' || (ch) == '1')
+
+/***********************************************************************
+ *              Config options
+ */
+
+BOOL option_use_system_cursors = TRUE;
+
 /***********************************************************************
  *		get_config_key
  *
@@ -51,6 +60,7 @@ static inline DWORD get_config_key(HKEY defkey, HKEY appkey, const char *name,
 void wayland_read_options_from_registry(void)
 {
     static const WCHAR waylanddriverW[] = {'\\','W','a','y','l','a','n','d',' ','D','r','i','v','e','r',0};
+    char buffer[64];
     WCHAR bufferW[MAX_PATH + 16];
     HKEY hkey, appkey = 0;
     DWORD len;
@@ -75,6 +85,9 @@ void wayland_read_options_from_registry(void)
             NtClose(tmpkey);
         }
     }
+
+    if (!get_config_key(hkey, appkey, "UseSystemCursors", REG_SZ, buffer, sizeof(buffer)))
+        option_use_system_cursors = IS_OPTION_TRUE(buffer[0]);
 
     if (appkey) NtClose(appkey);
     if (hkey) NtClose(hkey);

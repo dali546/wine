@@ -23,9 +23,17 @@
 static unixlib_handle_t waylanddrv_handle;
 NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *params);
 
+static NTSTATUS WINAPI waylanddrv_client_load_cursor(void *arg, ULONG size)
+{
+    struct waylanddrv_client_load_cursor_params *p = arg;
+
+    return HandleToULong(LoadCursorW(NULL, UIntToPtr(p->name)));
+}
+
 typedef NTSTATUS (WINAPI *kernel_callback)(void *params, ULONG size);
 static const kernel_callback kernel_callbacks[] =
 {
+    waylanddrv_client_load_cursor,
 };
 
 C_ASSERT(NtUserDriverCallbackFirst + ARRAYSIZE(kernel_callbacks) == waylanddrv_client_func_last);

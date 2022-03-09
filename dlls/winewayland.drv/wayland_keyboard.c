@@ -39,6 +39,7 @@
 #include "waylanddrv.h"
 
 #include "wine/debug.h"
+#include "wine/server.h"
 
 #include "ntuser.h"
 
@@ -576,6 +577,102 @@ static struct xkb_state *_xkb_state_new_from_wine(struct wayland_keyboard *keybo
     return xkb_state;
 }
 
+static BOOL get_wine_async_key_state(BYTE state[256])
+{
+    BOOL ret;
+
+    SERVER_START_REQ(get_key_state)
+    {
+        req->async = 1;
+        req->key = -1;
+        wine_server_set_reply(req, state, 256);
+        ret = !wine_server_call(req);
+    }
+    SERVER_END_REQ;
+    return ret;
+}
+
+static void set_wine_async_key_state(const BYTE state[256])
+{
+    SERVER_START_REQ(set_key_state)
+    {
+        req->async = 1;
+        wine_server_add_data(req, state, 256);
+        wine_server_call(req);
+    }
+    SERVER_END_REQ;
+}
+
+static void adjust_wine_lock_state(struct wayland_keyboard *keyboard,
+                                   BYTE *keystate, WORD vkey, DWORD flags)
+{
+    BYTE prev_state = keystate[vkey] & 0x01;
+    HWND hwnd = keyboard->focused_surface ? keyboard->focused_surface->hwnd : 0;
+
+    /* First try to set the lock key state by sending key events. */
+    if (hwnd)
+    {
+        WORD scan = vkey_to_scancode(keyboard, vkey);
+        send_keyboard_input(hwnd, vkey, scan, flags);
+        send_keyboard_input(hwnd, vkey, scan, flags ^ KEYEVENTF_KEYUP);
+    }
+
+    /* Keyboard hooks may have blocked processing lock keys causing our state
+     * to be different than state on the Wayland server side. Although Windows
+     * allows hooks to block changing state, we can't prevent it on Wayland
+     * server side. Having different states would cause us to try to adjust it
+     * again on the next key event. We prevent that by overriding hooks and
+     * setting key states here. */
+    if (get_wine_async_key_state(keystate) && (keystate[vkey] & 0x01) == prev_state)
+    {
+        WARN("keystate %x not changed (%#.2x), probably blocked by hooks\n",
+             vkey, keystate[vkey]);
+        keystate[vkey] ^= 0x01;
+        set_wine_async_key_state(keystate);
+    }
+}
+
+static void update_wine_lock_state(struct wayland_keyboard *keyboard)
+{
+    BYTE keystate[256];
+    BOOL capslock, numlock, scrollock;
+
+    capslock = xkb_state_mod_name_is_active(keyboard->xkb_state, XKB_MOD_NAME_CAPS,
+                                            XKB_STATE_MODS_LOCKED);
+    numlock = xkb_state_mod_name_is_active(keyboard->xkb_state, XKB_MOD_NAME_NUM,
+                                           XKB_STATE_MODS_LOCKED);
+    scrollock = xkb_state_led_name_is_active(keyboard->xkb_state, XKB_LED_NAME_SCROLL);
+
+    if (!get_wine_async_key_state(keystate)) return;
+
+    /* Adjust the CAPSLOCK state if it has been changed outside wine. */
+    if (!(keystate[VK_CAPITAL] & 0x01) != !capslock)
+    {
+        DWORD flags = 0;
+        if (keystate[VK_CAPITAL] & 0x80) flags ^= KEYEVENTF_KEYUP;
+        TRACE("Adjusting CapsLock state (%#.2x)\n", keystate[VK_CAPITAL]);
+        adjust_wine_lock_state(keyboard, keystate, VK_CAPITAL, flags);
+    }
+
+    /* Adjust the NUMLOCK state if it has been changed outside wine. */
+    if (!(keystate[VK_NUMLOCK] & 0x01) != !numlock)
+    {
+        DWORD flags = KEYEVENTF_EXTENDEDKEY;
+        if (keystate[VK_NUMLOCK] & 0x80) flags ^= KEYEVENTF_KEYUP;
+        TRACE("Adjusting NumLock state (%#.2x)\n", keystate[VK_NUMLOCK]);
+        adjust_wine_lock_state(keyboard, keystate, VK_NUMLOCK, flags);
+    }
+
+    /* Adjust the SCROLLLOCK state if it has been changed outside wine. */
+    if (!(keystate[VK_SCROLL] & 0x01) != !scrollock)
+    {
+        DWORD flags = 0;
+        if (keystate[VK_SCROLL] & 0x80) flags ^= KEYEVENTF_KEYUP;
+        TRACE("Adjusting ScrLock state (%#.2x)\n", keystate[VK_SCROLL]);
+        adjust_wine_lock_state(keyboard, keystate, VK_SCROLL, flags);
+    }
+}
+
 /**********************************************************************
  *          Keyboard handling
  */
@@ -791,7 +888,10 @@ static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
     if (group != last_group)
         wayland_keyboard_update_layout(&wayland->keyboard);
 
-    /* TODO: Sync wine modifier state with XKB modifier state. */
+    /* Update the wine lock key state, in case the XKB modifier state is set
+     * without previously sending the associated key events (e.g., during
+     * program startup). */
+    update_wine_lock_state(&wayland->keyboard);
 }
 
 static void keyboard_handle_repeat_info(void *data, struct wl_keyboard *keyboard,

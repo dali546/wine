@@ -32,6 +32,7 @@
 #include <wayland-cursor.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-compose.h>
+#include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
@@ -148,6 +149,7 @@ struct wayland
     struct wl_shm *wl_shm;
     struct wl_seat *wl_seat;
     struct wp_viewporter *wp_viewporter;
+    struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
     struct wl_list output_list;
@@ -254,6 +256,14 @@ struct wayland_shm_buffer
     size_t map_size;
     BOOL busy;
     HRGN damage_region;
+};
+
+struct wayland_dmabuf_buffer
+{
+   struct wl_list link;
+   struct wl_buffer *wl_buffer;
+   int width, height, stride;
+   uint32_t format;
 };
 
 struct wayland_buffer_queue
@@ -405,6 +415,8 @@ int wayland_surface_get_buffer_scale(struct wayland_surface *surface);
 BOOL wayland_native_buffer_init_shm(struct wayland_native_buffer *native,
                                     int width, int height,
                                     enum wl_shm_format format);
+BOOL wayland_native_buffer_init_gbm(struct wayland_native_buffer *native,
+                                    struct gbm_bo *bo);
 void wayland_native_buffer_deinit(struct wayland_native_buffer *native);
 
 /**********************************************************************
@@ -421,6 +433,16 @@ void wayland_shm_buffer_clear_damage(struct wayland_shm_buffer *shm_buffer);
 void wayland_shm_buffer_add_damage(struct wayland_shm_buffer *shm_buffer, HRGN damage);
 RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_buffer,
                                                HRGN clip);
+
+/**********************************************************************
+ *          Wayland dmabuf buffer
+ */
+
+struct wayland_dmabuf_buffer *wayland_dmabuf_buffer_create_from_native(struct wayland *wayland,
+                                                                       struct wayland_native_buffer *native);
+void wayland_dmabuf_buffer_destroy(struct wayland_dmabuf_buffer *dmabuf_buffer);
+struct wl_buffer *wayland_dmabuf_buffer_steal_wl_buffer_and_destroy(
+        struct wayland_dmabuf_buffer *dmabuf_buffer);
 
 /**********************************************************************
  *          Wayland buffer queue

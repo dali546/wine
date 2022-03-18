@@ -130,9 +130,15 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     {
         wayland->wl_shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);
     }
+    else if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0)
+    {
+        wayland->zwp_linux_dmabuf_v1 =
+            wl_registry_bind(registry, id, &zwp_linux_dmabuf_v1_interface,
+                             version < 2 ? version : 2);
+    }
 
-    /* The per-process wayland instance only handles output related
-     * and wl_shm globals. */
+    /* The per-process wayland instance should not handle every global, as there
+     * is no point. Many globals are only needed by the per-thread instances. */
     if (wayland_is_process(wayland)) return;
 
     if (strcmp(interface, "wl_compositor") == 0)
@@ -330,6 +336,9 @@ void wayland_deinit(struct wayland *wayland)
 
     if (wayland->wl_seat)
         wl_seat_destroy(wayland->wl_seat);
+
+    if (wayland->zwp_linux_dmabuf_v1)
+        zwp_linux_dmabuf_v1_destroy(wayland->zwp_linux_dmabuf_v1);
 
     if (wayland->wp_viewporter)
         wp_viewporter_destroy(wayland->wp_viewporter);

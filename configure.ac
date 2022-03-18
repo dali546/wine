@@ -1381,13 +1381,17 @@ then
     WINE_PACKAGE_FLAGS(GBM,[gbm],,,,
         [AC_CHECK_HEADERS([gbm.h])
          AC_CHECK_LIB(gbm,gbm_create_device,[:],[GBM_LIBS=""],[$GBM_LIBS])])
+    WINE_PACKAGE_FLAGS(DRM,[libdrm],,,,
+        [AC_CHECK_HEADERS([drm.h])
+         AC_CHECK_LIB(drm,drmPrimeHandleToFD,[:],[DRM_LIBS=""],[$DRM_LIBS])])
 fi
 WINE_NOTICE_WITH(wayland, [test -z "$WAYLAND_CLIENT_LIBS" ||
                            test -z "$WAYLAND_PROTOCOLS_DATADIR" ||
                            test -z "$WAYLAND_SCANNER" ||
                            test -z "$WAYLAND_CURSOR_LIBS" ||
                            test -z "$XKBCOMMON_LIBS" ||
-                           test -z "$GBM_LIBS"],
+                           test -z "$GBM_LIBS" ||
+                           test -z "$DRM_LIBS"],
                  [Wayland ${notice_platform}development files not found or not new enough, the Wayland driver won't be supported.],
                  [enable_winewayland_drv])
 

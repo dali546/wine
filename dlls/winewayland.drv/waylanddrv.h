@@ -25,6 +25,7 @@
 # error You must include config.h to use this header
 #endif
 
+#include <gbm.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <wayland-client.h>
@@ -47,6 +48,8 @@
  */
 
 extern struct wl_display *process_wl_display DECLSPEC_HIDDEN;
+extern struct gbm_device *process_gbm_device DECLSPEC_HIDDEN;
+extern char *option_drm_device DECLSPEC_HIDDEN;
 extern BOOL option_use_system_cursors DECLSPEC_HIDDEN;
 
 /**********************************************************************
@@ -463,6 +466,12 @@ void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
 BOOL wayland_init_set_cursor(void) DECLSPEC_HIDDEN;
 HCURSOR wayland_invalidate_set_cursor(void) DECLSPEC_HIDDEN;
 void wayland_set_cursor_if_current_invalid(HCURSOR hcursor) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          GBM support
+ */
+
+BOOL wayland_gbm_init(void) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Registry helpers

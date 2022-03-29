@@ -927,6 +927,7 @@ void WAYLAND_DestroyWindow(HWND hwnd)
     if (!(data = wayland_win_data_get(hwnd))) return;
     wayland_destroy_gl_drawable(hwnd);
     wayland_invalidate_vulkan_objects(hwnd);
+    wayland_destroy_remote_surfaces(hwnd);
     wayland_win_data_destroy(data);
 }
 
@@ -1634,6 +1635,14 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_WAYLAND_CLIPBOARD_WINDOW_CREATE:
         wayland_data_device_ensure_clipboard_window(thread_wayland());
+        break;
+    case WM_WAYLAND_REMOTE_SURFACE:
+        {
+            struct wayland_surface *wayland_surface = wayland_surface_for_hwnd_lock(hwnd);
+            if (wayland_surface)
+                wayland_remote_surface_handle_message(wayland_surface, wp, lp);
+            wayland_surface_for_hwnd_unlock(wayland_surface);
+        }
         break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);

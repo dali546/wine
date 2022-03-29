@@ -73,6 +73,7 @@ enum wayland_window_message
     WM_WAYLAND_WINDOW_SURFACE_FLUSH,
     WM_WAYLAND_POINTER_CONFINEMENT_UPDATE,
     WM_WAYLAND_CLIPBOARD_WINDOW_CREATE,
+    WM_WAYLAND_REMOTE_SURFACE,
 };
 
 enum wayland_surface_role
@@ -101,6 +102,18 @@ enum wayland_hidpi_scaling
 {
     WAYLAND_HIDPI_SCALING_APPLICATION,
     WAYLAND_HIDPI_SCALING_COMPOSITOR,
+};
+
+enum wayland_remote_surface_type
+{
+    WAYLAND_REMOTE_SURFACE_TYPE_NORMAL,
+    WAYLAND_REMOTE_SURFACE_TYPE_GLVK,
+};
+
+enum wayland_remote_buffer_type
+{
+    WAYLAND_REMOTE_BUFFER_TYPE_SHM,
+    WAYLAND_REMOTE_BUFFER_TYPE_DMABUF,
 };
 
 /**********************************************************************
@@ -603,6 +616,14 @@ struct wayland_data_device_format *wayland_data_device_format_for_clipboard_form
 
 xkb_layout_index_t _xkb_state_get_active_layout(struct xkb_state *xkb_state);
 int _xkb_keysyms_to_utf8(const xkb_keysym_t *syms, int nsyms, char *utf8, int utf8_size);
+
+/**********************************************************************
+ *          Wayland remote (cross-process) rendering
+ */
+
+void wayland_remote_surface_handle_message(struct wayland_surface *wayland_surface,
+                                           WPARAM message, LPARAM params);
+void wayland_destroy_remote_surfaces(HWND hwnd);
 
 /**********************************************************************
  *          Misc. helpers

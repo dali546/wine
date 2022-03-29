@@ -195,6 +195,12 @@ int wayland_dispatch_queue(struct wl_event_queue *queue, int timeout_ms) DECLSPE
 void wayland_native_buffer_deinit(struct wayland_native_buffer *native) DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          Misc. helpers
+ */
+
+int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
+
+/**********************************************************************
  *          USER driver functions
  */
 

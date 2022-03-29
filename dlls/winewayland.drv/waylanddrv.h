@@ -205,6 +205,12 @@ DWORD reg_set_value_a(HKEY hkey, const char *name, ULONG type, const char *buffe
                       DWORD buffer_len) DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          Misc. helpers
+ */
+
+int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
+
+/**********************************************************************
  *          USER driver functions
  */
 

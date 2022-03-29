@@ -195,6 +195,12 @@ int wayland_dispatch_queue(struct wl_event_queue *queue, int timeout_ms);
 void wayland_native_buffer_deinit(struct wayland_native_buffer *native);
 
 /**********************************************************************
+ *          Misc. helpers
+ */
+
+int wayland_shmfd_create(const char *name, int size);
+
+/**********************************************************************
  *          USER driver functions
  */
 

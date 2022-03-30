@@ -69,6 +69,8 @@ struct wayland_gl_drawable
     struct wl_list  buffer_list;
     int             swap_interval;
     struct wl_callback *throttle_callback;
+    struct wayland_remote_surface_proxy *remote_surface_proxy;
+    HANDLE remote_throttle_event;
 };
 
 struct wayland_gl_buffer
@@ -77,7 +79,9 @@ struct wayland_gl_buffer
     struct wayland_gl_drawable *gl;
     struct gbm_bo *gbm_bo;
     struct gbm_surface *gbm_surface;
+    struct wayland_native_buffer native_buffer;
     struct wayland_dmabuf_buffer *dmabuf_buffer;
+    HANDLE remote_buffer_released_event;
 };
 
 struct wgl_context
@@ -156,6 +160,12 @@ static struct wayland_gl_drawable *wayland_gl_drawable_create(HWND hwnd, int for
         wayland_surface_for_hwnd_unlock(wayland_surface);
         if (!ref_gl) goto err;
     }
+    else
+    {
+        gl->remote_surface_proxy =
+            wayland_remote_surface_proxy_create(hwnd, WAYLAND_REMOTE_SURFACE_TYPE_GLVK);
+        if (!gl->remote_surface_proxy) goto err;
+    }
 
     gl->hwnd = hwnd;
     gl->format = format;
@@ -177,6 +187,8 @@ err:
     {
         if (gl->wayland_surface) wayland_surface_unref_glvk(gl->wayland_surface);
         if (gl->wl_event_queue) wl_event_queue_destroy(gl->wl_event_queue);
+        if (gl->remote_surface_proxy)
+            wayland_remote_surface_proxy_destroy(gl->remote_surface_proxy);
         free(gl);
     }
     return NULL;
@@ -186,8 +198,11 @@ static void wayland_gl_buffer_destroy(struct wayland_gl_buffer *gl_buffer)
 {
     TRACE("gl_buffer=%p bo=%p\n", gl_buffer, gl_buffer->gbm_bo);
     wl_list_remove(&gl_buffer->link);
+    wayland_native_buffer_deinit(&gl_buffer->native_buffer);
     if (gl_buffer->dmabuf_buffer)
         wayland_dmabuf_buffer_destroy(gl_buffer->dmabuf_buffer);
+    if (gl_buffer->remote_buffer_released_event)
+        NtClose(gl_buffer->remote_buffer_released_event);
     gbm_bo_set_user_data(gl_buffer->gbm_bo, NULL, NULL);
     free(gl_buffer);
 }
@@ -215,6 +230,9 @@ void wayland_destroy_gl_drawable(HWND hwnd)
         if (gl->wayland_surface)
             wayland_surface_unref_glvk(gl->wayland_surface);
         if (gl->throttle_callback) wl_callback_destroy(gl->throttle_callback);
+        if (gl->remote_surface_proxy)
+            wayland_remote_surface_proxy_destroy(gl->remote_surface_proxy);
+        if (gl->remote_throttle_event) NtClose(gl->remote_throttle_event);
         if (gl->wl_event_queue) wl_event_queue_destroy(gl->wl_event_queue);
         free(gl);
         break;
@@ -368,22 +386,20 @@ static struct wayland_gl_buffer *wayland_gl_drawable_track_buffer(struct wayland
 
     if (!gl_buffer)
     {
-        struct wayland_native_buffer native_buffer;
-
         gl_buffer = calloc(1, sizeof(*gl_buffer));
         if (!gl_buffer) goto err;
 
         wl_list_init(&gl_buffer->link);
         gl_buffer->gbm_bo = bo;
         gl_buffer->gbm_surface = gl->gbm_surface;
-        if (!wayland_native_buffer_init_gbm(&native_buffer, bo)) goto err;
+        if (!wayland_native_buffer_init_gbm(&gl_buffer->native_buffer, bo)) goto err;
 
         if (gl->wayland_surface)
         {
             gl_buffer->dmabuf_buffer =
                 wayland_dmabuf_buffer_create_from_native(gl->wayland_surface->wayland,
-                                                         &native_buffer);
-            wayland_native_buffer_deinit(&native_buffer);
+                                                         &gl_buffer->native_buffer);
+            wayland_native_buffer_deinit(&gl_buffer->native_buffer);
             if (!gl_buffer->dmabuf_buffer) goto err;
 
             wl_proxy_set_queue((struct wl_proxy *) gl_buffer->dmabuf_buffer->wl_buffer,
@@ -421,7 +437,26 @@ static BOOL wayland_gl_drawable_commit(struct wayland_gl_drawable *gl,
 {
     BOOL committed = FALSE;
 
-    if (!gl->wayland_surface) return FALSE;
+    if (gl->remote_surface_proxy)
+    {
+        enum wayland_remote_buffer_commit buffer_commit =
+            gl->swap_interval > 0 ? WAYLAND_REMOTE_BUFFER_COMMIT_THROTTLED :
+                                    WAYLAND_REMOTE_BUFFER_COMMIT_NORMAL;
+
+        if (!wayland_remote_surface_proxy_commit(gl->remote_surface_proxy,
+                                                 &gl_buffer->native_buffer,
+                                                 WAYLAND_REMOTE_BUFFER_TYPE_DMABUF,
+                                                 buffer_commit,
+                                                 &gl_buffer->remote_buffer_released_event,
+                                                 &gl->remote_throttle_event))
+        {
+            gl_buffer->remote_buffer_released_event = 0;
+            gl->remote_throttle_event = 0;
+            return FALSE;
+        }
+
+        return TRUE;
+    }
 
     wayland_mutex_lock(&gl->wayland_surface->mutex);
     if (gl->wayland_surface->drawing_allowed)
@@ -445,6 +480,30 @@ static BOOL wayland_gl_drawable_commit(struct wayland_gl_drawable *gl,
     return committed;
 }
 
+static DWORD wayland_gl_drawable_wait_remote_throttle(struct wayland_gl_drawable *gl,
+                                                      int timeout_ms)
+{
+    DWORD ret;
+    LARGE_INTEGER timeout = { .QuadPart = timeout_ms };
+
+    TRACE("gl->remote_throttle_event=%p timeout_ms=%d\n", gl->remote_throttle_event, timeout_ms);
+    if (!wayland_remote_surface_proxy_dispatch_events(gl->remote_surface_proxy))
+    {
+        ERR("Failed to dispatch remote events\n");
+        return WAIT_FAILED;
+    }
+
+    ret = NtWaitForSingleObject(gl->remote_throttle_event, FALSE, &timeout);
+    if (ret == WAIT_OBJECT_0)
+    {
+        NtClose(gl->remote_throttle_event);
+        gl->remote_throttle_event = 0;
+    }
+
+    TRACE("=> ret=%d\n", ret);
+    return ret;
+}
+
 static void wayland_gl_drawable_throttle(struct wayland_gl_drawable *gl)
 {
     static const DWORD timeout = 100;
@@ -455,12 +514,18 @@ static void wayland_gl_drawable_throttle(struct wayland_gl_drawable *gl)
     start = NtGetTickCount();
     elapsed = 0;
 
+    TRACE("throttle_callback=%p throttle_event=%p\n",
+          gl->throttle_callback, gl->remote_throttle_event);
+
     /* The compositor may at any time decide to not display the surface on
      * screen and thus not send any frame events. Until we have a better way to
      * deal with this, wait for a maximum of timeout for the frame event to
      * arrive, in order to avoid blocking the GL thread indefinitely. */
-    while (gl->throttle_callback && elapsed < timeout &&
-           wayland_dispatch_queue(gl->wl_event_queue, timeout - elapsed) != -1)
+    while (elapsed < timeout &&
+           ((gl->throttle_callback &&
+             wayland_dispatch_queue(gl->wl_event_queue, timeout - elapsed) != -1) ||
+            (gl->remote_throttle_event &&
+             wayland_gl_drawable_wait_remote_throttle(gl, 10) != WAIT_FAILED)))
     {
         DWORD now = NtGetTickCount();
         /* Handle tick count wrap around to zero. */
@@ -470,12 +535,58 @@ static void wayland_gl_drawable_throttle(struct wayland_gl_drawable *gl)
             elapsed = now - start;
     }
 
+    TRACE("throttle_callback=%p throttle_event=%p => elapsed=%d\n",
+          gl->throttle_callback, gl->remote_throttle_event,
+          elapsed);
+
 out:
     if (gl->throttle_callback)
     {
         wl_callback_destroy(gl->throttle_callback);
         gl->throttle_callback = NULL;
     }
+    if (gl->remote_throttle_event)
+    {
+        NtClose(gl->remote_throttle_event);
+        gl->remote_throttle_event = 0;
+    }
+}
+
+static DWORD wayland_gl_drawable_wait_remote(struct wayland_gl_drawable *gl,
+                                             int timeout_ms)
+{
+    struct wayland_gl_buffer *gl_buffer;
+    HANDLE handles[8];
+    struct wayland_gl_buffer *gl_buffers[8];
+    int count = 0;
+    LARGE_INTEGER timeout = { .QuadPart = timeout_ms };
+    DWORD ret;
+
+    if (!wayland_remote_surface_proxy_dispatch_events(gl->remote_surface_proxy))
+        return WAIT_FAILED;
+
+    wl_list_for_each(gl_buffer, &gl->buffer_list, link)
+    {
+        if (!gl_buffer->remote_buffer_released_event) continue;
+        handles[count] = gl_buffer->remote_buffer_released_event;
+        gl_buffers[count] = gl_buffer;
+        count++;
+    }
+
+    TRACE("count=%d handles=%p,%p,%p,%p\n",
+         count, handles[0], handles[1], handles[2], handles[3]);
+    ret = NtWaitForMultipleObjects(count, handles, TRUE, FALSE, &timeout);
+    TRACE("count=%d => ret=%d\n", count, ret);
+    if (ret < WAIT_OBJECT_0 + count)
+    {
+        int index = ret - WAIT_OBJECT_0;
+        NtClose(gl_buffers[index]->remote_buffer_released_event);
+        gl_buffers[index]->remote_buffer_released_event = 0;
+        gbm_surface_release_buffer(gl_buffers[index]->gbm_surface,
+                                   gl_buffers[index]->gbm_bo);
+    }
+
+    return ret;
 }
 
 static BOOL wgl_context_refresh(struct wgl_context *ctx)
@@ -533,7 +644,8 @@ static BOOL set_pixel_format(HDC hdc, int format, BOOL allow_change)
     wayland_gl_drawable_release(gl);
 
     if (prev && prev != format && !allow_change) return FALSE;
-    if (NtUserSetWindowPixelFormat(hwnd, format)) return TRUE;
+    if (gl->remote_surface_proxy || NtUserSetWindowPixelFormat(hwnd, format))
+        return TRUE;
 
     wayland_destroy_gl_drawable(hwnd);
     return FALSE;
@@ -975,6 +1087,14 @@ static BOOL WINAPI wayland_wglSwapBuffers(HDC hdc)
                    wayland_dispatch_queue(draw_gl->wl_event_queue, -1) != -1)
             {
                   continue;
+            }
+        }
+        else if (draw_gl->remote_surface_proxy)
+        {
+            while (!gbm_surface_has_free_buffers(draw_gl->gbm_surface) &&
+                   wayland_gl_drawable_wait_remote(draw_gl, 10) != WAIT_FAILED)
+            {
+                continue;
             }
         }
     }

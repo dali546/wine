@@ -483,6 +483,8 @@ void wayland_native_buffer_deinit(struct wayland_native_buffer *native);
  *          Wayland SHM buffer
  */
 
+struct wayland_shm_buffer *wayland_shm_buffer_create_from_native(struct wayland *wayland,
+                                                                 struct wayland_native_buffer *native);
 struct wayland_shm_buffer *wayland_shm_buffer_create(struct wayland *wayland,
                                                      int width, int height,
                                                      enum wl_shm_format format);

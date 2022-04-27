@@ -6,6 +6,7 @@ UNIX_LIBS = -lwin32u -lm $(WAYLAND_CLIENT_LIBS) $(PTHREAD_LIBS)
 C_SRCS = \
 	display.c \
 	dllmain.c \
+	registry.c \
 	unicode.c \
 	wayland.c \
 	wayland_buffer_queue.c \

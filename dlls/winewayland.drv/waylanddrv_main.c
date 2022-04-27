@@ -89,6 +89,208 @@ size_t ascii_to_unicode_z(WCHAR *dst, size_t dst_max_chars,
     return len + 1;
 }
 
+/**********************************************************************
+ *          unicode_to_ascii_maybe_z
+ *
+ * Converts a unicode, possibly zero-terminated, string containing up to
+ * src_max_chars to an ascii string. Returns the number of characters
+ * (including any trailing zero) in the source unicode string. If the returned
+ * number of characters is greater than dst_max_chars the output will have been
+ * truncated.
+ */
+static size_t unicode_to_ascii_maybe_z(char *dst, size_t dst_max_chars,
+                                       const WCHAR *src, size_t src_max_chars)
+{
+    size_t src_len = 0;
+
+    while (src_max_chars--)
+    {
+        src_len++;
+        if (dst_max_chars)
+        {
+            *dst++ = *src;
+            dst_max_chars--;
+        }
+        if (!*src++) break;
+    }
+
+    return src_len;
+}
+
+static HKEY reg_open_key_w(HKEY root, const WCHAR *nameW)
+{
+    INT name_len = nameW ? lstrlenW(nameW) * sizeof(WCHAR) : 0;
+    UNICODE_STRING name_unicode = { name_len, name_len, (WCHAR *)nameW };
+    OBJECT_ATTRIBUTES attr;
+    HANDLE ret;
+
+    if (!nameW || !*nameW) return root;
+
+    attr.Length = sizeof(attr);
+    attr.RootDirectory = root;
+    attr.ObjectName = &name_unicode;
+    attr.Attributes = 0;
+    attr.SecurityDescriptor = NULL;
+    attr.SecurityQualityOfService = NULL;
+
+    return NtOpenKeyEx(&ret, MAXIMUM_ALLOWED, &attr, 0) ? 0 : ret;
+}
+
+static HKEY reg_open_key_a(HKEY root, const char *name)
+{
+    WCHAR nameW[256];
+    if (!name || !*name) return root;
+    if (ascii_to_unicode_maybe_z(nameW, ARRAY_SIZE(nameW), name, -1) > ARRAY_SIZE(nameW))
+        return 0;
+    return reg_open_key_w(root, nameW);
+}
+
+static HKEY reg_open_hkcu_key_a(const char *name)
+{
+    static HKEY hkcu;
+
+    if (!hkcu)
+    {
+        char buffer[256];
+        DWORD_PTR sid_data[(sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE) / sizeof(DWORD_PTR)];
+        DWORD i, len = sizeof(sid_data);
+        SID *sid;
+
+        if (NtQueryInformationToken(GetCurrentThreadEffectiveToken(), TokenUser, sid_data,
+                                    len, &len))
+        {
+            return 0;
+        }
+
+        sid = ((TOKEN_USER *)sid_data)->User.Sid;
+        len = snprintf(buffer, ARRAY_SIZE(buffer), "\\Registry\\User\\S-%u-%u",
+                       sid->Revision,
+                       (int)MAKELONG(MAKEWORD(sid->IdentifierAuthority.Value[5],
+                                              sid->IdentifierAuthority.Value[4]),
+                                     MAKEWORD(sid->IdentifierAuthority.Value[3],
+                                              sid->IdentifierAuthority.Value[2])));
+        if (len >= ARRAY_SIZE(buffer)) return 0;
+
+        for (i = 0; i < sid->SubAuthorityCount; i++)
+        {
+            len += snprintf(buffer + len, ARRAY_SIZE(buffer) - len, "-%u",
+                            (UINT)sid->SubAuthority[i]);
+            if (len >= ARRAY_SIZE(buffer)) return 0;
+        }
+
+        hkcu = reg_open_key_a(NULL, buffer);
+    }
+
+    return reg_open_key_a(hkcu, name);
+}
+
+static DWORD reg_get_value_info(HKEY hkey, const WCHAR *nameW, ULONG type,
+                                KEY_VALUE_PARTIAL_INFORMATION *info,
+                                ULONG info_size)
+{
+    unsigned int name_size = lstrlenW(nameW) * sizeof(WCHAR);
+    UNICODE_STRING name_unicode = { name_size, name_size, (WCHAR *)nameW };
+
+    if (NtQueryValueKey(hkey, &name_unicode, KeyValuePartialInformation,
+                        info, info_size, &info_size))
+        return ERROR_FILE_NOT_FOUND;
+
+    if (info->Type != type) return ERROR_DATATYPE_MISMATCH;
+
+    return ERROR_SUCCESS;
+}
+
+/**********************************************************************
+ *          reg_get_value_a
+ *
+ *  Get the value of the specified registry key (or subkey if name is not NULL),
+ *  having the specified type. If the types do not match an error is returned.
+ *  If the stored value is REG_SZ the string is transformed into ASCII before
+ *  being returned.
+ */
+static DWORD reg_get_value_a(HKEY hkey, const char *name, ULONG type,
+                             char *buffer, DWORD *buffer_len)
+{
+    WCHAR nameW[256];
+    char info_buf[2048];
+    KEY_VALUE_PARTIAL_INFORMATION *info = (void *)info_buf;
+    ULONG info_size = ARRAY_SIZE(info_buf);
+    DWORD err;
+
+    if (name && ascii_to_unicode_maybe_z(nameW, ARRAY_SIZE(nameW), name, -1) > ARRAY_SIZE(nameW))
+        return ERROR_INSUFFICIENT_BUFFER;
+
+    if ((err = reg_get_value_info(hkey, name ? nameW : NULL, type, info, info_size)))
+        return err;
+
+    if (type == REG_SZ)
+    {
+        size_t nchars = unicode_to_ascii_maybe_z(buffer, *buffer_len, (WCHAR *)info->Data,
+                                                 info->DataLength / sizeof(WCHAR));
+        err = *buffer_len >= nchars ? ERROR_SUCCESS : ERROR_MORE_DATA;
+        *buffer_len = nchars;
+    }
+    else
+    {
+        err = *buffer_len >= info->DataLength ? ERROR_SUCCESS : ERROR_MORE_DATA;
+        if (err == ERROR_SUCCESS) memcpy(buffer, info->Data, info->DataLength);
+        *buffer_len = info->DataLength;
+    }
+
+    return err;
+}
+
+/***********************************************************************
+ *		get_config_key
+ *
+ * Get a config key from either the app-specific or the default config
+ */
+static inline DWORD get_config_key(HKEY defkey, HKEY appkey, const char *name,
+                                   ULONG type, char *buffer, DWORD size)
+{
+    if (appkey && !reg_get_value_a(appkey, name, type, buffer, &size)) return 0;
+    if (defkey && !reg_get_value_a(defkey, name, type, buffer, &size)) return 0;
+    return ERROR_FILE_NOT_FOUND;
+}
+
+/***********************************************************************
+ *		wayland_read_options_from_registry
+ *
+ * Read the Wayland driver options from the registry.
+ */
+static void wayland_read_options_from_registry(void)
+{
+    static const WCHAR waylanddriverW[] = {'\\','W','a','y','l','a','n','d',' ','D','r','i','v','e','r',0};
+    HKEY hkey, appkey = 0;
+    DWORD process_name_len;
+
+    /* @@ Wine registry key: HKCU\Software\Wine\Wayland Driver */
+    hkey = reg_open_hkcu_key_a("Software\\Wine\\Wayland Driver");
+
+    /* open the app-specific key */
+    process_name_len = process_name ? strlen(process_name) : 0;
+    if (process_name_len > 0)
+    {
+        WCHAR appname[MAX_PATH + sizeof(waylanddriverW) / sizeof(WCHAR)];
+        DWORD reslen;
+        if (!RtlUTF8ToUnicodeN(appname, MAX_PATH * sizeof(WCHAR), &reslen,
+                               process_name, process_name_len))
+        {
+            HKEY tmpkey;
+            memcpy((char *)appname + reslen, waylanddriverW, sizeof(waylanddriverW));
+            /* @@ Wine registry key: HKCU\Software\Wine\AppDefaults\app.exe\Wayland Driver */
+            if ((tmpkey = reg_open_hkcu_key_a("Software\\Wine\\AppDefaults")))
+            {
+                appkey = reg_open_key_w(tmpkey, appname);
+                NtClose(tmpkey);
+            }
+        }
+    }
+
+    if (appkey) NtClose(appkey);
+    if (hkey) NtClose(hkey);
+}
+
 static void set_queue_fd(struct wayland *wayland)
 {
     HANDLE handle;
@@ -215,6 +417,8 @@ static NTSTATUS waylanddrv_unix_init(void *arg)
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
 
     wayland_init_process_name();
+
+    wayland_read_options_from_registry();
 
     if (!wayland_init_set_cursor()) goto err;
 

@@ -171,6 +171,19 @@ struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
                                                        LPCWSTR wine_name) DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          Registry helpers
+ */
+
+HKEY reg_open_key_a(HKEY root, const char *name) DECLSPEC_HIDDEN;
+HKEY reg_open_key_w(HKEY root, const WCHAR *nameW) DECLSPEC_HIDDEN;
+DWORD reg_get_value_a(HKEY hkey, const char *name, ULONG type, char *buffer,
+                      DWORD *buffer_len) DECLSPEC_HIDDEN;
+DWORD reg_get_value_w(HKEY hkey, const WCHAR *nameW, ULONG type, char *buffer,
+                      DWORD *buffer_len) DECLSPEC_HIDDEN;
+DWORD reg_set_value_a(HKEY hkey, const char *name, ULONG type, const char *buffer,
+                      DWORD buffer_len) DECLSPEC_HIDDEN;
+
+/**********************************************************************
  *          Misc. helpers
  */
 

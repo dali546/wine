@@ -26,6 +26,7 @@
 #endif
 
 #include <pthread.h>
+#include <sys/types.h>
 #include <stdarg.h>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
@@ -138,10 +139,17 @@ struct wayland_dmabuf_format
     struct wl_array modifiers;
 };
 
+struct wayland_dmabuf_feedback
+{
+    struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1;
+    dev_t main_device;
+};
+
 struct wayland_dmabuf
 {
     struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1;
     struct wl_list formats;
+    struct wayland_dmabuf_feedback feedback;
 };
 
 struct wayland

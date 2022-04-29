@@ -112,15 +112,108 @@ static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
     dmabuf_modifiers
 };
 
+/**********************************************************************
+ *          zwp_linux_dmabuf_feedback_v1 handling
+ */
+static void dmabuf_feedback_main_device(void *data,
+                                        struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1,
+                                        struct wl_array *device)
+{
+    struct wayland_dmabuf_feedback *feedback = data;
+
+    if (device->size != sizeof(feedback->main_device))
+        return;
+
+    memcpy(&feedback->main_device, device->data, device->size);
+}
+
+static void dmabuf_feedback_format_table(void *data,
+                                         struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1,
+                                         int32_t fd, uint32_t size)
+{
+    /* ignore for now */
+}
+
+static void dmabuf_feedback_tranche_target_device(void *data,
+                                                  struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1,
+                                                  struct wl_array *device)
+{
+    /* ignore for now */
+}
+
+static void dmabuf_feedback_tranche_formats(void *data,
+                                            struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1,
+                                            struct wl_array *indices)
+{
+    /* ignore for now */
+}
+
+static void dmabuf_feedback_tranche_flags(void *data,
+                                          struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1,
+                                          uint32_t flags)
+{
+    /* ignore for now */
+}
+
+static void dmabuf_feedback_tranche_done(void *data,
+                                         struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1)
+{
+    /* ignore for now */
+}
+
+static void dmabuf_feedback_done(void *data,
+                                 struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1)
+{
+    struct wayland_dmabuf_feedback *feedback = data;
+
+    zwp_linux_dmabuf_feedback_v1_destroy(feedback->zwp_linux_dmabuf_feedback_v1);
+    feedback->zwp_linux_dmabuf_feedback_v1 = NULL;
+}
+
+static const struct zwp_linux_dmabuf_feedback_v1_listener dmabuf_feedback_listener =
+{
+    .main_device = dmabuf_feedback_main_device,
+    .format_table = dmabuf_feedback_format_table,
+    .tranche_target_device = dmabuf_feedback_tranche_target_device,
+    .tranche_formats = dmabuf_feedback_tranche_formats,
+    .tranche_flags = dmabuf_feedback_tranche_flags,
+    .tranche_done = dmabuf_feedback_tranche_done,
+    .done = dmabuf_feedback_done,
+};
+
+static void wayland_dmabuf_feedback_init(struct wayland_dmabuf_feedback *feedback,
+                                         struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1)
+{
+    feedback->zwp_linux_dmabuf_feedback_v1 =
+        zwp_linux_dmabuf_v1_get_default_feedback(zwp_linux_dmabuf_v1);
+    zwp_linux_dmabuf_feedback_v1_add_listener(feedback->zwp_linux_dmabuf_feedback_v1,
+                                              &dmabuf_feedback_listener, feedback);
+}
+
+static void wayland_dmabuf_feedback_deinit(struct wayland_dmabuf_feedback *feedback)
+{
+    if (feedback->zwp_linux_dmabuf_feedback_v1)
+        zwp_linux_dmabuf_feedback_v1_destroy(feedback->zwp_linux_dmabuf_feedback_v1);
+}
+
 /***********************************************************************
  *           wayland_dmabuf_init
  */
 void wayland_dmabuf_init(struct wayland_dmabuf *dmabuf,
                          struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1)
 {
+    uint32_t dmabuf_version =
+        wl_proxy_get_version((struct wl_proxy *)zwp_linux_dmabuf_v1);
+
     dmabuf->zwp_linux_dmabuf_v1 = zwp_linux_dmabuf_v1;
     wl_list_init(&dmabuf->formats);
-    zwp_linux_dmabuf_v1_add_listener(zwp_linux_dmabuf_v1, &dmabuf_listener, dmabuf);
+
+    /* If the compositor supports dmabuf feedback events, it must not send
+     * format and modifier events, so don't even listen for them in that case. */
+    if (dmabuf_version >= ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK_SINCE_VERSION)
+        wayland_dmabuf_feedback_init(&dmabuf->feedback, zwp_linux_dmabuf_v1);
+    else
+        zwp_linux_dmabuf_v1_add_listener(zwp_linux_dmabuf_v1, &dmabuf_listener, dmabuf);
 }
 
 /***********************************************************************
@@ -129,6 +222,8 @@ void wayland_dmabuf_init(struct wayland_dmabuf *dmabuf,
 void wayland_dmabuf_deinit(struct wayland_dmabuf *dmabuf)
 {
     struct wayland_dmabuf_format *format, *tmp;
+
+    wayland_dmabuf_feedback_deinit(&dmabuf->feedback);
 
     if (dmabuf->zwp_linux_dmabuf_v1)
         zwp_linux_dmabuf_v1_destroy(dmabuf->zwp_linux_dmabuf_v1);

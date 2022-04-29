@@ -26,6 +26,7 @@
 #endif
 
 #include <pthread.h>
+#include <sys/types.h>
 #include <stdarg.h>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
@@ -131,6 +132,12 @@ struct wayland_pointer
     HCURSOR hcursor;
 };
 
+struct wayland_dmabuf_feedback
+{
+    struct zwp_linux_dmabuf_feedback_v1 *zwp_linux_dmabuf_feedback_v1;
+    dev_t main_device;
+};
+
 struct wayland
 {
     struct wl_list thread_link;
@@ -147,6 +154,7 @@ struct wayland
     struct wl_seat *wl_seat;
     struct wp_viewporter *wp_viewporter;
     struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1;
+    struct wayland_dmabuf_feedback dmabuf_feedback;
     struct zxdg_output_manager_v1 *zxdg_output_manager_v1;
     uint32_t next_fallback_output_id;
     struct wl_list output_list;
@@ -426,6 +434,7 @@ RGNDATA *wayland_shm_buffer_get_damage_clipped(struct wayland_shm_buffer *shm_bu
  *          Wayland dmabuf buffer
  */
 
+void wayland_bind_default_dmabuf_feedback(struct wayland *wayland);
 struct wayland_dmabuf_buffer *wayland_dmabuf_buffer_create_from_native(struct wayland *wayland,
                                                                        struct wayland_native_buffer *native) DECLSPEC_HIDDEN;
 void wayland_dmabuf_buffer_destroy(struct wayland_dmabuf_buffer *dmabuf_buffer) DECLSPEC_HIDDEN;

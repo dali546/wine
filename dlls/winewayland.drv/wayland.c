@@ -132,9 +132,13 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
     }
     else if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0)
     {
+        uint32_t dmabuf_version = version < 4 ? version : 4;
+
         wayland->zwp_linux_dmabuf_v1 =
-            wl_registry_bind(registry, id, &zwp_linux_dmabuf_v1_interface,
-                             version < 2 ? version : 2);
+            wl_registry_bind(registry, id, &zwp_linux_dmabuf_v1_interface, dmabuf_version);
+
+        if (dmabuf_version >= ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK_SINCE_VERSION)
+            wayland_bind_default_dmabuf_feedback(wayland);
     }
 
     /* The per-process wayland instance should not handle every global, as there

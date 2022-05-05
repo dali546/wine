@@ -25,6 +25,7 @@
 # error You must include config.h to use this header
 #endif
 
+#include <gbm.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <stdarg.h>
@@ -51,6 +52,8 @@
 
 extern char *process_name DECLSPEC_HIDDEN;
 extern struct wl_display *process_wl_display DECLSPEC_HIDDEN;
+extern struct gbm_device *process_gbm_device DECLSPEC_HIDDEN;
+extern char *option_drm_device DECLSPEC_HIDDEN;
 extern BOOL option_use_system_cursors DECLSPEC_HIDDEN;
 
 /**********************************************************************
@@ -468,6 +471,8 @@ int wayland_surface_get_buffer_scale(struct wayland_surface *surface) DECLSPEC_H
 BOOL wayland_native_buffer_init_shm(struct wayland_native_buffer *native,
                                     int width, int height,
                                     enum wl_shm_format format) DECLSPEC_HIDDEN;
+BOOL wayland_native_buffer_init_gbm(struct wayland_native_buffer *native,
+                                    struct gbm_bo *bo) DECLSPEC_HIDDEN;
 void wayland_native_buffer_deinit(struct wayland_native_buffer *native) DECLSPEC_HIDDEN;
 
 /**********************************************************************
@@ -551,6 +556,12 @@ void wayland_pointer_update_cursor_from_win32(struct wayland_pointer *pointer,
                                               HCURSOR handle) DECLSPEC_HIDDEN;
 BOOL wayland_init_set_cursor(void) DECLSPEC_HIDDEN;
 void wayland_invalidate_set_cursor(void) DECLSPEC_HIDDEN;
+
+/**********************************************************************
+ *          GBM support
+ */
+
+BOOL wayland_gbm_init(void) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Registry helpers

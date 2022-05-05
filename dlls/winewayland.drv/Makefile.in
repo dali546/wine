@@ -2,9 +2,9 @@ EXTRADEFS = -DWINE_NO_LONG_TYPES
 MODULE = winewayland.drv
 IMPORTS = user32 win32u
 EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_CURSOR_CFLAGS) $(XKBCOMMON_CFLAGS) \
-            $(DRM_CFLAGS)
+            $(GBM_CFLAGS) $(UDEV_CFLAGS) $(DRM_CFLAGS)
 EXTRALIBS = $(WAYLAND_CLIENT_LIBS) $(WAYLAND_CURSOR_LIBS) $(XKBCOMMON_LIBS) \
-            $(DRM_LIBS) $(PTHREAD_LIBS)
+            $(GBM_LIBS) $(UDEV_LIBS) $(DRM_LIBS) $(PTHREAD_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRACFLAGS = -std=c11 -Wno-declaration-after-statement
 CPPFLAGS = -std=c11 -Wno-declaration-after-statement
@@ -14,6 +14,7 @@ EXTRADLLFLAGS = -mcygwin
 
 C_SRCS = \
 	display.c \
+	gbm.c \
 	options.c \
 	registry.c \
 	wayland.c \

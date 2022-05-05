@@ -3,9 +3,9 @@ MODULE = winewayland.drv
 UNIXLIB = winewayland.so
 IMPORTS = user32
 EXTRAINCL = $(WAYLAND_CLIENT_CFLAGS) $(WAYLAND_CURSOR_CFLAGS) $(XKBCOMMON_CFLAGS) \
-            $(DRM_CFLAGS)
+            $(GBM_CFLAGS) $(UDEV_CFLAGS) $(DRM_CFLAGS)
 EXTRALIBS = -lwin32u -lm $(WAYLAND_CLIENT_LIBS) $(WAYLAND_CURSOR_LIBS) \
-             $(XKBCOMMON_LIBS) $(DRM_LIBS) $(PTHREAD_LIBS)
+            $(XKBCOMMON_LIBS) $(GBM_LIBS) $(UDEV_LIBS) $(DRM_LIBS) $(PTHREAD_LIBS)
 CFLAGS = -std=c11 -Wno-declaration-after-statement
 EXTRACFLAGS = -std=c11 -Wno-declaration-after-statement
 CPPFLAGS = -std=c11 -Wno-declaration-after-statement
@@ -14,6 +14,7 @@ EXTRACROSSCFLAGS = -std=c11 -Wno-declaration-after-statement
 C_SRCS = \
 	display.c \
 	dllmain.c \
+	gbm.c \
 	options.c \
 	registry.c \
 	unicode.c \

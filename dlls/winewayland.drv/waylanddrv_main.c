@@ -37,6 +37,57 @@
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
+/**********************************************************************
+ *          ascii_to_unicode_maybe_z
+ *
+ * Converts an ascii, possibly zero-terminated, string containing up to
+ * src_max_chars to a unicode string. Returns the number of characters
+ * (including any trailing zero) in the source ascii string. If the returned
+ * number of characters is greater than dst_max_chars the output will have been
+ * truncated.
+ */
+static size_t ascii_to_unicode_maybe_z(WCHAR *dst, size_t dst_max_chars,
+                                       const char *src, size_t src_max_chars)
+{
+    size_t src_len = 0;
+
+    while (src_max_chars--)
+    {
+        src_len++;
+        if (dst_max_chars)
+        {
+            *dst++ = *src;
+            dst_max_chars--;
+        }
+        if (!*src++) break;
+    }
+
+    return src_len;
+}
+
+
+/**********************************************************************
+ *          ascii_to_unicode_z
+ *
+ * Converts an ascii, possibly zero-terminated, string containing up to
+ * src_max_chars to a zero-terminated unicode string. Returns the number of
+ * characters (including the trailing zero) written to the destination string.
+ * If there isn't enough space in the destination to hold all the characters
+ * and the trailing zero, the string is truncated enough so that a trailing
+ * zero can be placed.
+ */
+size_t ascii_to_unicode_z(WCHAR *dst, size_t dst_max_chars,
+                          const char *src, size_t src_max_chars)
+{
+    size_t len;
+    if (src_max_chars == 0) return 0;
+    len = ascii_to_unicode_maybe_z(dst, dst_max_chars, src, src_max_chars);
+    if (len >= dst_max_chars) len = dst_max_chars - 1;
+    if (len > 0 && dst[len - 1] == 0) len--;
+    dst[len] = 0;
+    return len + 1;
+}
+
 /***********************************************************************
  *           Initialize per thread data
  */

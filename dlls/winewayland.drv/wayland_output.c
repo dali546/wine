@@ -392,6 +392,10 @@ static void wayland_output_done(struct wayland_output *output)
         wayland_init_display_devices();
         wayland_process_acquire();
     }
+    else
+    {
+        wayland_update_outputs_from_process(output->wayland);
+    }
 }
 
 static void output_handle_geometry(void *data, struct wl_output *wl_output,
@@ -580,4 +584,33 @@ void wayland_output_use_xdg_extension(struct wayland_output *output)
                                               output->wl_output);
     zxdg_output_v1_add_listener(output->zxdg_output_v1, &zxdg_output_v1_listener,
                                 output);
+}
+
+/**********************************************************************
+ *          wayland_update_outputs_from_process
+ *
+ * Update the information in the outputs of this instance, using the
+ * information in the process wayland instance.
+ */
+void wayland_update_outputs_from_process(struct wayland *wayland)
+{
+    struct wayland_output *output;
+    struct wayland_output *process_output;
+    struct wayland *process_wayland = wayland_process_acquire();
+
+    TRACE("wayland=%p process_wayland=%p\n", wayland, process_wayland);
+
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        wl_list_for_each(process_output, &process_wayland->output_list, link)
+        {
+            if (!strcmp(output->name, process_output->name))
+            {
+                lstrcpyW(output->wine_name, process_output->wine_name);
+                break;
+            }
+        }
+    }
+
+    wayland_process_release();
 }

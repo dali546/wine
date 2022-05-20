@@ -342,6 +342,19 @@ size_t ascii_to_unicode_z(WCHAR *dst, size_t dst_max_chars,
 int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          USER32 helpers
+ */
+
+static inline BOOL intersect_rect(RECT *dst, const RECT *src1, const RECT *src2)
+{
+    dst->left = max(src1->left, src2->left);
+    dst->top = max(src1->top, src2->top);
+    dst->right = min(src1->right, src2->right);
+    dst->bottom = min(src1->bottom, src2->bottom);
+    return !IsRectEmpty(dst);
+}
+
+/**********************************************************************
  *          USER driver functions
  */
 

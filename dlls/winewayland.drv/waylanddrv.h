@@ -142,10 +142,20 @@ void wayland_output_destroy(struct wayland_output *output) DECLSPEC_HIDDEN;
 void wayland_output_use_xdg_extension(struct wayland_output *output) DECLSPEC_HIDDEN;
 
 /**********************************************************************
+ *          USER32 helpers
+ */
+
+static inline LRESULT send_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    return NtUserMessageCall(hwnd, msg, wparam, lparam, NULL, NtUserSendDriverMessage, FALSE);
+}
+
+/**********************************************************************
  *          USER driver functions
  */
 
 BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
+LRESULT WAYLAND_DesktopWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;
 BOOL WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                   BOOL force, void *param) DECLSPEC_HIDDEN;
 

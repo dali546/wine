@@ -31,7 +31,7 @@ VkResult WINAPI vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
     params.semaphore = semaphore;
     params.fence = fence;
     params.pImageIndex = pImageIndex;
-    return vk_unix_call(unix_vkAcquireNextImageKHR, &params);
+    return unix_funcs->p_vk_call(unix_vkAcquireNextImageKHR, &params);
 }
 
 VkResult WINAPI vkAcquirePerformanceConfigurationINTEL(VkDevice device, const VkPerformanceConfigurationAcquireInfoINTEL *pAcquireInfo, VkPerformanceConfigurationINTEL *pConfiguration)
@@ -3162,6 +3162,15 @@ VkResult WINAPI vkGetEventStatus(VkDevice device, VkEvent event)
     return vk_unix_call(unix_vkGetEventStatus, &params);
 }
 
+VkResult WINAPI vkGetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR *pGetFdInfo, int *pFd)
+{
+    struct vkGetFenceFdKHR_params params;
+    params.device = device;
+    params.pGetFdInfo = pGetFdInfo;
+    params.pFd = pFd;
+    return vk_unix_call(unix_vkGetFenceFdKHR, &params);
+}
+
 VkResult WINAPI vkGetFenceStatus(VkDevice device, VkFence fence)
 {
     struct vkGetFenceStatus_params params;
@@ -3177,6 +3186,15 @@ void WINAPI vkGetGeneratedCommandsMemoryRequirementsNV(VkDevice device, const Vk
     params.pInfo = pInfo;
     params.pMemoryRequirements = pMemoryRequirements;
     vk_unix_call(unix_vkGetGeneratedCommandsMemoryRequirementsNV, &params);
+}
+
+VkResult WINAPI vkGetImageDrmFormatModifierPropertiesEXT(VkDevice device, VkImage image, VkImageDrmFormatModifierPropertiesEXT *pProperties)
+{
+    struct vkGetImageDrmFormatModifierPropertiesEXT_params params;
+    params.device = device;
+    params.image = image;
+    params.pProperties = pProperties;
+    return vk_unix_call(unix_vkGetImageDrmFormatModifierPropertiesEXT, &params);
 }
 
 void WINAPI vkGetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements *pMemoryRequirements)
@@ -3271,6 +3289,25 @@ uint32_t WINAPI vkGetImageViewHandleNVX(VkDevice device, const VkImageViewHandle
     params.device = device;
     params.pInfo = pInfo;
     return vk_unix_call(unix_vkGetImageViewHandleNVX, &params);
+}
+
+VkResult WINAPI vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo, int *pFd)
+{
+    struct vkGetMemoryFdKHR_params params;
+    params.device = device;
+    params.pGetFdInfo = pGetFdInfo;
+    params.pFd = pFd;
+    return vk_unix_call(unix_vkGetMemoryFdKHR, &params);
+}
+
+VkResult WINAPI vkGetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, int fd, VkMemoryFdPropertiesKHR *pMemoryFdProperties)
+{
+    struct vkGetMemoryFdPropertiesKHR_params params;
+    params.device = device;
+    params.handleType = handleType;
+    params.fd = fd;
+    params.pMemoryFdProperties = pMemoryFdProperties;
+    return vk_unix_call(unix_vkGetMemoryFdPropertiesKHR, &params);
 }
 
 VkResult WINAPI vkGetMemoryHostPointerPropertiesEXT(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, const void *pHostPointer, VkMemoryHostPointerPropertiesEXT *pMemoryHostPointerProperties)
@@ -3845,6 +3882,15 @@ VkResult WINAPI vkGetSemaphoreCounterValueKHR(VkDevice device, VkSemaphore semap
     return vk_unix_call(unix_vkGetSemaphoreCounterValueKHR, &params);
 }
 
+VkResult WINAPI vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR *pGetFdInfo, int *pFd)
+{
+    struct vkGetSemaphoreFdKHR_params params;
+    params.device = device;
+    params.pGetFdInfo = pGetFdInfo;
+    params.pFd = pFd;
+    return vk_unix_call(unix_vkGetSemaphoreFdKHR, &params);
+}
+
 VkResult WINAPI vkGetShaderInfoAMD(VkDevice device, VkPipeline pipeline, VkShaderStageFlagBits shaderStage, VkShaderInfoTypeAMD infoType, size_t *pInfoSize, void *pInfo)
 {
     struct vkGetShaderInfoAMD_params params;
@@ -3893,6 +3939,22 @@ VkResult WINAPI vkGetValidationCacheDataEXT(VkDevice device, VkValidationCacheEX
     params.pDataSize = pDataSize;
     params.pData = pData;
     return vk_unix_call(unix_vkGetValidationCacheDataEXT, &params);
+}
+
+VkResult WINAPI vkImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR *pImportFenceFdInfo)
+{
+    struct vkImportFenceFdKHR_params params;
+    params.device = device;
+    params.pImportFenceFdInfo = pImportFenceFdInfo;
+    return vk_unix_call(unix_vkImportFenceFdKHR, &params);
+}
+
+VkResult WINAPI vkImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR *pImportSemaphoreFdInfo)
+{
+    struct vkImportSemaphoreFdKHR_params params;
+    params.device = device;
+    params.pImportSemaphoreFdInfo = pImportSemaphoreFdInfo;
+    return vk_unix_call(unix_vkImportSemaphoreFdKHR, &params);
 }
 
 VkResult WINAPI vkInitializePerformanceApiINTEL(VkDevice device, const VkInitializePerformanceApiInfoINTEL *pInitializeInfo)
@@ -4621,8 +4683,10 @@ static const struct vulkan_func vk_device_dispatch_table[] =
     {"vkGetDeviceQueue2", vkGetDeviceQueue2},
     {"vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI", vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI},
     {"vkGetEventStatus", vkGetEventStatus},
+    {"vkGetFenceFdKHR", vkGetFenceFdKHR},
     {"vkGetFenceStatus", vkGetFenceStatus},
     {"vkGetGeneratedCommandsMemoryRequirementsNV", vkGetGeneratedCommandsMemoryRequirementsNV},
+    {"vkGetImageDrmFormatModifierPropertiesEXT", vkGetImageDrmFormatModifierPropertiesEXT},
     {"vkGetImageMemoryRequirements", vkGetImageMemoryRequirements},
     {"vkGetImageMemoryRequirements2", vkGetImageMemoryRequirements2},
     {"vkGetImageMemoryRequirements2KHR", vkGetImageMemoryRequirements2KHR},
@@ -4633,6 +4697,8 @@ static const struct vulkan_func vk_device_dispatch_table[] =
     {"vkGetImageSubresourceLayout2EXT", vkGetImageSubresourceLayout2EXT},
     {"vkGetImageViewAddressNVX", vkGetImageViewAddressNVX},
     {"vkGetImageViewHandleNVX", vkGetImageViewHandleNVX},
+    {"vkGetMemoryFdKHR", vkGetMemoryFdKHR},
+    {"vkGetMemoryFdPropertiesKHR", vkGetMemoryFdPropertiesKHR},
     {"vkGetMemoryHostPointerPropertiesEXT", vkGetMemoryHostPointerPropertiesEXT},
     {"vkGetPerformanceParameterINTEL", vkGetPerformanceParameterINTEL},
     {"vkGetPipelineCacheData", vkGetPipelineCacheData},
@@ -4652,11 +4718,14 @@ static const struct vulkan_func vk_device_dispatch_table[] =
     {"vkGetRenderAreaGranularity", vkGetRenderAreaGranularity},
     {"vkGetSemaphoreCounterValue", vkGetSemaphoreCounterValue},
     {"vkGetSemaphoreCounterValueKHR", vkGetSemaphoreCounterValueKHR},
+    {"vkGetSemaphoreFdKHR", vkGetSemaphoreFdKHR},
     {"vkGetShaderInfoAMD", vkGetShaderInfoAMD},
     {"vkGetShaderModuleCreateInfoIdentifierEXT", vkGetShaderModuleCreateInfoIdentifierEXT},
     {"vkGetShaderModuleIdentifierEXT", vkGetShaderModuleIdentifierEXT},
     {"vkGetSwapchainImagesKHR", vkGetSwapchainImagesKHR},
     {"vkGetValidationCacheDataEXT", vkGetValidationCacheDataEXT},
+    {"vkImportFenceFdKHR", vkImportFenceFdKHR},
+    {"vkImportSemaphoreFdKHR", vkImportSemaphoreFdKHR},
     {"vkInitializePerformanceApiINTEL", vkInitializePerformanceApiINTEL},
     {"vkInvalidateMappedMemoryRanges", vkInvalidateMappedMemoryRanges},
     {"vkMapMemory", vkMapMemory},

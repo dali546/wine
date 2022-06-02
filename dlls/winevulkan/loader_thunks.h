@@ -346,8 +346,10 @@ enum unix_call
     unix_vkGetDeviceQueue2,
     unix_vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI,
     unix_vkGetEventStatus,
+    unix_vkGetFenceFdKHR,
     unix_vkGetFenceStatus,
     unix_vkGetGeneratedCommandsMemoryRequirementsNV,
+    unix_vkGetImageDrmFormatModifierPropertiesEXT,
     unix_vkGetImageMemoryRequirements,
     unix_vkGetImageMemoryRequirements2,
     unix_vkGetImageMemoryRequirements2KHR,
@@ -358,6 +360,8 @@ enum unix_call
     unix_vkGetImageSubresourceLayout2EXT,
     unix_vkGetImageViewAddressNVX,
     unix_vkGetImageViewHandleNVX,
+    unix_vkGetMemoryFdKHR,
+    unix_vkGetMemoryFdPropertiesKHR,
     unix_vkGetMemoryHostPointerPropertiesEXT,
     unix_vkGetPerformanceParameterINTEL,
     unix_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,
@@ -420,11 +424,14 @@ enum unix_call
     unix_vkGetRenderAreaGranularity,
     unix_vkGetSemaphoreCounterValue,
     unix_vkGetSemaphoreCounterValueKHR,
+    unix_vkGetSemaphoreFdKHR,
     unix_vkGetShaderInfoAMD,
     unix_vkGetShaderModuleCreateInfoIdentifierEXT,
     unix_vkGetShaderModuleIdentifierEXT,
     unix_vkGetSwapchainImagesKHR,
     unix_vkGetValidationCacheDataEXT,
+    unix_vkImportFenceFdKHR,
+    unix_vkImportSemaphoreFdKHR,
     unix_vkInitializePerformanceApiINTEL,
     unix_vkInvalidateMappedMemoryRanges,
     unix_vkMapMemory,
@@ -2987,6 +2994,13 @@ struct vkGetEventStatus_params
     VkEvent event;
 };
 
+struct vkGetFenceFdKHR_params
+{
+    VkDevice device;
+    const VkFenceGetFdInfoKHR *pGetFdInfo;
+    int *pFd;
+};
+
 struct vkGetFenceStatus_params
 {
     VkDevice device;
@@ -2998,6 +3012,13 @@ struct vkGetGeneratedCommandsMemoryRequirementsNV_params
     VkDevice device;
     const VkGeneratedCommandsMemoryRequirementsInfoNV *pInfo;
     VkMemoryRequirements2 *pMemoryRequirements;
+};
+
+struct vkGetImageDrmFormatModifierPropertiesEXT_params
+{
+    VkDevice device;
+    VkImage image;
+    VkImageDrmFormatModifierPropertiesEXT *pProperties;
 };
 
 struct vkGetImageMemoryRequirements_params
@@ -3072,6 +3093,21 @@ struct vkGetImageViewHandleNVX_params
 {
     VkDevice device;
     const VkImageViewHandleInfoNVX *pInfo;
+};
+
+struct vkGetMemoryFdKHR_params
+{
+    VkDevice device;
+    const VkMemoryGetFdInfoKHR *pGetFdInfo;
+    int *pFd;
+};
+
+struct vkGetMemoryFdPropertiesKHR_params
+{
+    VkDevice device;
+    VkExternalMemoryHandleTypeFlagBits handleType;
+    int fd;
+    VkMemoryFdPropertiesKHR *pMemoryFdProperties;
 };
 
 struct vkGetMemoryHostPointerPropertiesEXT_params
@@ -3538,6 +3574,13 @@ struct vkGetSemaphoreCounterValueKHR_params
     uint64_t *pValue;
 };
 
+struct vkGetSemaphoreFdKHR_params
+{
+    VkDevice device;
+    const VkSemaphoreGetFdInfoKHR *pGetFdInfo;
+    int *pFd;
+};
+
 struct vkGetShaderInfoAMD_params
 {
     VkDevice device;
@@ -3576,6 +3619,18 @@ struct vkGetValidationCacheDataEXT_params
     VkValidationCacheEXT validationCache;
     size_t *pDataSize;
     void *pData;
+};
+
+struct vkImportFenceFdKHR_params
+{
+    VkDevice device;
+    const VkImportFenceFdInfoKHR *pImportFenceFdInfo;
+};
+
+struct vkImportSemaphoreFdKHR_params
+{
+    VkDevice device;
+    const VkImportSemaphoreFdInfoKHR *pImportSemaphoreFdInfo;
 };
 
 struct vkInitializePerformanceApiINTEL_params

@@ -93,6 +93,7 @@ static VkResult (*pvkGetPhysicalDeviceSurfacePresentModesKHR)(VkPhysicalDevice, 
 static VkResult (*pvkGetPhysicalDeviceSurfaceSupportKHR)(VkPhysicalDevice, uint32_t, VkSurfaceKHR, VkBool32 *);
 static VkBool32 (*pvkGetPhysicalDeviceXlibPresentationSupportKHR)(VkPhysicalDevice, uint32_t, Display *, VisualID);
 static VkResult (*pvkGetSwapchainImagesKHR)(VkDevice, VkSwapchainKHR, uint32_t *, VkImage *);
+static VkResult (*pvkAcquireNextImageKHR)(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t *);
 static VkResult (*pvkQueuePresentKHR)(VkQueue, const VkPresentInfoKHR *);
 
 static void *X11DRV_get_vk_device_proc_addr(const char *name);
@@ -134,6 +135,7 @@ static void wine_vk_init(void)
     LOAD_FUNCPTR(vkGetPhysicalDeviceSurfaceSupportKHR);
     LOAD_FUNCPTR(vkGetPhysicalDeviceXlibPresentationSupportKHR);
     LOAD_FUNCPTR(vkGetSwapchainImagesKHR);
+    LOAD_FUNCPTR(vkAcquireNextImageKHR);
     LOAD_FUNCPTR(vkQueuePresentKHR);
     LOAD_OPTIONAL_FUNCPTR(vkGetDeviceGroupSurfacePresentModesKHR);
     LOAD_OPTIONAL_FUNCPTR(vkGetPhysicalDevicePresentRectanglesKHR);
@@ -640,6 +642,15 @@ static VkResult X11DRV_vkGetSwapchainImagesKHR(VkDevice device,
     return pvkGetSwapchainImagesKHR(device, swapchain, count, images);
 }
 
+static VkResult X11DRV_vkAcquireNextImageKHR(VkDevice device,
+        VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore,
+        VkFence fence, uint32_t *image_index)
+{
+    pvkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, image_index);
+
+    return VK_SUCCESS;
+}
+
 static VkResult X11DRV_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *present_info)
 {
     VkResult res;
@@ -683,6 +694,7 @@ static VkSurfaceKHR X11DRV_wine_get_native_surface(VkSurfaceKHR surface)
 
 static const struct vulkan_funcs vulkan_funcs =
 {
+    X11DRV_vkAcquireNextImageKHR,
     X11DRV_vkCreateInstance,
     X11DRV_vkCreateSwapchainKHR,
     X11DRV_vkCreateWin32SurfaceKHR,

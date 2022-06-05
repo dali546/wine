@@ -131,9 +131,17 @@ struct wayland_pointer
     HCURSOR hcursor;
 };
 
+struct wayland_dmabuf_format
+{
+    struct wl_list link;
+    uint32_t format;
+    struct wl_array modifiers;
+};
+
 struct wayland_dmabuf
 {
     struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1;
+    struct wl_list formats;
 };
 
 struct wayland

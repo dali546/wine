@@ -32,6 +32,86 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 
+static struct wayland_dmabuf_format *wayland_dmabuf_find_format(struct wayland_dmabuf *dmabuf,
+                                                                uint32_t format)
+{
+    struct wayland_dmabuf_format *dmabuf_format;
+
+    wl_list_for_each(dmabuf_format, &dmabuf->formats, link)
+        if (dmabuf_format->format == format) break;
+
+    if (&dmabuf_format->link == &dmabuf->formats) dmabuf_format = NULL;
+
+    return dmabuf_format;
+}
+
+static BOOL wayland_dmabuf_format_find_modifier(struct wayland_dmabuf_format *format, uint64_t modifier)
+{
+    uint64_t *mod;
+
+    wl_array_for_each(mod, &format->modifiers)
+        if (*mod == modifier) return TRUE;
+
+    return FALSE;
+}
+
+static void *wayland_dmabuf_add_format_modifier(struct wayland_dmabuf *dmabuf,
+                                                uint32_t format, uint64_t modifier)
+{
+    struct wayland_dmabuf_format *dmabuf_format;
+    uint64_t *mod;
+
+    if ((dmabuf_format = wayland_dmabuf_find_format(dmabuf, format)))
+    {
+        /* Avoid a possible duplicate, e.g., if compositor sends both format and
+         * modifier event with a DRM_FORMAT_MOD_INVALID. */
+        if (wayland_dmabuf_format_find_modifier(dmabuf_format, modifier))
+            goto out;
+    }
+    else
+    {
+        if (!(dmabuf_format = malloc(sizeof(struct wayland_dmabuf_format))))
+            return NULL;
+        dmabuf_format->format = format;
+        wl_array_init(&dmabuf_format->modifiers);
+        wl_list_insert(&dmabuf->formats, &dmabuf_format->link);
+    }
+
+    mod = wl_array_add(&dmabuf_format->modifiers, sizeof(uint64_t));
+    if (mod) *mod = modifier;
+    else dmabuf_format = NULL;
+
+out:
+    return dmabuf_format;
+}
+
+/**********************************************************************
+ *          zwp_linux_dmabuf_v1 implementation
+ */
+
+static void dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *zwp_dmabuf, uint32_t format)
+{
+    struct wayland_dmabuf *dmabuf = data;
+
+    if (!wayland_dmabuf_add_format_modifier(dmabuf, format, DRM_FORMAT_MOD_INVALID))
+        WARN("Could not add format 0x%08x\n", format);
+}
+
+static void dmabuf_modifiers(void *data, struct zwp_linux_dmabuf_v1 *zwp_dmabuf, uint32_t format,
+                             uint32_t mod_hi, uint32_t mod_lo)
+{
+    struct wayland_dmabuf *dmabuf = data;
+    const uint64_t modifier = (uint64_t)mod_hi << 32 | mod_lo;
+
+    if (!wayland_dmabuf_add_format_modifier(dmabuf, format, modifier))
+        WARN("Could not add format/modifier 0x%08x/0x%llx\n", format, modifier);
+}
+
+static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
+    dmabuf_format,
+    dmabuf_modifiers
+};
+
 /***********************************************************************
  *           wayland_dmabuf_init
  */
@@ -39,6 +119,8 @@ void wayland_dmabuf_init(struct wayland_dmabuf *dmabuf,
                          struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1)
 {
     dmabuf->zwp_linux_dmabuf_v1 = zwp_linux_dmabuf_v1;
+    wl_list_init(&dmabuf->formats);
+    zwp_linux_dmabuf_v1_add_listener(zwp_linux_dmabuf_v1, &dmabuf_listener, dmabuf);
 }
 
 /***********************************************************************
@@ -46,8 +128,17 @@ void wayland_dmabuf_init(struct wayland_dmabuf *dmabuf,
  */
 void wayland_dmabuf_deinit(struct wayland_dmabuf *dmabuf)
 {
+    struct wayland_dmabuf_format *format, *tmp;
+
     if (dmabuf->zwp_linux_dmabuf_v1)
         zwp_linux_dmabuf_v1_destroy(dmabuf->zwp_linux_dmabuf_v1);
+
+    wl_list_for_each_safe(format, tmp, &dmabuf->formats, link)
+    {
+        wl_array_release(&format->modifiers);
+        wl_list_remove(&format->link);
+        free(format);
+    }
 }
 
 /**********************************************************************

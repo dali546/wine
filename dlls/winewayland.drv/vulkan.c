@@ -74,6 +74,7 @@ static VkResult (*pvkGetPhysicalDeviceSurfaceSupportKHR)(VkPhysicalDevice, uint3
 static VkBool32 (*pvkGetPhysicalDeviceWaylandPresentationSupportKHR)(VkPhysicalDevice, uint32_t, struct wl_display *);
 static VkResult (*pvkGetSwapchainImagesKHR)(VkDevice, VkSwapchainKHR, uint32_t *, VkImage *);
 static VkResult (*pvkQueuePresentKHR)(VkQueue, const VkPresentInfoKHR *);
+static VkResult (*pvkAcquireNextImageKHR)(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t *);
 
 static void *vulkan_handle;
 
@@ -716,6 +717,13 @@ static VkResult wayland_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR 
     return pvkGetSwapchainImagesKHR(device, swapchain, count, images);
 }
 
+static VkResult wayland_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
+                                              uint64_t timeout, VkSemaphore semaphore,
+                                              VkFence fence, uint32_t *image_index)
+{
+    return pvkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, image_index);
+}
+
 static VkResult validate_present_info(const VkPresentInfoKHR *present_info)
 {
     uint32_t i;
@@ -847,6 +855,7 @@ static void wine_vk_init(void)
     LOAD_FUNCPTR(vkGetPhysicalDeviceSurfaceSupportKHR);
     LOAD_FUNCPTR(vkGetPhysicalDeviceWaylandPresentationSupportKHR);
     LOAD_FUNCPTR(vkGetSwapchainImagesKHR);
+    LOAD_FUNCPTR(vkAcquireNextImageKHR);
     LOAD_FUNCPTR(vkQueuePresentKHR);
 #undef LOAD_FUNCPTR
 #undef LOAD_OPTIONAL_FUNCPTR
@@ -879,6 +888,7 @@ static const struct vulkan_funcs vulkan_funcs =
     .p_vkGetPhysicalDeviceSurfaceSupportKHR = wayland_vkGetPhysicalDeviceSurfaceSupportKHR,
     .p_vkGetPhysicalDeviceWin32PresentationSupportKHR = wayland_vkGetPhysicalDeviceWin32PresentationSupportKHR,
     .p_vkGetSwapchainImagesKHR = wayland_vkGetSwapchainImagesKHR,
+    .p_vkAcquireNextImageKHR = wayland_vkAcquireNextImageKHR,
     .p_vkQueuePresentKHR = wayland_vkQueuePresentKHR,
     .p_wine_get_native_surface = wayland_wine_get_native_surface,
 };

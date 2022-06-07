@@ -103,3 +103,56 @@ size_t ascii_to_unicode_z(WCHAR *dst, size_t dst_max_chars,
     dst[len] = 0;
     return len + 1;
 }
+
+/**********************************************************************
+ *          unicode_z_to_long
+ *
+ *  Converts a unicode string to a LONG using the provided base.
+ */
+LONG unicode_z_to_long(LPCWSTR s, LPWSTR *end, INT base)
+{
+    BOOL negative = FALSE, empty = TRUE;
+    LONG ret = 0;
+
+    if (base < 0 || base == 1 || base > 36) return 0;
+    if (end) *end = (WCHAR *)s;
+    while (*s == ' ' || *s == '\t') s++;
+
+    if (*s == '-')
+    {
+        negative = TRUE;
+        s++;
+    }
+    else if (*s == '+') s++;
+
+    if ((base == 0 || base == 16) && s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+    {
+        base = 16;
+        s += 2;
+    }
+    if (base == 0) base = s[0] != '0' ? 10 : 8;
+
+    while (*s)
+    {
+        int v;
+
+        if ('0' <= *s && *s <= '9') v = *s - '0';
+        else if ('A' <= *s && *s <= 'Z') v = *s - 'A' + 10;
+        else if ('a' <= *s && *s <= 'z') v = *s - 'a' + 10;
+        else break;
+        if (v >= base) break;
+        if (negative) v = -v;
+        s++;
+        empty = FALSE;
+
+        if (!negative && (ret > MAXLONG / base || ret * base > MAXLONG - v))
+            ret = MAXLONG;
+        else if (negative && (ret < (LONG)MINLONG / base || ret * base < (LONG)(MINLONG - v)))
+            ret = MINLONG;
+        else
+            ret = ret * base + v;
+    }
+
+    if (end && !empty) *end = (WCHAR *)s;
+    return ret;
+}

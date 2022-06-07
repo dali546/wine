@@ -20,11 +20,24 @@
 
 #include "waylanddrv_dll.h"
 
+static unixlib_handle_t waylanddrv_handle;
+NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *params);
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
 {
+    struct waylanddrv_unix_init_params init_params;
+
     if (reason != DLL_PROCESS_ATTACH) return TRUE;
 
     DisableThreadLibraryCalls(instance);
+    if (NtQueryVirtualMemory(GetCurrentProcess(), instance, MemoryWineUnixFuncs,
+                             &waylanddrv_handle, sizeof(waylanddrv_handle), NULL))
+        return FALSE;
+
+    if (__wine_unix_call(waylanddrv_handle, waylanddrv_unix_func_init, &init_params))
+        return FALSE;
+
+    waylanddrv_unix_call = init_params.unix_call;
 
     return TRUE;
 }

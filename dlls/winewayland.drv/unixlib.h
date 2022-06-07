@@ -1,6 +1,4 @@
 /*
- * Wayland driver DLL definitions
- *
  * Copyright 2022 Alexandros Frantzis for Collabora Ltd
  *
  * This library is free software; you can redistribute it and/or
@@ -18,18 +16,22 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#ifndef __WINE_WAYLANDDRV_DLL_H
-#define __WINE_WAYLANDDRV_DLL_H
+#ifndef __WINE_WAYLANDDRV_UNIXLIB_H
+#define __WINE_WAYLANDDRV_UNIXLIB_H
 
 #include <stdarg.h>
-#include "windef.h"
-#include "winbase.h"
+#include "winternl.h"
+#include "wine/unixlib.h"
 
-#include "unixlib.h"
+enum waylanddrv_unix_func
+{
+    waylanddrv_unix_func_init,
+    waylanddrv_unix_func_count,
+};
 
-/* FIXME: Use __wine_unix_call instead */
-extern NTSTATUS (CDECL *waylanddrv_unix_call)(enum waylanddrv_unix_func func, void *params) DECLSPEC_HIDDEN;
-#define WAYLANDDRV_UNIX_CALL(func, params) waylanddrv_unix_call(waylanddrv_unix_func_ ## func, params)
+struct waylanddrv_unix_init_params
+{
+    NTSTATUS (CDECL *unix_call)(enum waylanddrv_unix_func func, void *params);
+};
 
-
-#endif /* __WINE_WAYLANDDRV_DLL_H */
+#endif /* __WINE_WAYLANDDRV_UNIXLIB_H */

@@ -20,11 +20,19 @@
 
 #include "waylanddrv_dll.h"
 
+unixlib_handle_t waylanddrv_handle;
+
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
 {
     if (reason != DLL_PROCESS_ATTACH) return TRUE;
 
     DisableThreadLibraryCalls(instance);
+    if (NtQueryVirtualMemory(GetCurrentProcess(), instance, MemoryWineUnixFuncs,
+                             &waylanddrv_handle, sizeof(waylanddrv_handle), NULL))
+        return FALSE;
+
+    if (WAYLANDDRV_UNIX_CALL(init, NULL))
+        return FALSE;
 
     return TRUE;
 }

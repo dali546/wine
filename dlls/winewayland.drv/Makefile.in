@@ -1,7 +1,9 @@
 EXTRADEFS = -DWINE_NO_LONG_TYPES
 MODULE = winewayland.drv
+UNIXLIB = winewayland.so
 
 C_SRCS = \
 	dllmain.c \
+	waylanddrv_main.c \
 
 RC_SRCS = version.rc

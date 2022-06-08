@@ -19,8 +19,8 @@
 #ifndef __WINE_WAYLANDDRV_UNIXLIB_H
 #define __WINE_WAYLANDDRV_UNIXLIB_H
 
-#include <stdarg.h>
-#include "winternl.h"
+#include "windef.h"
+#include "ntuser.h"
 #include "wine/unixlib.h"
 
 enum waylanddrv_unix_func
@@ -34,5 +34,13 @@ struct waylanddrv_unix_init_params
     NTSTATUS (WINAPI *pNtWaitForMultipleObjects)(ULONG,const HANDLE*,BOOLEAN,BOOLEAN,const LARGE_INTEGER*);
     NTSTATUS (CDECL *unix_call)(enum waylanddrv_unix_func func, void *params);
 };
+
+/* driver client callbacks exposed with KernelCallbackTable interface */
+enum waylanddrv_client_func
+{
+    waylanddrv_client_func_last = NtUserDriverCallbackFirst
+};
+
+C_ASSERT(waylanddrv_client_func_last <= NtUserDriverCallbackLast + 1);
 
 #endif /* __WINE_WAYLANDDRV_UNIXLIB_H */

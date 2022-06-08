@@ -39,6 +39,8 @@
 #include "unixlib.h"
 #include "wine/gdi_driver.h"
 
+#define WAYLANDDRV_CLIENT_CALL(func, params, size) waylanddrv_client_call(waylanddrv_client_func_ ## func, params, size)
+
 /**********************************************************************
  *          Globals
  */
@@ -433,6 +435,13 @@ static inline BOOL intersect_rect(RECT *dst, const RECT *src1, const RECT *src2)
     dst->bottom = min(src1->bottom, src2->bottom);
     return !IsRectEmpty(dst);
 }
+
+/**********************************************************************
+ *          PE/unixlib support
+ */
+
+NTSTATUS waylanddrv_client_call(enum waylanddrv_client_func func, const void *params,
+                                ULONG size) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          USER driver functions

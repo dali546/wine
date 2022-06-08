@@ -217,3 +217,14 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
 };
 
 C_ASSERT(ARRAYSIZE(__wine_unix_call_funcs) == waylanddrv_unix_func_count);
+
+/***********************************************************************
+ *           waylanddrv_client_call
+ */
+NTSTATUS waylanddrv_client_call(enum waylanddrv_client_func func, const void *params,
+                                ULONG size)
+{
+    void *ret_ptr;
+    ULONG ret_len;
+    return KeUserModeCallback(func, params, size, &ret_ptr, &ret_len);
+}

@@ -373,8 +373,30 @@ static VkResult wine_vk_device_convert_create_info(const VkDeviceCreateInfo *src
 {
     unsigned int i;
     VkResult res;
+    const unsigned int num_swapchain_extensions = 6;
+    const char **extensions_names;
+
+    extensions_names =
+        malloc((src->enabledExtensionCount + num_swapchain_extensions + 1) *
+               sizeof(const char *));
+
+    /* These are the extensions the applications wants */
+    for (i = 0; i < src->enabledExtensionCount; i++)
+        extensions_names[i] = src->ppEnabledExtensionNames[i];
+
+    /* These are the extensions we need on Wine Wayland for internal swapchain */
+    extensions_names[i++] = "VK_EXT_image_drm_format_modifier";
+    extensions_names[i++] = "VK_KHR_external_semaphore_fd";
+    extensions_names[i++] = "VK_KHR_timeline_semaphore";
+    extensions_names[i++] = "VK_KHR_external_memory";
+    extensions_names[i++] = "VK_KHR_external_memory_fd";
+    extensions_names[i++] = "VK_EXT_external_memory_dma_buf";
+
+    extensions_names[i] = NULL;
 
     *dst = *src;
+    dst->enabledExtensionCount += num_swapchain_extensions;
+    dst->ppEnabledExtensionNames = extensions_names;
 
     if ((res = convert_VkDeviceCreateInfo_struct_chain(src->pNext, dst)) < 0)
     {
@@ -453,8 +475,25 @@ static VkResult wine_vk_instance_convert_create_info(const VkInstanceCreateInfo 
     VkBaseInStructure *header;
     unsigned int i;
     VkResult res;
+    const unsigned int num_swapchain_extensions = 1;
+    const char **extensions_names;
+
+    extensions_names =
+        malloc((src->enabledExtensionCount + num_swapchain_extensions + 1) *
+               sizeof(const char *));
+
+    /* These are the extensions the applications wants */
+    for (i = 0; i < src->enabledExtensionCount; i++)
+        extensions_names[i] = src->ppEnabledExtensionNames[i];
+
+    /* These are the extensions we need on Wine Wayland for internal swapchain */
+    extensions_names[i++] = "VK_KHR_get_physical_device_properties2";
+
+    extensions_names[i] = NULL;
 
     *dst = *src;
+    dst->enabledExtensionCount += num_swapchain_extensions;
+    dst->ppEnabledExtensionNames = extensions_names;
 
     if ((res = convert_VkInstanceCreateInfo_struct_chain(src->pNext, dst)) < 0)
     {

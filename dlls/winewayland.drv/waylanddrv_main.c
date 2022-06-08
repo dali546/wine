@@ -176,3 +176,14 @@ static NTSTATUS CDECL waylanddrv_unix_call(enum waylanddrv_unix_func func, void 
 {
     return __wine_unix_call_funcs[func](params);
 }
+
+/***********************************************************************
+ *           waylanddrv_client_call
+ */
+NTSTATUS waylanddrv_client_call(enum waylanddrv_client_func func, const void *params,
+                                ULONG size)
+{
+    void *ret_ptr;
+    ULONG ret_len;
+    return KeUserModeCallback(func, params, size, &ret_ptr, &ret_len);
+}

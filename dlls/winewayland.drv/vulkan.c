@@ -45,6 +45,9 @@ WINE_DEFAULT_DEBUG_CHANNEL(vulkan);
 
 #define VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR 1000006000
 
+/* TODO: if possible drop this global variable later */
+VkPhysicalDevice global_phys_dev = NULL;
+
 typedef struct VkWaylandSurfaceCreateInfoKHR
 {
     VkStructureType sType;
@@ -624,6 +627,8 @@ static VkResult wayland_vkGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice p
     VkResult result;
     TRACE("%p, %p, %p, %p\n", phys_dev, surface_info, count, formats);
 
+    global_phys_dev = phys_dev;
+
     if (!wine_vk_surface_handle_is_valid(surface_info->surface))
         RETURN_VK_ERROR_SURFACE_LOST_KHR;
 
@@ -667,6 +672,8 @@ static VkResult wayland_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice ph
                                                              VkSurfaceFormatKHR *formats)
 {
     TRACE("%p, 0x%s, %p, %p\n", phys_dev, wine_dbgstr_longlong(surface), count, formats);
+
+    global_phys_dev = phys_dev;
 
     if (!wine_vk_surface_handle_is_valid(surface))
         RETURN_VK_ERROR_SURFACE_LOST_KHR;

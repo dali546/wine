@@ -93,6 +93,7 @@ static const struct vulkan_funcs vulkan_funcs;
 
 struct wine_vk_surface
 {
+    VkInstance instance;
     struct wl_list link;
     HWND hwnd;
     struct wayland_surface *wayland_surface;
@@ -102,6 +103,7 @@ struct wine_vk_surface
 
 struct wine_vk_swapchain
 {
+    VkInstance instance;
     struct wl_list link;
     HWND hwnd;
     struct wayland_surface *wayland_surface;
@@ -303,6 +305,7 @@ static VkResult wayland_vkCreateSwapchainKHR(VkDevice device,
     wine_vk_swapchain->native_vk_swapchain = *swapchain;
     wine_vk_swapchain->extent = info.imageExtent;
     wine_vk_swapchain->valid = TRUE;
+    wine_vk_swapchain->instance = wine_vk_surface->instance;
 
     wine_vk_list_add(&wine_vk_swapchain_list, &wine_vk_swapchain->link);
 
@@ -372,6 +375,7 @@ static VkResult wayland_vkCreateWin32SurfaceKHR(VkInstance instance,
     wine_vk_surface->hwnd = create_info->hwnd;
     wine_vk_surface->native_vk_surface = *vk_surface;
     wine_vk_surface->valid = TRUE;
+    wine_vk_surface->instance = instance;
 
     wine_vk_list_add(&wine_vk_surface_list, &wine_vk_surface->link);
 

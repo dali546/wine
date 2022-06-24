@@ -651,6 +651,8 @@ void wayland_update_front_buffer(HWND hwnd,
  *          Vulkan support
  */
 
+extern const struct vulkan_funcs vulkan_funcs;
+
 void wayland_invalidate_vulkan_objects(HWND hwnd) DECLSPEC_HIDDEN;
 
 /**********************************************************************

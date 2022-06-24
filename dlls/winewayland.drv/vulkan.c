@@ -89,7 +89,7 @@ static struct wayland_mutex wine_vk_object_mutex =
 static struct wl_list wine_vk_surface_list = { &wine_vk_surface_list, &wine_vk_surface_list };
 static struct wl_list wine_vk_swapchain_list = { &wine_vk_swapchain_list, &wine_vk_swapchain_list };
 
-static const struct vulkan_funcs vulkan_funcs;
+const struct vulkan_funcs vulkan_funcs;
 
 struct wine_vk_surface
 {
@@ -878,7 +878,7 @@ fail:
     vulkan_handle = NULL;
 }
 
-static const struct vulkan_funcs vulkan_funcs =
+const struct vulkan_funcs vulkan_funcs =
 {
     .p_vkCreateInstance = wayland_vkCreateInstance,
     .p_vkCreateSwapchainKHR = wayland_vkCreateSwapchainKHR,

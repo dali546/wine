@@ -50,6 +50,12 @@
 
 #define WAYLANDDRV_CLIENT_CALL(func, params, size) waylanddrv_client_call(waylanddrv_client_func_ ## func, params, size)
 
+#define VK_NO_PROTOTYPES
+#define WINE_VK_HOST
+
+#include "wine/vulkan.h"
+#include "wine/vulkan_driver.h"
+
 /**********************************************************************
  *          Globals
  */
@@ -651,9 +657,21 @@ void wayland_update_front_buffer(HWND hwnd,
  *          Vulkan support
  */
 
+struct wine_vk_swapchain
+{
+    VkInstance instance;
+    struct wl_list link;
+    HWND hwnd;
+    struct wayland_surface *wayland_surface;
+    VkSwapchainKHR native_vk_swapchain;
+    VkExtent2D extent;
+    BOOL valid;
+};
+
 extern const struct vulkan_funcs vulkan_funcs;
 
 void wayland_invalidate_vulkan_objects(HWND hwnd) DECLSPEC_HIDDEN;
+struct wine_vk_swapchain *wine_vk_swapchain_from_handle(VkSwapchainKHR handle);
 
 /**********************************************************************
  *          Wayland data device

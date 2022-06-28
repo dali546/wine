@@ -30,12 +30,6 @@
 
 #include "ntuser.h"
 
-#define VK_NO_PROTOTYPES
-#define WINE_VK_HOST
-
-#include "wine/vulkan.h"
-#include "wine/vulkan_driver.h"
-
 #include <dlfcn.h>
 #include <stdlib.h>
 
@@ -101,17 +95,6 @@ struct wine_vk_surface
     BOOL valid;
 };
 
-struct wine_vk_swapchain
-{
-    VkInstance instance;
-    struct wl_list link;
-    HWND hwnd;
-    struct wayland_surface *wayland_surface;
-    VkSwapchainKHR native_vk_swapchain;
-    VkExtent2D extent;
-    BOOL valid;
-};
-
 static inline void wine_vk_list_add(struct wl_list *list, struct wl_list *link)
 {
     wayland_mutex_lock(&wine_vk_object_mutex);
@@ -168,7 +151,7 @@ static void wine_vk_swapchain_destroy(struct wine_vk_swapchain *wine_vk_swapchai
     free(wine_vk_swapchain);
 }
 
-static struct wine_vk_swapchain *wine_vk_swapchain_from_handle(VkSurfaceKHR handle)
+struct wine_vk_swapchain *wine_vk_swapchain_from_handle(VkSwapchainKHR handle)
 {
     struct wine_vk_swapchain *swap;
 

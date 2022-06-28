@@ -39,6 +39,9 @@ WINE_DEFAULT_DEBUG_CHANNEL(vulkan);
 
 #define VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR 1000006000
 
+/* TODO: only set this to true for Vulkan cross-process rendering apps */
+BOOL use_internal_swapchain = TRUE;
+
 /* TODO: if possible drop this global variable later */
 VkPhysicalDevice global_phys_dev = NULL;
 
@@ -244,6 +247,78 @@ static VkResult wayland_vkCreateInstance(const VkInstanceCreateInfo *create_info
     return res;
 }
 
+static VkResult wine_vk_swapchain_init(VkSwapchainKHR *swapchain,
+                                       VkSwapchainCreateInfoKHR create_info,
+                                       struct wine_vk_swapchain *wine_vk_swapchain,
+                                       struct wine_vk_surface *wine_vk_surface,
+                                       BOOL use_internal_swapchain,
+                                       VkPhysicalDevice phys_dev, VkDevice dev)
+{
+    VkResult res;
+    unsigned int i;
+    struct wl_display *wl_display =
+        wine_vk_surface->wayland_surface->wayland->wl_display;
+
+    wl_list_init(&wine_vk_swapchain->link);
+
+    res = pvkCreateSwapchainKHR(dev, &create_info, NULL /* allocator */, swapchain);
+    if (res != VK_SUCCESS)
+        goto err;
+
+    wine_vk_swapchain->hwnd = wine_vk_surface->hwnd;
+    if (wine_vk_surface->wayland_surface)
+    {
+        wayland_surface_create_or_ref_glvk(wine_vk_surface->wayland_surface);
+        wine_vk_swapchain->wayland_surface = wine_vk_surface->wayland_surface;
+    }
+    wine_vk_swapchain->native_vk_swapchain = *swapchain;
+    wine_vk_swapchain->extent = create_info.imageExtent;
+    wine_vk_swapchain->valid = TRUE;
+    wine_vk_swapchain->instance = wine_vk_surface->instance;
+
+    /* The next variables are only used by cross-process Vulkan rendering apps */
+    if (!use_internal_swapchain)
+        return VK_SUCCESS;
+
+    wine_vk_swapchain->device = dev;
+
+    wine_vk_swapchain->wl_event_queue = wl_display_create_queue(wl_display);
+    if (!wine_vk_swapchain->wl_event_queue)
+        goto err;
+
+    wine_vk_swapchain->count_internal_images = max(create_info.minImageCount, 4);
+    wine_vk_swapchain->internal_images = malloc(wine_vk_swapchain->count_internal_images *
+                                                sizeof(struct wine_vk_image));
+    if (!wine_vk_swapchain->internal_images)
+        goto err;
+
+    for (i = 0; i < wine_vk_swapchain->count_internal_images; i++) {
+        res = wayland_vulkan_create_internal_swapchain_image(wine_vk_swapchain,
+                                                             phys_dev, dev, create_info,
+                                                             &wine_vk_swapchain->internal_images[i]);
+        if (res != VK_SUCCESS)
+            goto err;
+    }
+
+    wine_vk_swapchain->ready = TRUE;
+    wine_vk_swapchain->wait_for_callback = (create_info.presentMode == VK_PRESENT_MODE_FIFO_KHR);
+
+    return VK_SUCCESS;
+
+err:
+    /* TODO: free images as well, not only the array */
+    if (wine_vk_swapchain->internal_images)
+        free(wine_vk_swapchain->internal_images);
+    if (wine_vk_swapchain->wl_event_queue)
+        wl_event_queue_destroy(wine_vk_swapchain->wl_event_queue);
+    if (wine_vk_swapchain->wayland_surface)
+        wayland_surface_unref_glvk(wine_vk_swapchain->wayland_surface);
+    if (swapchain)
+        pvkDestroySwapchainKHR(dev, *swapchain, NULL);
+
+    return res;
+}
+
 static VkResult wayland_vkCreateSwapchainKHR(VkDevice device,
                                              const VkSwapchainCreateInfoKHR *create_info,
                                              const VkAllocationCallbacks *allocator,
@@ -273,22 +348,10 @@ static VkResult wayland_vkCreateSwapchainKHR(VkDevice device,
     if (!wine_vk_swapchain)
         return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-    wl_list_init(&wine_vk_swapchain->link);
-
-    res = pvkCreateSwapchainKHR(device, &info, NULL /* allocator */, swapchain);
+    res = wine_vk_swapchain_init(swapchain, info, wine_vk_swapchain, wine_vk_surface,
+                                 use_internal_swapchain, global_phys_dev, device);
     if (res != VK_SUCCESS)
         goto err;
-
-    wine_vk_swapchain->hwnd = wine_vk_surface->hwnd;
-    if (wine_vk_surface->wayland_surface)
-    {
-        wayland_surface_create_or_ref_glvk(wine_vk_surface->wayland_surface);
-        wine_vk_swapchain->wayland_surface = wine_vk_surface->wayland_surface;
-    }
-    wine_vk_swapchain->native_vk_swapchain = *swapchain;
-    wine_vk_swapchain->extent = info.imageExtent;
-    wine_vk_swapchain->valid = TRUE;
-    wine_vk_swapchain->instance = wine_vk_surface->instance;
 
     wine_vk_list_add(&wine_vk_swapchain_list, &wine_vk_swapchain->link);
 
@@ -610,8 +673,9 @@ static VkResult wayland_vkGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice p
                                                               VkSurfaceFormat2KHR *formats)
 {
     VkSurfaceFormatKHR *formats_host;
-    uint32_t i;
-    VkResult result;
+    VkResult res;
+    unsigned int i;
+
     TRACE("%p, %p, %p, %p\n", phys_dev, surface_info, count, formats);
 
     global_phys_dev = phys_dev;
@@ -621,6 +685,9 @@ static VkResult wayland_vkGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice p
 
     if (pvkGetPhysicalDeviceSurfaceFormats2KHR)
     {
+        if (use_internal_swapchain)
+            return wayland_vulkan_internal_swapchain_get_supported_formats2(phys_dev, surface_info,
+                                                                            count, formats);
         return pvkGetPhysicalDeviceSurfaceFormats2KHR(phys_dev, surface_info,
                                                       count, formats);
     }
@@ -633,24 +700,36 @@ static VkResult wayland_vkGetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice p
               "vkGetPhysicalDeviceSurfaceFormatsKHR, pNext is ignored.\n");
     }
 
-    if (!formats)
-    {
+    if (!formats) {
+        if (use_internal_swapchain)
+            return wayland_vulkan_internal_swapchain_get_supported_formats(phys_dev, surface_info->surface,
+                                                                           count, NULL);
         return pvkGetPhysicalDeviceSurfaceFormatsKHR(phys_dev, surface_info->surface,
                                                      count, NULL);
     }
 
-    formats_host = calloc(*count, sizeof(*formats_host));
-    if (!formats_host) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    result = pvkGetPhysicalDeviceSurfaceFormatsKHR(phys_dev, surface_info->surface,
-                                                   count, formats_host);
-    if (result == VK_SUCCESS || result == VK_INCOMPLETE)
-    {
-        for (i = 0; i < *count; i++)
-            formats[i].surfaceFormat = formats_host[i];
+    formats_host = malloc(*count * sizeof(VkSurfaceFormatKHR));
+    if (!formats_host)
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+    if (use_internal_swapchain)
+        res = wayland_vulkan_internal_swapchain_get_supported_formats(phys_dev, surface_info->surface,
+                                                                      count, formats_host);
+    else
+        res = pvkGetPhysicalDeviceSurfaceFormatsKHR(phys_dev, surface_info->surface,
+                                                    count, formats_host);
+
+    if (res != VK_SUCCESS && res != VK_INCOMPLETE) {
+        free(formats_host);
+        return res;
     }
 
+    for (i = 0; i < *count; i++)
+        formats[i].surfaceFormat = formats_host[i];
+
     free(formats_host);
-    return result;
+
+    return VK_SUCCESS;
 }
 
 static VkResult wayland_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice phys_dev,
@@ -665,7 +744,11 @@ static VkResult wayland_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice ph
     if (!wine_vk_surface_handle_is_valid(surface))
         RETURN_VK_ERROR_SURFACE_LOST_KHR;
 
-    return pvkGetPhysicalDeviceSurfaceFormatsKHR(phys_dev, surface, count, formats);
+    if (use_internal_swapchain)
+        return wayland_vulkan_internal_swapchain_get_supported_formats(phys_dev, surface,
+                                                                       count, formats);
+    return pvkGetPhysicalDeviceSurfaceFormatsKHR(phys_dev, surface,
+                                                 count, formats);
 }
 
 static VkResult wayland_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice phys_dev,
@@ -708,6 +791,10 @@ static VkResult wayland_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR 
 {
     TRACE("%p, 0x%s %p %p\n", device, wine_dbgstr_longlong(swapchain), count, images);
 
+    if (use_internal_swapchain)
+        return wayland_vulkan_internal_swapchain_get_images(device, swapchain,
+                                                            count, images);
+
     return pvkGetSwapchainImagesKHR(device, swapchain, count, images);
 }
 
@@ -715,6 +802,11 @@ static VkResult wayland_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR sw
                                               uint64_t timeout, VkSemaphore semaphore,
                                               VkFence fence, uint32_t *image_index)
 {
+    if (use_internal_swapchain)
+        return wayland_vulkan_internal_swapchain_acquire_next_image(device, swapchain,
+                                                                    timeout, semaphore,
+                                                                    fence, image_index);
+
     return pvkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, image_index);
 }
 
@@ -804,8 +896,12 @@ static VkResult wayland_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
      * incomplete configuration state. */
     lock_swapchain_wayland_surfaces(present_info, TRUE);
 
-    if ((res = validate_present_info(present_info)) == VK_SUCCESS)
-        res = pvkQueuePresentKHR(queue, present_info);
+    if ((res = validate_present_info(present_info)) == VK_SUCCESS) {
+        if (use_internal_swapchain)
+            res = wayland_vulkan_internal_swapchain_queue_present(present_info);
+        else
+            res = pvkQueuePresentKHR(queue, present_info);
+    }
 
     lock_swapchain_wayland_surfaces(present_info, FALSE);
 

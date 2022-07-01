@@ -657,6 +657,16 @@ void wayland_update_front_buffer(HWND hwnd,
  *          Vulkan support
  */
 
+struct wine_vk_image
+{
+    VkImage native_vk_image;
+    VkFormat format;
+    uint32_t width, height;
+    struct wayland_native_buffer native_buffer;
+    struct wayland_dmabuf_buffer *dmabuf_buffer;
+    BOOL busy;
+};
+
 struct wine_vk_swapchain
 {
     VkInstance instance;
@@ -666,12 +676,44 @@ struct wine_vk_swapchain
     VkSwapchainKHR native_vk_swapchain;
     VkExtent2D extent;
     BOOL valid;
+
+    /* These are only used for cross-process Vulkan rendering apps */
+    VkDevice device;
+    BOOL ready;
+    BOOL wait_for_callback;
+    struct wl_event_queue *wl_event_queue;
+    struct wl_callback *frame_callback;
+    uint32_t count_internal_images;
+    struct wine_vk_image *internal_images;
 };
 
 extern const struct vulkan_funcs vulkan_funcs;
 
 void wayland_invalidate_vulkan_objects(HWND hwnd) DECLSPEC_HIDDEN;
 struct wine_vk_swapchain *wine_vk_swapchain_from_handle(VkSwapchainKHR handle);
+
+VkResult wayland_vulkan_internal_swapchain_get_supported_formats(VkPhysicalDevice phys_dev,
+                                                                 VkSurfaceKHR surface,
+                                                                 uint32_t *supported_formats_count,
+                                                                 VkSurfaceFormatKHR *supported_formats);
+VkResult wayland_vulkan_internal_swapchain_get_supported_formats2(VkPhysicalDevice phys_dev,
+                                                                  const VkPhysicalDeviceSurfaceInfo2KHR *surface_info,
+                                                                  uint32_t *supported_formats_count,
+                                                                  VkSurfaceFormat2KHR *supported_formats);
+VkResult wayland_vulkan_create_internal_swapchain_image(struct wine_vk_swapchain *wine_vk_swapchain,
+                                                        VkPhysicalDevice phys_dev, VkDevice dev,
+                                                        VkSwapchainCreateInfoKHR chain_create_info,
+                                                        struct wine_vk_image *image);
+VkResult wayland_vulkan_internal_swapchain_get_images(VkDevice device, VkSwapchainKHR swapchain,
+                                                      uint32_t *count, VkImage *images);
+VkResult wayland_vulkan_internal_swapchain_acquire_next_image(VkDevice device, VkSwapchainKHR swapchain,
+                                                              uint64_t timeout, VkSemaphore semaphore,
+                                                              VkFence fence, uint32_t *image_index);
+VkResult wayland_vulkan_internal_swapchain_queue_present(const VkPresentInfoKHR *present_info);
+
+
+extern VkResult (*pvkGetPhysicalDeviceSurfaceFormats2KHR)(VkPhysicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR *, uint32_t *, VkSurfaceFormat2KHR *);
+extern VkResult (*pvkGetPhysicalDeviceSurfaceFormatsKHR)(VkPhysicalDevice, VkSurfaceKHR, uint32_t *, VkSurfaceFormatKHR *);
 
 /**********************************************************************
  *          Wayland data device

@@ -479,6 +479,8 @@ void wayland_dmabuf_init(struct wayland_dmabuf *dmabuf,
                          struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf_v1) DECLSPEC_HIDDEN;
 void wayland_dmabuf_deinit(struct wayland_dmabuf *dmabuf) DECLSPEC_HIDDEN;
 BOOL wayland_dmabuf_is_format_supported(struct wayland_dmabuf *dmabuf, uint32_t format, dev_t render_dev) DECLSPEC_HIDDEN;
+size_t wayland_dmabuf_get_format_modifiers(struct wayland_dmabuf *dmabuf, uint32_t format, dev_t render_dev, uint64_t **modifiers) DECLSPEC_HIDDEN;
+BOOL wayland_dmabuf_is_format_scanoutable(struct wayland_dmabuf *dmabuf, uint32_t format, dev_t render_dev) DECLSPEC_HIDDEN;
 struct wayland_dmabuf_buffer *wayland_dmabuf_buffer_create_from_native(struct wayland *wayland,
                                                                        struct wayland_native_buffer *native) DECLSPEC_HIDDEN;
 void wayland_dmabuf_buffer_destroy(struct wayland_dmabuf_buffer *dmabuf_buffer) DECLSPEC_HIDDEN;

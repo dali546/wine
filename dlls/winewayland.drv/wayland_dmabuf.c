@@ -68,6 +68,24 @@ static int dmabuf_feedback_get_tranche_priority(struct wayland_dmabuf_feedback *
     return DMABUF_DEV_NODEV;
 }
 
+static BOOL dmabuf_format_supports_modifiers(struct wayland_dmabuf_format *format)
+{
+    uint64_t *mod;
+    uint32_t num_modifiers;
+
+    num_modifiers = format->modifiers.size / sizeof(uint64_t);
+
+    if (num_modifiers == 0) return FALSE;
+
+    if (num_modifiers == 1)
+    {
+        mod = (uint64_t *) format->modifiers.data;
+        if (*mod == DRM_FORMAT_MOD_INVALID) return FALSE;
+    }
+
+    return TRUE;
+}
+
 static BOOL dmabuf_format_has_modifier(struct wayland_dmabuf_format *format, uint64_t modifier)
 {
     uint64_t *mod;
@@ -100,9 +118,11 @@ static struct wayland_dmabuf_format *dmabuf_format_array_find_format(struct wl_a
 
 static struct wayland_dmabuf_format *dmabuf_get_format_from_optimal_tranche(struct wayland_dmabuf *dmabuf,
                                                                             uint32_t format,
-                                                                            dev_t render_dev)
+                                                                            dev_t render_dev,
+                                                                            struct wayland_dmabuf_feedback_tranche **out_tranche)
 {
     struct wayland_dmabuf_format *dmabuf_format = NULL;
+    struct wayland_dmabuf_feedback_tranche *format_tranche = NULL;
     int prio;
 
     if (dmabuf_has_feedback_support(dmabuf))
@@ -115,7 +135,10 @@ static struct wayland_dmabuf_format *dmabuf_get_format_from_optimal_tranche(stru
             {
                 if (prio == dmabuf_feedback_get_tranche_priority(&dmabuf->feedback, tranche, render_dev) &&
                     (dmabuf_format = dmabuf_format_array_find_format(&tranche->formats, format)))
+                {
+                    format_tranche = tranche;
                     break;
+                }
             }
             if (dmabuf_format) break;
         }
@@ -124,6 +147,8 @@ static struct wayland_dmabuf_format *dmabuf_get_format_from_optimal_tranche(stru
     {
         dmabuf_format = dmabuf_format_array_find_format(&dmabuf->formats, format);
     }
+
+    if (dmabuf_format && out_tranche) *out_tranche = format_tranche;
 
     return dmabuf_format;
 }
@@ -386,11 +411,43 @@ void wayland_dmabuf_deinit(struct wayland_dmabuf *dmabuf)
 }
 
 /***********************************************************************
+ *           wayland_dmabuf_get_format_modifiers
+ */
+size_t wayland_dmabuf_get_format_modifiers(struct wayland_dmabuf *dmabuf, uint32_t format,
+                                           dev_t render_dev, uint64_t **modifiers)
+{
+    struct wayland_dmabuf_format *dmabuf_format =
+        dmabuf_get_format_from_optimal_tranche(dmabuf, format, render_dev, NULL);
+
+    if (!dmabuf_format || !dmabuf_format_supports_modifiers(dmabuf_format))
+        return 0;
+
+    *modifiers = dmabuf_format->modifiers.data;
+
+    return dmabuf_format->modifiers.size / sizeof(uint64_t);
+}
+
+/***********************************************************************
+ *           wayland_dmabuf_is_format_scanoutable
+ */
+BOOL wayland_dmabuf_is_format_scanoutable(struct wayland_dmabuf *dmabuf, uint32_t format,
+                                          dev_t render_dev)
+{
+    struct wayland_dmabuf_feedback_tranche *tranche;
+
+    if (!dmabuf_get_format_from_optimal_tranche(dmabuf, format, render_dev, &tranche) ||
+        !tranche)
+        return FALSE;
+
+    return tranche->flags & ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_SCANOUT;
+}
+
+/***********************************************************************
  *           wayland_dmabuf_is_format_supported
  */
 BOOL wayland_dmabuf_is_format_supported(struct wayland_dmabuf *dmabuf, uint32_t format, dev_t render_dev)
 {
-    return dmabuf_get_format_from_optimal_tranche(dmabuf, format, render_dev) != NULL;
+    return dmabuf_get_format_from_optimal_tranche(dmabuf, format, render_dev, NULL) != NULL;
 }
 
 /**********************************************************************

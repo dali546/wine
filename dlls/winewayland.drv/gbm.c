@@ -261,6 +261,43 @@ out:
     return compositor_render_node;
 }
 
+/**********************************************************************
+ *          wayland_gbm_create_surface
+ */
+struct gbm_surface *wayland_gbm_create_surface(uint32_t drm_format, int width, int height,
+                                               size_t count_modifiers, uint64_t *modifiers,
+                                               BOOL format_is_scanoutable)
+{
+    uint32_t gbm_bo_flags = GBM_BO_USE_RENDERING;
+
+    if (TRACE_ON(waylanddrv))
+    {
+        size_t i;
+
+        TRACE("%dx%d %.4s scanout=%d count_mods=%d\n",
+              width, height, (const char *)&drm_format,
+              format_is_scanoutable, count_modifiers);
+
+        for (i = 0; i < count_modifiers; i++)
+            TRACE("    mod: 0x%.16llx\n", modifiers[i]);
+    }
+
+    if (format_is_scanoutable) gbm_bo_flags |= GBM_BO_USE_SCANOUT;
+
+    if (count_modifiers)
+    {
+#ifdef HAVE_GBM_SURFACE_CREATE_WITH_MODIFIERS2
+        return gbm_surface_create_with_modifiers2(process_gbm_device, width, height,
+                                                  drm_format, modifiers, count_modifiers, gbm_bo_flags);
+#else
+        return gbm_surface_create_with_modifiers(process_gbm_device, width, height,
+                                                 drm_format, modifiers, count_modifiers);
+#endif
+    }
+
+    return gbm_surface_create(process_gbm_device, width, height, drm_format, gbm_bo_flags);
+}
+
 static void wayland_gbm_init_once(void)
 {
     int drm_fd = -1;

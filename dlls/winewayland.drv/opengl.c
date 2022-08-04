@@ -178,19 +178,54 @@ static void wayland_gl_drawable_release(struct wayland_gl_drawable *gl)
 static void wayland_gl_drawable_update(struct wayland_gl_drawable *gl)
 {
     RECT client_rect;
+    EGLint drm_format;
+    struct wayland_dmabuf *dmabuf;
+    uint64_t *modifiers;
+    size_t count_modifiers;
+    dev_t render_dev;
 
     TRACE("hwnd=%p\n", gl->hwnd);
 
     if (gl->surface) p_eglDestroySurface(egl_display, gl->surface);
     if (gl->gbm_surface) gbm_surface_destroy(gl->gbm_surface);
 
+    if (!(render_dev = wayland_gbm_get_render_dev()))
+    {
+        ERR("Failed to get device's dev_t from GBM device.\n");
+        return;
+    }
+
     NtUserGetClientRect(gl->hwnd, &client_rect);
     gl->width = client_rect.right;
     gl->height = client_rect.bottom;
 
-    gl->gbm_surface = gbm_surface_create(process_gbm_device, gl->width, gl->height,
-                                         pixel_formats[gl->format-1].native_visual_id,
-                                         GBM_BO_USE_RENDERING);
+    drm_format = pixel_formats[gl->format - 1].native_visual_id;
+
+    dmabuf = &wayland_process_acquire()->dmabuf;
+    if ((count_modifiers = wayland_dmabuf_get_format_modifiers(dmabuf, drm_format, render_dev, &modifiers)))
+    {
+#ifdef HAVE_GBM_SURFACE_CREATE_WITH_MODIFIERS2
+        uint32_t gbm_bo_flags = GBM_BO_USE_RENDERING;
+
+        if (wayland_dmabuf_is_format_scanoutable(dmabuf, drm_format, render_dev))
+            gbm_bo_flags |= GBM_BO_USE_SCANOUT;
+
+        gl->gbm_surface =
+            gbm_surface_create_with_modifiers2(process_gbm_device, gl->width, gl->height,
+                                               drm_format, modifiers, count_modifiers, gbm_bo_flags);
+#else
+        gl->gbm_surface =
+            gbm_surface_create_with_modifiers(process_gbm_device, gl->width, gl->height,
+                                              drm_format, modifiers, count_modifiers);
+#endif
+    }
+    else
+    {
+        gl->gbm_surface = gbm_surface_create(process_gbm_device, gl->width, gl->height,
+                                             drm_format, GBM_BO_USE_RENDERING);
+    }
+
+    wayland_process_release();
 
     if (!gl->gbm_surface)
         ERR("Failed to create GBM surface\n");

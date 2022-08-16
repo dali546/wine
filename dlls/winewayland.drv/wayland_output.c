@@ -614,3 +614,23 @@ void wayland_update_outputs_from_process(struct wayland *wayland)
 
     wayland_process_release();
 }
+
+/**********************************************************************
+ *          wayland_output_get_by_wine_name
+ *
+ *  Returns the wayland_output with the specified Wine name (or NULL
+ *  if not present).
+ */
+struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
+                                                       LPCWSTR wine_name)
+{
+    struct wayland_output *output;
+
+    wl_list_for_each(output, &wayland->output_list, link)
+    {
+        if (!wcsicmp(wine_name, output->wine_name))
+            return output;
+    }
+
+    return NULL;
+}

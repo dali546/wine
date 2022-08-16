@@ -159,6 +159,8 @@ void wayland_output_destroy(struct wayland_output *output) DECLSPEC_HIDDEN;
 void wayland_output_use_xdg_extension(struct wayland_output *output) DECLSPEC_HIDDEN;
 void wayland_notify_wine_monitor_change(void) DECLSPEC_HIDDEN;
 void wayland_update_outputs_from_process(struct wayland *wayland) DECLSPEC_HIDDEN;
+struct wayland_output *wayland_output_get_by_wine_name(struct wayland *wayland,
+                                                       LPCWSTR wine_name) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Misc. helpers
@@ -182,6 +184,8 @@ static inline LRESULT send_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 
 BOOL WAYLAND_CreateWindow(HWND hwnd) DECLSPEC_HIDDEN;
 LRESULT WAYLAND_DesktopWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;
+BOOL WAYLAND_GetCurrentDisplaySettings(LPCWSTR name, BOOL is_primary,
+                                       LPDEVMODEW devmode) DECLSPEC_HIDDEN;
 BOOL WAYLAND_UpdateDisplayDevices(const struct gdi_device_manager *device_manager,
                                   BOOL force, void *param) DECLSPEC_HIDDEN;
 LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) DECLSPEC_HIDDEN;

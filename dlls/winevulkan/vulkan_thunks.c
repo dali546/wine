@@ -1751,6 +1751,18 @@ static inline void convert_VkDeviceMemoryOpaqueCaptureAddressInfo_win32_to_host(
 #endif /* USE_STRUCT_CONVERSION */
 
 #if defined(USE_STRUCT_CONVERSION)
+static inline void convert_VkFenceGetFdInfoKHR_win32_to_host(const VkFenceGetFdInfoKHR *in, VkFenceGetFdInfoKHR_host *out)
+{
+    if (!in) return;
+
+    out->sType = in->sType;
+    out->pNext = in->pNext;
+    out->fence = in->fence;
+    out->handleType = in->handleType;
+}
+#endif /* USE_STRUCT_CONVERSION */
+
+#if defined(USE_STRUCT_CONVERSION)
 static inline void convert_VkGeneratedCommandsMemoryRequirementsInfoNV_win32_to_host(const VkGeneratedCommandsMemoryRequirementsInfoNV *in, VkGeneratedCommandsMemoryRequirementsInfoNV_host *out)
 {
     if (!in) return;
@@ -1761,6 +1773,27 @@ static inline void convert_VkGeneratedCommandsMemoryRequirementsInfoNV_win32_to_
     out->pipeline = in->pipeline;
     out->indirectCommandsLayout = in->indirectCommandsLayout;
     out->maxSequencesCount = in->maxSequencesCount;
+}
+#endif /* USE_STRUCT_CONVERSION */
+
+#if defined(USE_STRUCT_CONVERSION)
+static inline void convert_VkImageDrmFormatModifierPropertiesEXT_win32_to_host(const VkImageDrmFormatModifierPropertiesEXT *in, VkImageDrmFormatModifierPropertiesEXT_host *out)
+{
+    if (!in) return;
+
+    out->pNext = in->pNext;
+    out->sType = in->sType;
+}
+#endif /* USE_STRUCT_CONVERSION */
+
+#if defined(USE_STRUCT_CONVERSION)
+static inline void convert_VkImageDrmFormatModifierPropertiesEXT_host_to_win32(const VkImageDrmFormatModifierPropertiesEXT_host *in, VkImageDrmFormatModifierPropertiesEXT *out)
+{
+    if (!in) return;
+
+    out->sType = in->sType;
+    out->pNext = in->pNext;
+    out->drmFormatModifier = in->drmFormatModifier;
 }
 #endif /* USE_STRUCT_CONVERSION */
 
@@ -1852,6 +1885,18 @@ static inline void convert_VkImageViewHandleInfoNVX_win32_to_host(const VkImageV
     out->imageView = in->imageView;
     out->descriptorType = in->descriptorType;
     out->sampler = in->sampler;
+}
+#endif /* USE_STRUCT_CONVERSION */
+
+#if defined(USE_STRUCT_CONVERSION)
+static inline void convert_VkMemoryGetFdInfoKHR_win32_to_host(const VkMemoryGetFdInfoKHR *in, VkMemoryGetFdInfoKHR_host *out)
+{
+    if (!in) return;
+
+    out->sType = in->sType;
+    out->pNext = in->pNext;
+    out->memory = in->memory;
+    out->handleType = in->handleType;
 }
 #endif /* USE_STRUCT_CONVERSION */
 
@@ -2188,6 +2233,46 @@ static inline void convert_VkPipelineInfoEXT_win32_to_host(const VkPipelineInfoE
     out->sType = in->sType;
     out->pNext = in->pNext;
     out->pipeline = in->pipeline;
+}
+#endif /* USE_STRUCT_CONVERSION */
+
+#if defined(USE_STRUCT_CONVERSION)
+static inline void convert_VkSemaphoreGetFdInfoKHR_win32_to_host(const VkSemaphoreGetFdInfoKHR *in, VkSemaphoreGetFdInfoKHR_host *out)
+{
+    if (!in) return;
+
+    out->sType = in->sType;
+    out->pNext = in->pNext;
+    out->semaphore = in->semaphore;
+    out->handleType = in->handleType;
+}
+#endif /* USE_STRUCT_CONVERSION */
+
+#if defined(USE_STRUCT_CONVERSION)
+static inline void convert_VkImportFenceFdInfoKHR_win32_to_host(const VkImportFenceFdInfoKHR *in, VkImportFenceFdInfoKHR_host *out)
+{
+    if (!in) return;
+
+    out->sType = in->sType;
+    out->pNext = in->pNext;
+    out->fence = in->fence;
+    out->flags = in->flags;
+    out->handleType = in->handleType;
+    out->fd = in->fd;
+}
+#endif /* USE_STRUCT_CONVERSION */
+
+#if defined(USE_STRUCT_CONVERSION)
+static inline void convert_VkImportSemaphoreFdInfoKHR_win32_to_host(const VkImportSemaphoreFdInfoKHR *in, VkImportSemaphoreFdInfoKHR_host *out)
+{
+    if (!in) return;
+
+    out->sType = in->sType;
+    out->pNext = in->pNext;
+    out->semaphore = in->semaphore;
+    out->flags = in->flags;
+    out->handleType = in->handleType;
+    out->fd = in->fd;
 }
 #endif /* USE_STRUCT_CONVERSION */
 

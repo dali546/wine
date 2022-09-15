@@ -106,14 +106,9 @@ UNSUPPORTED_EXTENSIONS = [
     "VK_NV_external_memory_rdma", # Needs shared resources work.
 
     # Extensions for other platforms
-    "VK_EXT_external_memory_dma_buf",
-    "VK_EXT_image_drm_format_modifier",
     "VK_EXT_metal_objects",
     "VK_EXT_physical_device_drm",
     "VK_GOOGLE_surfaceless_query",
-    "VK_KHR_external_fence_fd",
-    "VK_KHR_external_memory_fd",
-    "VK_KHR_external_semaphore_fd",
     "VK_SEC_amigo_profiling", # Angle specific.
 
     # Extensions which require callback handling
@@ -129,6 +124,11 @@ UNSUPPORTED_EXTENSIONS = [
 # but not expose to applications (useful for test commits)
 UNEXPOSED_EXTENSIONS = {
     "VK_KHR_external_memory_win32",
+    "VK_EXT_external_memory_dma_buf",
+    "VK_EXT_image_drm_format_modifier",
+    "VK_KHR_external_fence_fd",
+    "VK_KHR_external_memory_fd",
+    "VK_KHR_external_semaphore_fd",
 }
 
 # The Vulkan loader provides entry-points for core functionality and important
@@ -187,7 +187,7 @@ FUNCTION_OVERRIDES = {
     "vkGetInstanceProcAddr": {"dispatch" : False, "driver" : True, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.NONE},
 
     # Instance functions
-    "vkCreateDevice" : {"dispatch" : True, "driver" : False, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE, "extra_param" : "client_ptr"},
+    "vkCreateDevice" : {"dispatch" : True, "driver" : True, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE, "extra_param" : "client_ptr"},
     "vkDestroyInstance" : {"dispatch" : False, "driver" : True, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE},
     "vkEnumerateDeviceExtensionProperties" : {"dispatch" : True, "driver" : False, "thunk" : ThunkType.NONE},
     "vkEnumerateDeviceLayerProperties": {"dispatch": True, "driver": False, "thunk": ThunkType.NONE},
@@ -204,7 +204,7 @@ FUNCTION_OVERRIDES = {
     "vkAllocateCommandBuffers" : {"dispatch" : True, "driver" : False, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE},
     "vkCreateCommandPool" : {"dispatch": True, "driver" : False, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE, "extra_param" : "client_ptr"},
     "vkDestroyCommandPool" : {"dispatch": True, "driver" : False, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE},
-    "vkDestroyDevice" : {"dispatch" : True, "driver" : False, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE},
+    "vkDestroyDevice" : {"dispatch" : True, "driver" : True, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE},
     "vkFreeCommandBuffers" : {"dispatch" : True, "driver" : False, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.PRIVATE},
     "vkGetDeviceProcAddr" : {"dispatch" : False, "driver" : True, "thunk" : ThunkType.NONE, "loader_thunk" : ThunkType.NONE},
     "vkGetDeviceQueue" : {"dispatch": True, "driver" : False, "thunk" : ThunkType.NONE},
@@ -226,6 +226,7 @@ FUNCTION_OVERRIDES = {
     "vkGetPhysicalDeviceWin32PresentationSupportKHR" : {"dispatch" : True, "driver" : True, "thunk" : ThunkType.PUBLIC},
 
     # VK_KHR_swapchain
+    "vkAcquireNextImageKHR": {"dispatch" : True, "driver" : True, "thunk" : ThunkType.PUBLIC},
     "vkCreateSwapchainKHR" : {"dispatch" : True, "driver" : True, "thunk" : ThunkType.PUBLIC},
     "vkDestroySwapchainKHR" : {"dispatch" : True, "driver" : True, "thunk" : ThunkType.PUBLIC},
     "vkGetSwapchainImagesKHR": {"dispatch" : True, "driver" : True, "thunk" : ThunkType.PUBLIC},
@@ -1780,7 +1781,8 @@ class VkStruct(Sequence):
         # Those structs seem to be broken in spec, they are specified as
         # returned only, but documented as input structs.
         if name in ["VkSubpassShadingPipelineCreateInfoHUAWEI",
-                    "VkPipelineShaderStageRequiredSubgroupSizeCreateInfo"]:
+                    "VkPipelineShaderStageRequiredSubgroupSizeCreateInfo",
+                    "VkSubresourceLayout"]:
             returnedonly = False
 
         structextends = struct.attrib.get("structextends")
@@ -2177,20 +2179,25 @@ class StructConversionFunction(object):
                     body += ident + "{0} *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));\n".format(out_type)
                 else:
                     body += ident + "{0} *out_ext = find_next_struct(out_header, {1});\n".format(out_type, stype)
-                if self.direction == Direction.OUTPUT or not ext.returnedonly:
-                    body += ident + "{0} *in_ext = ({0} *)in_header;\n".format(in_type)
+
+                copy_body = ""
 
                 for m in ext:
                     if m.name == "sType":
-                        body += ident + "out_ext->sType = {0};\n".format(stype)
+                        copy_body += ident + "out_ext->sType = {0};\n".format(stype)
                         continue
                     if not self.member_needs_copy(ext, m):
                         continue
                     if m.name == "pNext":
-                        body += ident + "out_ext->pNext = NULL;\n"
+                        copy_body += ident + "out_ext->pNext = NULL;\n"
                         continue
 
-                    body += ident + m.copy("in_ext->", "out_ext->", self.direction, self.conv, True)
+                    copy_body += ident + m.copy("in_ext->", "out_ext->", self.direction, self.conv, True)
+
+                # Generate the definition of "in_ext" if we need it
+                if "in_ext->" in copy_body:
+                    body += ident + "{0} *in_ext = ({0} *)in_header;\n".format(in_type)
+                body += copy_body
 
                 if self.direction == Direction.INPUT:
                     body += ident + "out_header->pNext = (void *)out_ext;\n"

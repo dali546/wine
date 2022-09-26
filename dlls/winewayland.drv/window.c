@@ -61,6 +61,15 @@ LRESULT WAYLAND_WindowMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     switch (msg)
     {
+    case WM_WAYLAND_RESIZE_DESKTOP:
+        {
+            RECT virtual_rect = NtUserGetVirtualScreenRect();
+            NtUserSetWindowPos(hwnd, 0, virtual_rect.left, virtual_rect.top,
+                               virtual_rect.right - virtual_rect.left,
+                               virtual_rect.bottom - virtual_rect.top,
+                               SWP_NOZORDER | SWP_NOACTIVATE | SWP_DEFERERASE);
+        }
+        break;
     default:
         FIXME("got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp);
     }

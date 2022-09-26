@@ -45,6 +45,15 @@
 extern struct wl_display *process_wl_display DECLSPEC_HIDDEN;
 
 /**********************************************************************
+  *          Internal messages and data
+  */
+
+enum wayland_window_message
+{
+    WM_WAYLAND_RESIZE_DESKTOP = 0x80001000,
+};
+
+/**********************************************************************
  *          Definitions for wayland types
  */
 

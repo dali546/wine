@@ -131,6 +131,7 @@ const struct user_driver_funcs waylanddrv_funcs =
     .pGetKeyNameText = WAYLAND_GetKeyNameText,
     .pMapVirtualKeyEx = WAYLAND_MapVirtualKeyEx,
     .pMsgWaitForMultipleObjectsEx = WAYLAND_MsgWaitForMultipleObjectsEx,
+    .pSetCursorPos = WAYLAND_SetCursorPos,
     .pSetCursor = WAYLAND_SetCursor,
     .pSetLayeredWindowAttributes = WAYLAND_SetLayeredWindowAttributes,
     .pSetWindowRgn = WAYLAND_SetWindowRgn,

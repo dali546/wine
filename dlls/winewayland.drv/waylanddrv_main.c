@@ -37,6 +37,8 @@
 WINE_DEFAULT_DEBUG_CHANNEL(waylanddrv);
 WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
+char *process_name = NULL;
+
 /**********************************************************************
  *          ascii_to_unicode_maybe_z
  *
@@ -64,7 +66,6 @@ static size_t ascii_to_unicode_maybe_z(WCHAR *dst, size_t dst_max_chars,
 
     return src_len;
 }
-
 
 /**********************************************************************
  *          ascii_to_unicode_z
@@ -179,11 +180,41 @@ static const struct user_driver_funcs waylanddrv_funcs =
     .pWindowPosChanging = WAYLAND_WindowPosChanging,
 };
 
+static void wayland_init_process_name(void)
+{
+    WCHAR *p, *appname;
+    WCHAR appname_lower[MAX_PATH];
+    DWORD appname_len;
+    DWORD appnamez_size;
+    DWORD utf8_size;
+    int i;
+
+    appname = NtCurrentTeb()->Peb->ProcessParameters->ImagePathName.Buffer;
+    if ((p = wcsrchr(appname, '/'))) appname = p + 1;
+    if ((p = wcsrchr(appname, '\\'))) appname = p + 1;
+    appname_len = lstrlenW(appname);
+
+    if (appname_len == 0 || appname_len >= MAX_PATH) return;
+
+    for (i = 0; appname[i]; i++) appname_lower[i] = RtlDowncaseUnicodeChar(appname[i]);
+    appname_lower[i] = 0;
+
+    appnamez_size = (appname_len + 1) * sizeof(WCHAR);
+
+    if (!RtlUnicodeToUTF8N(NULL, 0, &utf8_size, appname_lower, appnamez_size) &&
+        (process_name = malloc(utf8_size)))
+    {
+        RtlUnicodeToUTF8N(process_name, utf8_size, &utf8_size, appname_lower, appnamez_size);
+    }
+}
+
 static NTSTATUS waylanddrv_unix_init(void *arg)
 {
     /* Set the user driver functions now so that they are available during
      * our initialization. We clear them on error. */
     __wine_set_user_driver(&waylanddrv_funcs, WINE_GDI_DRIVER_VERSION);
+
+    wayland_init_process_name();
 
     if (!wayland_init_set_cursor()) goto err;
 

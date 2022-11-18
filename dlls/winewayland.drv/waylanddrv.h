@@ -268,6 +268,15 @@ struct wayland_data_device_format
     UINT_PTR extra;
 };
 
+struct wayland_callback
+{
+   struct wl_list link;
+   uintptr_t id;
+   void (*func)(void*);
+   void *data;
+   uint64_t target_time_ms;
+};
+
 struct wayland
 {
     struct wl_list thread_link;
@@ -301,6 +310,7 @@ struct wayland
     int event_notification_pipe[2];
     HWND clipboard_hwnd;
     RECT cursor_clip;
+    struct wl_list callback_list;
 };
 
 struct wayland_output_mode
@@ -499,6 +509,9 @@ void wayland_output_set_wine_mode(struct wayland_output *output,
 
 int wayland_dispatch_queue(struct wl_event_queue *queue, int timeout_ms) DECLSPEC_HIDDEN;
 BOOL wayland_read_events_and_dispatch_process(void) DECLSPEC_HIDDEN;
+void wayland_schedule_thread_callback(uintptr_t id, int delay_ms,
+                                      void (*callback)(void *), void *data) DECLSPEC_HIDDEN;
+void wayland_cancel_thread_callback(uintptr_t id) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          Wayland surface

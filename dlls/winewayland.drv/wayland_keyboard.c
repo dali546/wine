@@ -815,11 +815,10 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
     }
 }
 
-static void CALLBACK maybe_unset_from_foreground(HWND hwnd, UINT msg,
-                                                 UINT_PTR timer_id,
-                                                 DWORD elapsed)
+static void maybe_unset_from_foreground(void *data)
 {
     struct wayland *wayland = thread_wayland();
+    HWND hwnd = data;
 
     TRACE("wayland=%p hwnd=%p\n", wayland, hwnd);
 
@@ -829,8 +828,6 @@ static void CALLBACK maybe_unset_from_foreground(HWND hwnd, UINT msg,
      * other window hasn't become foreground in the meantime. */
     if (!wayland->keyboard.focused_surface && NtUserGetForegroundWindow() == hwnd)
         NtUserSetForegroundWindow(NtUserGetDesktopWindow());
-
-    NtUserKillTimer(hwnd, timer_id);
 }
 
 static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
@@ -842,32 +839,37 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
     if (focused_surface && focused_surface->wl_surface == surface)
     {
         TRACE("surface=%p hwnd=%p\n", focused_surface, focused_surface->hwnd);
-        NtUserKillTimer(focused_surface->hwnd, (UINT_PTR)keyboard);
+        wayland_cancel_thread_callback((uintptr_t)keyboard);
         /* This leave event may not signify a real loss of focus for the
          * window. Such a case occurs when the focus changes from the main
          * surface to a subsurface. Don't be too eager to lose the foreground
          * state in such cases, as some fullscreen applications may become
          * minimized. Instead wait a bit in case other enter events targeting a
          * (sub)surface of the same HWND arrive soon after. */
-        NtUserSetTimer(focused_surface->hwnd,
-                       (UINT_PTR)&wayland->keyboard.focused_surface, 50,
-                       maybe_unset_from_foreground, TIMERV_DEFAULT_COALESCING);
+        wayland_schedule_thread_callback((uintptr_t)&wayland->keyboard.focused_surface,
+                                         50, maybe_unset_from_foreground,
+                                         focused_surface->hwnd);
         wayland->keyboard.focused_surface = NULL;
         wayland->keyboard.enter_serial = 0;
     }
 }
 
-static void CALLBACK repeat_key(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD elapsed)
+static void repeat_key(void *data)
 {
     struct wayland *wayland = thread_wayland();
+    HWND hwnd = data;
 
     if (wayland->keyboard.repeat_interval_ms > 0)
     {
+        wayland->last_dispatch_mask |= QS_KEY | QS_HOTKEY;
+        wayland->last_event_type = INPUT_KEYBOARD;
+
         wayland_keyboard_emit(&wayland->keyboard, wayland->keyboard.pressed_key,
                               WL_KEYBOARD_KEY_STATE_PRESSED, hwnd);
 
-        NtUserSetTimer(hwnd, timer_id, wayland->keyboard.repeat_interval_ms,
-                       repeat_key, TIMERV_DEFAULT_COALESCING);
+        wayland_schedule_thread_callback((uintptr_t)wayland->keyboard.wl_keyboard,
+                                         wayland->keyboard.repeat_interval_ms,
+                                         repeat_key, hwnd);
     }
 }
 
@@ -878,7 +880,7 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
     struct wayland *wayland = data;
     HWND focused_hwnd = wayland->keyboard.focused_surface ?
                         wayland->keyboard.focused_surface->hwnd : 0;
-    UINT_PTR repeat_key_timer_id = (UINT_PTR)keyboard;
+    uintptr_t repeat_key_timer_id = (uintptr_t)keyboard;
 
     if (!focused_hwnd)
         return;
@@ -895,14 +897,15 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
         wayland->keyboard.pressed_key = key;
         if (wayland->keyboard.repeat_interval_ms > 0)
         {
-            NtUserSetTimer(focused_hwnd, repeat_key_timer_id, wayland->keyboard.repeat_delay_ms,
-                           repeat_key, TIMERV_DEFAULT_COALESCING);
+            wayland_schedule_thread_callback(repeat_key_timer_id,
+                                             wayland->keyboard.repeat_delay_ms,
+                                             repeat_key, focused_hwnd);
         }
     }
     else
     {
         wayland->keyboard.pressed_key = 0;
-        NtUserKillTimer(focused_hwnd, repeat_key_timer_id);
+        wayland_cancel_thread_callback(repeat_key_timer_id);
     }
 }
 

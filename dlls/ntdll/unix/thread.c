@@ -2402,6 +2402,12 @@ NTSTATUS WINAPI NtSetInformationThread( HANDLE handle, THREADINFOCLASS class,
         WARN("Unimplemented class ThreadPriorityBoost.\n");
         return STATUS_SUCCESS;
 
+    case ThreadPowerThrottlingState:
+        if (length != sizeof(THREAD_POWER_THROTTLING_STATE)) return STATUS_INFO_LENGTH_MISMATCH;
+        if (!data) return STATUS_ACCESS_VIOLATION;
+        FIXME( "ThreadPowerThrottling stub!\n" );
+        return STATUS_SUCCESS;
+
     case ThreadBasicInformation:
     case ThreadTimes:
     case ThreadPriority:

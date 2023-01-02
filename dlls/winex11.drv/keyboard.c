@@ -65,6 +65,11 @@ WINE_DECLARE_DEBUG_CHANNEL(key);
 
 static const unsigned int ControlMask = 1 << 2;
 
+/* X.h defines ControlMask but conflicts with struct variable name */
+#ifndef ControlMask
+#define ControlMask (1<<2)
+#endif
+
 static int min_keycode, max_keycode, keysyms_per_keycode;
 static KeySym *key_mapping;
 static WORD keyc2vkey[256], keyc2scan[256];

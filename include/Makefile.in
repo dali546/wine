@@ -16,6 +16,7 @@ SOURCES = \
 	amstream.idl \
 	amva.h \
 	amvideo.idl \
+	apiset.h \
 	appcompatapi.h \
 	appmgmt.h \
 	appmodel.h \
@@ -812,6 +813,8 @@ SOURCES = \
 	windows.media.idl \
 	windows.media.speechrecognition.idl \
 	windows.media.speechsynthesis.idl \
+	windows.networking.idl \
+	windows.networking.connectivity.idl \
 	windows.security.cryptography.idl \
 	windows.storage.streams.idl \
 	windows.system.idl \

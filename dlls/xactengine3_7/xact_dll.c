@@ -449,6 +449,8 @@ static HRESULT WINAPI IXACT3SoundBankImpl_Prepare(IXACT3SoundBank *iface,
     cue->engine = This->engine;
     *ppCue = &cue->IXACT3Cue_iface;
 
+    FACTCue_SetPrivateContext(fcue, &cue->IXACT3Cue_iface);
+
     TRACE("Created Cue: %p\n", cue);
 
     return S_OK;
@@ -499,6 +501,8 @@ static HRESULT WINAPI IXACT3SoundBankImpl_Play(IXACT3SoundBank *iface,
         cue->fact_cue = fcue;
         cue->engine = This->engine;
         *ppCue = &cue->IXACT3Cue_iface;
+
+        FACTCue_SetPrivateContext(fcue, &cue->IXACT3Cue_iface);
     }
 
     return hr;
@@ -1207,6 +1211,43 @@ static HRESULT WINAPI IXACT3EngineImpl_CreateSoundBank(IXACT3Engine *iface,
     return S_OK;
 }
 
+struct thread_data
+{
+    XACT3EngineImpl *engine;
+    XACT_NOTIFICATION note;
+};
+
+static DWORD WINAPI thread_notications(LPVOID data)
+{
+    struct thread_data *tdata = data;
+
+    Sleep(1000);
+
+    FIXME("Callback XACTNOTIFICATIONTYPE_WAVEBANKPREPARED (%p)\n", tdata->engine);
+
+    tdata->engine->notification_callback(&tdata->note);
+
+    CoTaskMemFree(data);
+    return 0;
+}
+
+static void send_wavebank_notification(XACT3EngineImpl *This, IXACT3WaveBank *wavebank)
+{
+    if (This->notification_callback)
+    {
+        HANDLE thread;
+        struct thread_data *tdata = CoTaskMemAlloc(sizeof(struct thread_data));
+
+        tdata->engine = This;
+        tdata->note.type = XACTNOTIFICATIONTYPE_WAVEBANKPREPARED;
+        tdata->note.pvContext = This->contexts[XACTNOTIFICATIONTYPE_WAVEBANKPREPARED - 1];
+        tdata->note.wave.pWaveBank = wavebank;
+
+        thread = CreateThread(NULL, 0, thread_notications, tdata, 0, NULL);
+        CloseHandle(thread);
+    }
+}
+
 static HRESULT WINAPI IXACT3EngineImpl_CreateInMemoryWaveBank(IXACT3Engine *iface,
         const void* pvBuffer, DWORD dwSize, DWORD dwFlags,
         DWORD dwAllocAttributes, IXACT3WaveBank **ppWaveBank)
@@ -1248,6 +1289,8 @@ static HRESULT WINAPI IXACT3EngineImpl_CreateInMemoryWaveBank(IXACT3Engine *ifac
     wb->fact_wavebank = fwb;
     wb->engine = This;
     *ppWaveBank = &wb->IXACT3WaveBank_iface;
+
+    send_wavebank_notification(This, &wb->IXACT3WaveBank_iface);
 
     TRACE("Created in-memory WaveBank: %p\n", wb);
 
@@ -1307,6 +1350,8 @@ static HRESULT WINAPI IXACT3EngineImpl_CreateStreamingWaveBank(IXACT3Engine *ifa
     wb->engine = This;
     *ppWaveBank = &wb->IXACT3WaveBank_iface;
 
+    send_wavebank_notification(This, &wb->IXACT3WaveBank_iface);
+
     TRACE("Created streaming WaveBank: %p\n", wb);
 
     return S_OK;
@@ -1320,8 +1365,46 @@ static HRESULT WINAPI IXACT3EngineImpl_PrepareInMemoryWave(IXACT3Engine *iface,
         IXACT3Wave **ppWave)
 {
     XACT3EngineImpl *This = impl_from_IXACT3Engine(iface);
-    FIXME("(%p): stub!\n", This);
-    return E_NOTIMPL;
+    XACT3WaveImpl *wave;
+    FACTWave *fwave = NULL;
+    FACTWaveBankEntry fact_wavebank;
+    UINT ret;
+
+    TRACE("(%p)->(0x%08x, %p, %p, %p, %d, %d, %p)\n", This, dwFlags, &entry, pdwSeekTable,
+          pbWaveData, dwPlayOffset, nLoopCount, ppWave);
+
+    fact_wavebank.dwFlagsAndDuration = entry.dwFlagsAndDuration;
+    fact_wavebank.Format.dwValue = entry.Format.dwValue;
+    fact_wavebank.PlayRegion.dwOffset = entry.PlayRegion.dwOffset;
+    fact_wavebank.PlayRegion.dwLength = entry.PlayRegion.dwLength;
+    fact_wavebank.LoopRegion.dwStartSample = entry.LoopRegion.dwStartSample;
+    fact_wavebank.LoopRegion.dwTotalSamples = entry.LoopRegion.dwTotalSamples;
+
+    ret = FACTAudioEngine_PrepareInMemoryWave(This->fact_engine, dwFlags, fact_wavebank,
+            pdwSeekTable, pbWaveData, dwPlayOffset, nLoopCount, &fwave);
+    if(ret != 0 || !fwave)
+    {
+        ERR("Failed to CreateWave: %d (%p)\n", ret, fwave);
+        return E_FAIL;
+    }
+
+    wave = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*wave));
+    if (!wave)
+    {
+        FACTWave_Destroy(fwave);
+        ERR("Failed to allocate XACT3WaveImpl!");
+        return E_OUTOFMEMORY;
+    }
+
+    wave->IXACT3Wave_iface.lpVtbl = &XACT3Wave_Vtbl;
+    wave->fact_wave = fwave;
+    *ppWave = &wave->IXACT3Wave_iface;
+
+    FACTWave_SetPrivateContext(fwave, &wave->IXACT3Wave_iface);
+
+    TRACE("Created Wave: %p\n", wave);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI IXACT3EngineImpl_PrepareStreamingWave(IXACT3Engine *iface,
@@ -1331,8 +1414,61 @@ static HRESULT WINAPI IXACT3EngineImpl_PrepareStreamingWave(IXACT3Engine *iface,
         IXACT3Wave **ppWave)
 {
     XACT3EngineImpl *This = impl_from_IXACT3Engine(iface);
-    FIXME("(%p): stub!\n", This);
-    return E_NOTIMPL;
+    XACT3WaveImpl *wave;
+    FACTWave *fwave = NULL;
+    FACTStreamingParameters fakeParms;
+    wrap_readfile_struct *fake;
+    FACTWaveBankEntry fact_wavebank;
+    UINT ret;
+
+    TRACE("(%p)->(0x%08x, %p, %p, %d, %p, %d, %d, %p)\n", This, dwFlags, &entry, &streamingParams,
+            dwAlignment, pdwSeekTable, dwPlayOffset, nLoopCount, ppWave);
+
+    fake = (wrap_readfile_struct*) CoTaskMemAlloc(
+            sizeof(wrap_readfile_struct));
+    fake->engine = This;
+    fake->file = streamingParams.file;
+    fakeParms.file = fake;
+    fakeParms.flags = streamingParams.flags;
+    fakeParms.offset = streamingParams.offset;
+    fakeParms.packetSize = streamingParams.packetSize;
+
+    fact_wavebank.dwFlagsAndDuration = entry.dwFlagsAndDuration;
+    fact_wavebank.Format.dwValue = entry.Format.dwValue;
+    fact_wavebank.PlayRegion.dwOffset = entry.PlayRegion.dwOffset;
+    fact_wavebank.PlayRegion.dwLength = entry.PlayRegion.dwLength;
+    fact_wavebank.LoopRegion.dwStartSample = entry.LoopRegion.dwStartSample;
+    fact_wavebank.LoopRegion.dwTotalSamples = entry.LoopRegion.dwTotalSamples;
+
+    /* FAudio Prototype is incorrect and shouldn't take a buffer as an parameter,
+     *   passing through NULL to ensure it's not used.
+     */
+    ret = FACTAudioEngine_PrepareStreamingWave(This->fact_engine, dwFlags, fact_wavebank, fakeParms,
+            dwAlignment, pdwSeekTable, NULL, dwPlayOffset, nLoopCount, &fwave);
+
+    if(ret != 0 || !fwave)
+    {
+        ERR("Failed to CreateWave: %d (%p)\n", ret, fwave);
+        return E_FAIL;
+    }
+
+    wave = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*wave));
+    if (!wave)
+    {
+        FACTWave_Destroy(fwave);
+        ERR("Failed to allocate XACT3WaveImpl!");
+        return E_OUTOFMEMORY;
+    }
+
+    wave->IXACT3Wave_iface.lpVtbl = &XACT3Wave_Vtbl;
+    wave->fact_wave = fwave;
+    *ppWave = &wave->IXACT3Wave_iface;
+
+    FACTWave_SetPrivateContext(fwave, &wave->IXACT3Wave_iface);
+
+    TRACE("Created Wave: %p\n", wave);
+
+    return S_OK;
 }
 
 static HRESULT WINAPI IXACT3EngineImpl_PrepareWave(IXACT3Engine *iface,
@@ -1376,6 +1512,8 @@ static HRESULT WINAPI IXACT3EngineImpl_PrepareWave(IXACT3Engine *iface,
     wave->fact_wave = fwave;
     wave->engine = This;
     *ppWave = &wave->IXACT3Wave_iface;
+
+    FACTWave_SetPrivateContext(fwave, &wave->IXACT3Wave_iface);
 
     TRACE("Created Wave: %p\n", wave);
 
@@ -1540,6 +1678,8 @@ static HRESULT WINAPI IXACT3EngineImpl_UnRegisterNotification(IXACT3Engine *ifac
         return S_OK;
 
     unwrap_notificationdesc(&fdesc, pNotificationDesc);
+
+    This->contexts[pNotificationDesc->type - 1] = pNotificationDesc->pvContext;
     fdesc.pvContext = This;
     return FACTAudioEngine_UnRegisterNotification(This->fact_engine, &fdesc);
 }

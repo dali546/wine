@@ -474,6 +474,9 @@ struct FACTSoundBank
 	uint32_t *variationCodes;
 	FACTTransitionTable *transitions;
 	uint32_t *transitionCodes;
+
+	/* Application data */
+	void *privatecontext;
 };
 
 struct FACTWaveBank
@@ -499,6 +502,9 @@ struct FACTWaveBank
 	uint8_t *packetBuffer;
 	uint32_t packetBufferLen;
 	void* io;
+
+	/* Application data */
+	void *privatecontext;
 };
 
 struct FACTWave
@@ -525,6 +531,9 @@ struct FACTWave
 	uint16_t srcChannels;
 	FAudioSourceVoice *voice;
 	FACTWaveCallback callback;
+
+	/* Application data */
+	void *privatecontext;
 };
 
 struct FACTCue
@@ -570,6 +579,9 @@ struct FACTCue
 	/* Timer */
 	uint32_t start;
 	uint32_t elapsed;
+
+	/* Application data */
+	void *privatecontext;
 };
 
 /* Internal functions */

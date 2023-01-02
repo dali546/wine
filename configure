@@ -951,6 +951,7 @@ with_unwind
 with_usb
 with_v4l2
 with_vulkan
+with_xattr
 with_xcomposite
 with_xcursor
 with_xfixes
@@ -1463,6 +1464,7 @@ enable_windows_media_devices
 enable_windows_media_speech
 enable_windows_media
 enable_windows_networking
+enable_windows_networking_connectivity
 enable_windowscodecs
 enable_windowscodecsext
 enable_winealsa_drv
@@ -2476,6 +2478,7 @@ Optional Packages:
   --without-usb           do not use the libusb library
   --without-v4l2          do not use v4l2 (video capture)
   --without-vulkan        do not use Vulkan
+  --without-xattr         do not use xattr (security attributes support)
   --without-xcomposite    do not use the Xcomposite extension
   --without-xcursor       do not use the Xcursor extension
   --without-xfixes        do not use Xfixes for clipboard change notifications
@@ -4410,6 +4413,13 @@ fi
 if test ${with_vulkan+y}
 then :
   withval=$with_vulkan;
+fi
+
+
+# Check whether --with-xattr was given.
+if test ${with_xattr+y}
+then :
+  withval=$with_xattr;
 fi
 
 
@@ -9125,6 +9135,65 @@ printf "%s\n" "$wine_cv_xattr_extra_args" >&6; }
     test $wine_cv_xattr_extra_args != yes ||
 printf "%s\n" "#define XATTR_ADDITIONAL_OPTIONS 1" >>confdefs.h
 
+fi
+
+if test "x$with_xattr" != "xno"
+then
+           for ac_header in attr/xattr.h sys/extattr.h
+do :
+  as_ac_Header=`printf "%s\n" "ac_cv_header_$ac_header" | $as_tr_sh`
+ac_fn_c_check_header_compile "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
+if eval test \"x\$"$as_ac_Header"\" = x"yes"
+then :
+  cat >>confdefs.h <<_ACEOF
+#define `printf "%s\n" "HAVE_$ac_header" | $as_tr_cpp` 1
+_ACEOF
+ HAVE_XATTR=1
+fi
+
+done
+           for ac_header in sys/xattr.h
+do :
+  ac_fn_c_check_header_compile "$LINENO" "sys/xattr.h" "ac_cv_header_sys_xattr_h" "$ac_includes_default"
+if test "x$ac_cv_header_sys_xattr_h" = xyes
+then :
+  printf "%s\n" "#define HAVE_SYS_XATTR_H 1" >>confdefs.h
+ HAVE_XATTR=1
+        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/xattr.h>
+int
+main (void)
+{
+getxattr("", "", "", 0, 0, 0);
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+
+printf "%s\n" "#define XATTR_ADDITIONAL_OPTIONS 1" >>confdefs.h
+
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
+fi
+
+done
+fi
+if test "x$with_xattr" = "xyes"
+then
+    if test "x$HAVE_XATTR" = "x"
+then :
+  case "x$with_xattr" in
+  xno) ;;
+  *)   as_fn_error $? "xattr ${notice_platform}development files \
+not found. Wine will be built without extended attribute support, which probably isn't what you \
+want. You will need to install ${notice_platform}development packages of libattr at the very least.
+Use the --without-xattr option if you really want this." "$LINENO" 5 ;;
+esac
+
+fi
 fi
 
 
@@ -15774,7 +15843,7 @@ fi
 
 CPPFLAGS=$ac_save_CPPFLAGS
 
-    if ${WAYLAND_PROTOCOLS_CFLAGS:+false} :
+if ${WAYLAND_PROTOCOLS_CFLAGS:+false} :
 then :
   if test ${PKG_CONFIG+y}
 then :
@@ -15845,7 +15914,7 @@ printf "%s\n" "no" >&6; }
 fi
 
 
-    if ${WAYLAND_CURSOR_CFLAGS:+false} :
+if ${WAYLAND_CURSOR_CFLAGS:+false} :
 then :
   if test ${PKG_CONFIG+y}
 then :
@@ -15917,7 +15986,7 @@ fi
 
 CPPFLAGS=$ac_save_CPPFLAGS
 
-    if ${XKBCOMMON_CFLAGS:+false} :
+if ${XKBCOMMON_CFLAGS:+false} :
 then :
   if test ${PKG_CONFIG+y}
 then :
@@ -15989,7 +16058,7 @@ fi
 
 CPPFLAGS=$ac_save_CPPFLAGS
 
-    if ${GBM_CFLAGS:+false} :
+if ${GBM_CFLAGS:+false} :
 then :
   if test ${PKG_CONFIG+y}
 then :
@@ -16071,7 +16140,7 @@ fi
 LIBS="$ac_wine_check_funcs_save_LIBS"
 CPPFLAGS=$ac_save_CPPFLAGS
 
-    if ${DRM_CFLAGS:+false} :
+if ${DRM_CFLAGS:+false} :
 then :
   if test ${PKG_CONFIG+y}
 then :
@@ -21761,6 +21830,7 @@ wine_fn_config_makefile dlls/crypt32/tests enable_tests
 wine_fn_config_makefile dlls/cryptdlg enable_cryptdlg
 wine_fn_config_makefile dlls/cryptdll enable_cryptdll
 wine_fn_config_makefile dlls/cryptext enable_cryptext
+wine_fn_config_makefile dlls/cryptext/tests enable_tests
 wine_fn_config_makefile dlls/cryptnet enable_cryptnet
 wine_fn_config_makefile dlls/cryptnet/tests enable_tests
 wine_fn_config_makefile dlls/cryptowinrt enable_cryptowinrt
@@ -22474,6 +22544,7 @@ wine_fn_config_makefile dlls/windows.media.speech/tests enable_tests
 wine_fn_config_makefile dlls/windows.media enable_windows_media
 wine_fn_config_makefile dlls/windows.media/tests enable_tests
 wine_fn_config_makefile dlls/windows.networking enable_windows_networking
+wine_fn_config_makefile dlls/windows.networking.connectivity enable_windows_networking_connectivity
 wine_fn_config_makefile dlls/windowscodecs enable_windowscodecs
 wine_fn_config_makefile dlls/windowscodecs/tests enable_tests
 wine_fn_config_makefile dlls/windowscodecsext enable_windowscodecsext

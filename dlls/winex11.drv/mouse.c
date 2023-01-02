@@ -1945,7 +1945,7 @@ static BOOL X11DRV_RawMotion( XGenericEventCookie *xev )
     input.u.mi.dwExtraInfo = 0;
     input.u.mi.dx          = 0;
     input.u.mi.dy          = 0;
-    if (!map_raw_event_coords( event, &input )) return FALSE;
+    if (!map_raw_event_coords( event, &input, &rawinput )) return FALSE;
 
     __wine_send_input( 0, &input, NULL );
     return TRUE;

@@ -23,6 +23,7 @@
 
 #include <ntdef.h>
 #include <windef.h>
+#include <apiset.h>
 
 #ifdef __cplusplus
 extern "C" {

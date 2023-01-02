@@ -18,6 +18,9 @@
 /* Define to 1 if you have the <asm/user.h> header file. */
 #undef HAVE_ASM_USER_H
 
+/* Define to 1 if you have the <attr/xattr.h> header file. */
+#undef HAVE_ATTR_XATTR_H
+
 /* Define to 1 if you have the <capi20.h> header file. */
 #undef HAVE_CAPI20_H
 
@@ -855,7 +858,7 @@
    backward compatibility; new code need not use it. */
 #undef STDC_HEADERS
 
-/* Define if xattr functions take additional arguments (macOS) */
+/* Define if xattr functions take additional arguments (Mac OS X) */
 #undef XATTR_ADDITIONAL_OPTIONS
 
 /* Define to 1 if the X Window System is missing or not being used. */

@@ -814,7 +814,7 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
             return SEC_E_INSUFFICIENT_MEMORY;
     }
 
-    if (!phContext)
+    if (!phContext || (phNewContext && !pInput))
     {
         ULONG_PTR handle;
         struct create_session_params create_params;
@@ -927,7 +927,7 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
                 ptr += record_size;
             }
 
-            if (!expected_size)
+            if (!expected_size && record_size)
             {
                 TRACE("Expected at least %Iu bytes, but buffer only contains %lu bytes.\n",
                       max(ctx->header_size, record_size), buffer->cbBuffer);

@@ -820,7 +820,6 @@ HWND WINAPI GetShellWindow(void)
     return NtUserGetShellWindow();
 }
 
-
 /***********************************************************************
  *           SetProgmanWindow (USER32.@)
  */

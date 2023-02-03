@@ -192,6 +192,7 @@ void wayland_native_buffer_deinit(struct wayland_native_buffer *native) DECLSPEC
 size_t ascii_to_unicode_z(WCHAR *dst, size_t dst_max_chars,
                           const char *src, size_t src_max_chars) DECLSPEC_HIDDEN;
 int wayland_shmfd_create(const char *name, int size) DECLSPEC_HIDDEN;
+RGNDATA *get_region_data(HRGN region) DECLSPEC_HIDDEN;
 
 /**********************************************************************
  *          USER32 helpers

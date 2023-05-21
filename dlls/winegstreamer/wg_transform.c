@@ -346,10 +346,9 @@ NTSTATUS wg_transform_create(void *args)
         case WG_MAJOR_TYPE_AUDIO_MPEG4:
         case WG_MAJOR_TYPE_AUDIO_WMA:
         case WG_MAJOR_TYPE_VIDEO_CINEPAK:
-        case WG_MAJOR_TYPE_VIDEO_WMV:
         case WG_MAJOR_TYPE_VIDEO_INDEO:
-            if (!(element = find_element(GST_ELEMENT_FACTORY_TYPE_DECODER, src_caps, raw_caps))
-                    || !append_element(transform->container, element, &first, &last))
+            if (!(element = transform_find_element(GST_ELEMENT_FACTORY_TYPE_DECODER, src_caps, raw_caps))
+                    || !transform_append_element(transform, element, &first, &last))
             {
                 gst_caps_unref(raw_caps);
                 goto out;

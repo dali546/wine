@@ -66,18 +66,6 @@ extern NTSTATUS wg_transform_set_output_format(void *args) DECLSPEC_HIDDEN;
 extern NTSTATUS wg_transform_push_data(void *args) DECLSPEC_HIDDEN;
 extern NTSTATUS wg_transform_read_data(void *args) DECLSPEC_HIDDEN;
 extern NTSTATUS wg_transform_get_status(void *args) DECLSPEC_HIDDEN;
-extern NTSTATUS wg_transform_drain(void *args) DECLSPEC_HIDDEN;
-
-/* wg_source.c */
-
-extern NTSTATUS wg_source_create(void *args) DECLSPEC_HIDDEN;
-extern NTSTATUS wg_source_destroy(void *args) DECLSPEC_HIDDEN;
-extern NTSTATUS wg_source_get_status(void *args) DECLSPEC_HIDDEN;
-extern NTSTATUS wg_source_push_data(void *args) DECLSPEC_HIDDEN;
-extern NTSTATUS wg_source_get_stream_format(void *args) DECLSPEC_HIDDEN;
-extern NTSTATUS wg_source_get_stream_tag(void *args) DECLSPEC_HIDDEN;
-
-/* wg_allocator.c */
 
 /* wg_allocator_release_sample can be used to release any sample that was requested. */
 typedef struct wg_sample *(*wg_allocator_request_sample_cb)(gsize size, void *context);

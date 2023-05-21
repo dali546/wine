@@ -311,7 +311,7 @@ HRESULT WINAPI UiaRaiseAutomationPropertyChangedEvent(IRawElementProviderSimple 
  *          UiaRaiseStructureChangedEvent (uiautomationcore.@)
  */
 HRESULT WINAPI UiaRaiseStructureChangedEvent(IRawElementProviderSimple *provider, enum StructureChangeType struct_change_type,
-                                             int *runtime_id, int runtime_id_len)
+        int *runtime_id, int runtime_id_len)
 {
     FIXME("(%p, %d, %p, %d): stub\n", provider, struct_change_type, runtime_id, runtime_id_len);
     return S_OK;
@@ -321,8 +321,7 @@ HRESULT WINAPI UiaRaiseStructureChangedEvent(IRawElementProviderSimple *provider
  *          UiaRaiseAsyncContentLoadedEvent (uiautomationcore.@)
  */
 HRESULT WINAPI UiaRaiseAsyncContentLoadedEvent(IRawElementProviderSimple *provider,
-                                                enum AsyncContentLoadedState async_content_loaded_state,
-                                                double percent_complete)
+        enum AsyncContentLoadedState async_content_loaded_state, double percent_complete)
 {
     FIXME("(%p, %d, %f): stub\n", provider, async_content_loaded_state, percent_complete);
     return S_OK;
@@ -341,9 +340,8 @@ HRESULT WINAPI UiaRaiseTextEditTextChangedEvent(IRawElementProviderSimple *provi
 /***********************************************************************
  *          UiaRaiseNotificationEvent (uiautomationcore.@)
  */
-HRESULT WINAPI UiaRaiseNotificationEvent(IRawElementProviderSimple *provider,
-        enum NotificationKind notification_kind, enum NotificationProcessing notification_processing,
-        BSTR display_str, BSTR activity_id)
+HRESULT WINAPI UiaRaiseNotificationEvent(IRawElementProviderSimple *provider, enum NotificationKind notification_kind,
+        enum NotificationProcessing notification_processing, BSTR display_str, BSTR activity_id)
 {
     FIXME("(%p, %d, %d, %s, %s): stub\n", provider, notification_kind, notification_processing,
             debugstr_w(display_str), debugstr_w(activity_id));
@@ -465,18 +463,14 @@ static HRESULT WINAPI uia_cf_CreateInstance(IClassFactory *iface, IUnknown *pout
     if (pouter)
         return CLASS_E_NOAGGREGATION;
 
-    if (IsEqualGUID(cf->clsid, &CLSID_CUIAutomation) && (IsEqualGUID(riid, &IID_IUnknown) ||
-                IsEqualGUID(riid, &IID_IUIAutomation)))
+    if (IsEqualGUID(cf->clsid, &CLSID_CUIAutomation))
         hr = create_uia_iface(&obj, FALSE);
-    else if (IsEqualGUID(cf->clsid, &CLSID_CUIAutomation8) && (IsEqualGUID(riid, &IID_IUnknown) ||
-                IsEqualGUID(riid, &IID_IUIAutomation)  || IsEqualGUID(riid, &IID_IUIAutomation2) ||
-                IsEqualGUID(riid, &IID_IUIAutomation3) || IsEqualGUID(riid, &IID_IUIAutomation4) ||
-                IsEqualGUID(riid, &IID_IUIAutomation5) || IsEqualGUID(riid, &IID_IUIAutomation6)))
+    else if (IsEqualGUID(cf->clsid, &CLSID_CUIAutomation8))
         hr = create_uia_iface(&obj, TRUE);
     else
         return E_NOINTERFACE;
 
-    if (SUCCEEDED(hr) && obj)
+    if (SUCCEEDED(hr))
     {
         hr = IUnknown_QueryInterface(obj, riid, ppv);
         IUnknown_Release(obj);

@@ -94,57 +94,6 @@ static inline struct uia_provider *impl_from_IWineUiaProvider(IWineUiaProvider *
     return CONTAINING_RECORD(iface, struct uia_provider, IWineUiaProvider_iface);
 }
 
-static inline BOOL uia_array_reserve(void **elements, SIZE_T *capacity, SIZE_T count, SIZE_T size)
-{
-    SIZE_T max_capacity, new_capacity;
-    void *new_elements;
-
-    if (count <= *capacity)
-        return TRUE;
-
-    max_capacity = ~(SIZE_T)0 / size;
-    if (count > max_capacity)
-        return FALSE;
-
-    new_capacity = max(1, *capacity);
-    while (new_capacity < count && new_capacity <= max_capacity / 2)
-        new_capacity *= 2;
-    if (new_capacity < count)
-        new_capacity = count;
-
-    if (!*elements)
-        new_elements = heap_alloc_zero(new_capacity * size);
-    else
-        new_elements = HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, *elements, new_capacity * size);
-    if (!new_elements)
-        return FALSE;
-
-    *elements = new_elements;
-    *capacity = new_capacity;
-    return TRUE;
-}
-
-struct uia_event_args
-{
-    LONG ref;
-
-    union {
-        struct UiaEventArgs                    simple_args;
-        struct UiaPropertyChangedEventArgs     prop_change_args;
-        struct UiaStructureChangedEventArgs    struct_change_args;
-        struct UiaAsyncContentLoadedEventArgs  async_loaded_args;
-        struct UiaWindowClosedEventArgs        window_closed_args;
-        struct UiaTextEditTextChangedEventArgs text_edit_change_args;
-        struct UiaChangesEventArgs             changes_args;
-    } u;
-    void *event_handler_data;
-};
-
-static inline struct uia_event_args *impl_from_UiaEventArgs(struct UiaEventArgs *args)
-{
-    return CONTAINING_RECORD(args, struct uia_event_args, u.simple_args);
-}
-
 static inline void variant_init_bool(VARIANT *v, BOOL val)
 {
     V_VT(v) = VT_BOOL;
@@ -152,6 +101,7 @@ static inline void variant_init_bool(VARIANT *v, BOOL val)
 }
 
 /* uia_client.c */
+HRESULT get_safearray_bounds(SAFEARRAY *sa, LONG *lbound, LONG *elems) DECLSPEC_HIDDEN;
 int uia_compare_safearrays(SAFEARRAY *sa1, SAFEARRAY *sa2, int prop_type) DECLSPEC_HIDDEN;
 int get_node_provider_type_at_idx(struct uia_node *node, int idx) DECLSPEC_HIDDEN;
 HRESULT create_uia_node_from_elprov(IRawElementProviderSimple *elprov, HUIANODE *out_node,
@@ -163,10 +113,13 @@ HRESULT uia_add_event(HUIANODE huianode, EVENTID event_id, UiaEventCallback *cal
 /* uia_com_client.c */
 HRESULT create_uia_iface(IUnknown **iface, BOOL is_cui8) DECLSPEC_HIDDEN;
 
+/* uia_com_client.c */
+HRESULT create_uia_iface(IUnknown **iface, BOOL is_cui8) DECLSPEC_HIDDEN;
+
 /* uia_ids.c */
 const struct uia_prop_info *uia_prop_info_from_id(PROPERTYID prop_id) DECLSPEC_HIDDEN;
-const struct uia_event_info *uia_event_info_from_id(EVENTID event_id) DECLSPEC_HIDDEN;
 const struct uia_pattern_info *uia_pattern_info_from_id(PATTERNID pattern_id) DECLSPEC_HIDDEN;
+const struct uia_control_type_info *uia_control_type_info_from_id(CONTROLTYPEID control_type_id) DECLSPEC_HIDDEN;
 
 /* uia_provider.c */
 void uia_stop_provider_thread(void) DECLSPEC_HIDDEN;

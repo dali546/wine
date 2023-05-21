@@ -1010,7 +1010,7 @@ static HRESULT get_safearray_dim_bounds(SAFEARRAY *sa, UINT dim, LONG *lbound, L
     return S_OK;
 }
 
-static HRESULT get_safearray_bounds(SAFEARRAY *sa, LONG *lbound, LONG *elems)
+HRESULT get_safearray_bounds(SAFEARRAY *sa, LONG *lbound, LONG *elems)
 {
     UINT dims;
 
@@ -1050,7 +1050,7 @@ int uia_compare_safearrays(SAFEARRAY *sa1, SAFEARRAY *sa2, int prop_type)
 
     if (prop_type != UIAutomationType_IntArray)
     {
-        FIXME("Array type %#x value comparsion currently unimplemented.\n", prop_type);
+        FIXME("Array type %#x value comparison currently unimplemented.\n", prop_type);
         return -1;
     }
 
@@ -2547,7 +2547,10 @@ static HRESULT uia_provider_get_pattern_prop_val(struct uia_provider *prov,
     hr = IUnknown_QueryInterface(unk, pattern_info->pattern_iid, (void **)&pattern_prov);
     IUnknown_Release(unk);
     if (FAILED(hr) || !pattern_prov)
+    {
+        WARN("Failed to get pattern interface from object\n");
         return S_OK;
+    }
 
     switch (prop_info->prop_id)
     {

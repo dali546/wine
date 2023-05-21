@@ -37,7 +37,6 @@
 #include "macdrv_dll.h"
 #include "imm.h"
 #include "immdev.h"
-#include "wine/server.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(imm);

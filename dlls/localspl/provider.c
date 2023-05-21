@@ -3008,7 +3008,7 @@ static void fill_builtin_form_info( BYTE **base, WCHAR **strings, const struct b
                                     DWORD size, DWORD *used )
 {
     FORM_INFO_2W *info = *(FORM_INFO_2W**)base;
-    DWORD name_len = wcslen( form->name ) + 1, res_len, keyword_len, total_size;
+    DWORD name_len = wcslen( form->name ) + 1, res_len = 0, keyword_len, total_size;
     static const WCHAR dll_name[] = L"localspl.dll";
     const WCHAR *resource;
 
@@ -3697,7 +3697,7 @@ static BOOL WINAPI fpScheduleJob(HANDLE hprinter, DWORD job_id)
     }
 
     port = job->port;
-    if (!port)
+    if (!port || !*port)
         port = printer->info->port;
     TRACE("need to schedule job %ld filename %s to port %s\n", job->id,
             debugstr_w(job->filename), debugstr_w(port));

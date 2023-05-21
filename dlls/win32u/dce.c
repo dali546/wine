@@ -1446,7 +1446,6 @@ static void update_now( HWND hwnd, UINT rdw_flags )
  */
 BOOL WINAPI NtUserRedrawWindow( HWND hwnd, const RECT *rect, HRGN hrgn, UINT flags )
 {
-    LARGE_INTEGER zero = { .QuadPart = 0 };
     static const RECT empty;
     BOOL ret;
 
@@ -1467,7 +1466,7 @@ BOOL WINAPI NtUserRedrawWindow( HWND hwnd, const RECT *rect, HRGN hrgn, UINT fla
     }
 
     /* process pending expose events before painting */
-    if (flags & RDW_UPDATENOW) user_driver->pMsgWaitForMultipleObjectsEx( 0, NULL, &zero, QS_PAINT, 0 );
+    if (flags & RDW_UPDATENOW) user_driver->pProcessEvents( QS_PAINT );
 
     if (rect && !hrgn)
     {
@@ -1726,7 +1725,7 @@ INT WINAPI NtUserScrollWindowEx( HWND hwnd, INT dx, INT dy, const RECT *rect,
     TRACE( "%p, %d,%d update_rgn=%p update_rect = %p %s %04x\n",
            hwnd, dx, dy, update_rgn, update_rect, wine_dbgstr_rect(rect), flags );
     TRACE( "clip_rect = %s\n", wine_dbgstr_rect(clip_rect) );
-    if (flags & ~(SW_SCROLLCHILDREN | SW_INVALIDATE | SW_ERASE))
+    if (flags & ~(SW_SCROLLCHILDREN | SW_INVALIDATE | SW_ERASE | SW_NODCCACHE))
         FIXME( "some flags (%04x) are unhandled\n", flags );
 
     rdw_flags = (flags & SW_ERASE) && (flags & SW_INVALIDATE) ?

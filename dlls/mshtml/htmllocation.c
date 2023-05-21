@@ -611,7 +611,7 @@ static const tid_t HTMLLocation_iface_tids[] = {
     IHTMLLocation_tid,
     0
 };
-dispex_static_data_t HTMLLocation_dispex = {
+static dispex_static_data_t HTMLLocation_dispex = {
     L"Location",
     NULL,
     PROTO_ID_HTMLLocation,
@@ -619,12 +619,10 @@ dispex_static_data_t HTMLLocation_dispex = {
     HTMLLocation_iface_tids
 };
 
-void HTMLLocation_Init(HTMLOuterWindow *window)
+void HTMLLocation_Init(HTMLLocation *location)
 {
-    compat_mode_t compat_mode = dispex_compat_mode(&window->base.inner_window->event_target.dispex);
+    location->IHTMLLocation_iface.lpVtbl = &HTMLLocationVtbl;
 
-    window->location.IHTMLLocation_iface.lpVtbl = &HTMLLocationVtbl;
-
-    init_dispatch(&window->location.dispex, (IUnknown*)&window->location.IHTMLLocation_iface, &HTMLLocation_dispex,
-                  window->base.inner_window, min(compat_mode, COMPAT_MODE_IE8));
+    init_dispatch(&location->dispex, (IUnknown*)&location->IHTMLLocation_iface, &HTMLLocation_dispex,
+                  COMPAT_MODE_QUIRKS);
 }

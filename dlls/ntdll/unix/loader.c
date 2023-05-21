@@ -119,7 +119,6 @@ void     (WINAPI *p__wine_ctrl_routine)(void*);
 SYSTEM_DLL_INIT_BLOCK *pLdrSystemDllInitBlock = NULL;
 
 static void *p__wine_syscall_dispatcher;
-static void **p__wine_unix_call_dispatcher;
 
 static void * const syscalls[] =
 {
@@ -145,6 +144,7 @@ static void * const syscalls[] =
     NtCancelTimer,
     NtClearEvent,
     NtClose,
+    NtCommitTransaction,
     NtCompareObjects,
     NtCompleteConnectPort,
     NtConnectPort,
@@ -170,6 +170,7 @@ static void * const syscalls[] =
     NtCreateThread,
     NtCreateThreadEx,
     NtCreateTimer,
+    NtCreateTransaction,
     NtCreateUserProcess,
     NtDebugActiveProcess,
     NtDebugContinue,
@@ -298,6 +299,7 @@ static void * const syscalls[] =
     NtRestoreKey,
     NtResumeProcess,
     NtResumeThread,
+    NtRollbackTransaction,
     NtSaveKey,
     NtSecureConnectPort,
     NtSetContextThread,
@@ -357,14 +359,7 @@ static void * const syscalls[] =
     NtWriteFileGather,
     NtWriteVirtualMemory,
     NtYieldExecution,
-    __wine_dbg_write,
-    __wine_needs_override_large_address_aware,
-    __wine_set_unix_env,
-    __wine_unix_spawnvp,
     wine_nt_to_unix_file_name,
-    wine_server_call,
-    wine_server_fd_to_handle,
-    wine_server_handle_to_fd,
     wine_unix_to_nt_file_name,
 };
 
@@ -387,9 +382,6 @@ static const char *dll_dir;
 static const char *ntdll_dir;
 static const char *wineloader;
 static SIZE_T dll_path_maxlen;
-static int *p___wine_main_argc;
-static char ***p___wine_main_argv;
-static WCHAR ***p___wine_main_wargv;
 
 const char *home_dir = NULL;
 const char *data_dir = NULL;
@@ -399,7 +391,6 @@ const char **dll_paths = NULL;
 const char **system_dll_paths = NULL;
 const char *user_name = NULL;
 SECTION_IMAGE_INFORMATION main_image_info = { NULL };
-HMODULE ntdll_module = 0;
 static const IMAGE_EXPORT_DIRECTORY *ntdll_exports;
 
 /* adjust an array of pointers to make them into RVAs */
@@ -686,8 +677,6 @@ static void init_paths( char *argv[] )
                 bin_dir = realpath_dirname( path );
             free( path );
         }
-#else
-        bin_dir = realpath_dirname( argv[0] );
 #endif
         if (!bin_dir) bin_dir = build_path( dll_dir, DLL_TO_BINDIR );
         data_dir = build_path( bin_dir, BIN_TO_DATADIR );
@@ -1082,6 +1071,9 @@ static const void *get_module_data_dir( HMODULE module, ULONG dir, ULONG *size )
 
 static void load_ntdll_functions( HMODULE module )
 {
+    void **p__wine_unix_call_dispatcher;
+    unixlib_handle_t *p__wine_unixlib_handle;
+
     ntdll_exports = get_module_data_dir( module, IMAGE_FILE_EXPORT_DIRECTORY, NULL );
     assert( ntdll_exports );
 
@@ -1100,6 +1092,9 @@ static void load_ntdll_functions( HMODULE module )
     GET_FUNC( __wine_ctrl_routine );
     GET_FUNC( __wine_syscall_dispatcher );
     GET_FUNC( __wine_unix_call_dispatcher );
+    GET_FUNC( __wine_unixlib_handle );
+    *p__wine_unix_call_dispatcher = __wine_unix_call_dispatcher;
+    *p__wine_unixlib_handle = (UINT_PTR)__wine_unix_call_funcs;
 #ifdef __aarch64__
     {
         void **p__wine_current_teb;
@@ -1131,6 +1126,14 @@ static void load_ntdll_wow64_functions( HMODULE module )
 #undef GET_FUNC
 
     p__wine_ctrl_routine = (void *)find_named_export( module, exports, "__wine_ctrl_routine" );
+
+#ifdef _WIN64
+    {
+        unixlib_handle_t *p__wine_unixlib_handle = (void *)find_named_export( module, exports,
+                                                                              "__wine_unixlib_handle" );
+        *p__wine_unixlib_handle = (UINT_PTR)__wine_unix_call_wow64_funcs;
+    }
+#endif
 
     /* also set the 32-bit LdrSystemDllInitBlock */
     memcpy( (void *)(ULONG_PTR)pLdrSystemDllInitBlock->pLdrSystemDllInitBlock,
@@ -1223,54 +1226,6 @@ static void relocate_ntdll( void *module )
 }
 
 
-static void *callback_module;
-
-/***********************************************************************
- *           load_builtin_callback
- *
- * Load a library in memory; callback function for wine_dll_register
- */
-static void load_builtin_callback( void *module, const char *filename )
-{
-    callback_module = module;
-}
-
-
-/***********************************************************************
- *           load_libwine
- */
-static void load_libwine(void)
-{
-#ifdef __APPLE__
-#define LIBWINE "libwine.1.dylib"
-#else
-#define LIBWINE "libwine.so.1"
-#endif
-    typedef void (*load_dll_callback_t)( void *, const char * );
-    void (*p_wine_dll_set_callback)( load_dll_callback_t load );
-    char ***p___wine_main_environ;
-
-    char *path;
-    void *handle;
-
-    if (build_dir) path = build_path( build_dir, "libs/wine/" LIBWINE );
-    else path = build_path( ntdll_dir, LIBWINE );
-
-    handle = dlopen( path, RTLD_NOW );
-    free( path );
-    if (!handle && !(handle = dlopen( LIBWINE, RTLD_NOW ))) return;
-
-    p_wine_dll_set_callback = dlsym( handle, "wine_dll_set_callback" );
-    p___wine_main_argc      = dlsym( handle, "__wine_main_argc" );
-    p___wine_main_argv      = dlsym( handle, "__wine_main_argv" );
-    p___wine_main_wargv     = dlsym( handle, "__wine_main_wargv" );
-    p___wine_main_environ   = dlsym( handle, "__wine_main_environ" );
-
-    if (p_wine_dll_set_callback) p_wine_dll_set_callback( load_builtin_callback );
-    if (p___wine_main_environ) *p___wine_main_environ = main_envp;
-}
-
-
 /***********************************************************************
  *           fill_builtin_image_info
  */
@@ -1314,35 +1269,32 @@ static NTSTATUS dlopen_dll( const char *so_name, UNICODE_STRING *nt_name, void *
     const IMAGE_NT_HEADERS *nt;
     BOOL mapped = FALSE;
 
-    callback_module = (void *)1;
-    if ((handle = dlopen( so_name, RTLD_NOW | RTLD_NOLOAD ))) mapped = TRUE;
-    else handle = dlopen( so_name, RTLD_NOW );
+    handle = dlopen( so_name, RTLD_NOW );
     if (!handle)
     {
         WARN( "failed to load .so lib %s: %s\n", debugstr_a(so_name), dlerror() );
         return STATUS_INVALID_IMAGE_FORMAT;
     }
-    if (callback_module != (void *)1)  /* callback was called */
+
+    if (!(nt = dlsym( handle, "__wine_spec_nt_header" )))
     {
-        if (!callback_module) return STATUS_NO_MEMORY;
-        WARN( "got old-style builtin library %s, constructors won't work\n", debugstr_a(so_name) );
-        module = callback_module;
-        if (get_builtin_so_handle( module )) goto already_loaded;
-    }
-    else if ((nt = dlsym( handle, "__wine_spec_nt_header" )))
-    {
-        module = (HMODULE)((nt->OptionalHeader.ImageBase + 0xffff) & ~0xffff);
-        if (get_builtin_so_handle( module )) goto already_loaded;
-        if (!mapped && map_so_dll( nt, module ))
-        {
-            dlclose( handle );
-            return STATUS_NO_MEMORY;
-        }
-    }
-    else  /* already loaded .so */
-    {
-        WARN( "%s already loaded?\n", debugstr_a(so_name));
+        ERR( "invalid .so library %s, too old?\n", debugstr_a(so_name));
         return STATUS_INVALID_IMAGE_FORMAT;
+    }
+
+    module = (HMODULE)((nt->OptionalHeader.ImageBase + 0xffff) & ~0xffff);
+    if (get_builtin_so_handle( module ))  /* already loaded */
+    {
+        fill_builtin_image_info( module, image_info );
+        *ret_module = module;
+        dlclose( handle );
+        return STATUS_SUCCESS;
+    }
+
+    if (map_so_dll( nt, module ))
+    {
+        dlclose( handle );
+        return STATUS_NO_MEMORY;
     }
 
     fill_builtin_image_info( module, image_info );
@@ -1359,12 +1311,6 @@ static NTSTATUS dlopen_dll( const char *so_name, UNICODE_STRING *nt_name, void *
         return STATUS_NO_MEMORY;
     }
     *ret_module = module;
-    return STATUS_SUCCESS;
-
-already_loaded:
-    fill_builtin_image_info( module, image_info );
-    *ret_module = module;
-    dlclose( handle );
     return STATUS_SUCCESS;
 }
 
@@ -1952,7 +1898,6 @@ static void load_ntdll(void)
     else if (status) fatal_error( "failed to load %s error %x\n", name, status );
     free( name );
     load_ntdll_functions( module );
-    ntdll_module = module;
 }
 
 
@@ -2147,6 +2092,11 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
 {
     load_so_dll,
     unwind_builtin_dll,
+    unixcall_wine_dbg_write,
+    unixcall_wine_server_call,
+    unixcall_wine_server_fd_to_handle,
+    unixcall_wine_server_handle_to_fd,
+    unixcall_wine_spawnvp,
     system_time_precise,
     is_pc_in_native_so,
     debugstr_pc,
@@ -2274,6 +2224,11 @@ const unixlib_entry_t __wine_unix_call_wow64_funcs[] =
 {
     wow64_load_so_dll,
     wow64_unwind_builtin_dll,
+    wow64_wine_dbg_write,
+    wow64_wine_server_call,
+    wow64_wine_server_fd_to_handle,
+    wow64_wine_server_handle_to_fd,
+    wow64_wine_spawnvp,
     system_time_precise,
 };
 
@@ -2297,14 +2252,7 @@ static void start_main_thread(void)
     virtual_map_user_shared_data();
     init_cpu_info();
     init_files();
-
-    set_thread_teb( teb );
-
-    load_libwine();
     init_startup_info();
-    if (p___wine_main_argc) *p___wine_main_argc = main_argc;
-    if (p___wine_main_argv) *p___wine_main_argv = main_argv;
-    if (p___wine_main_wargv) *p___wine_main_wargv = main_wargv;
     *(ULONG_PTR *)&peb->CloudFileFlags = get_image_address();
     set_load_order_app_name( main_wargv[0] );
     init_thread_stack( teb, 0, 0, 0 );
@@ -2313,7 +2261,6 @@ static void start_main_thread(void)
     if (main_image_info.Machine != current_machine) load_wow64_ntdll( main_image_info.Machine );
     load_apiset_dll();
     ntdll_init_syscalls( 0, &syscall_table, p__wine_syscall_dispatcher );
-    *p__wine_unix_call_dispatcher = __wine_unix_call_dispatcher;
     server_init_process_done();
 }
 

@@ -330,53 +330,6 @@ struct wg_transform_get_status_params
     UINT32 accepts_input;
 };
 
-struct wg_transform_drain_params
-{
-    struct wg_transform *transform;
-    BOOL flush;
-};
-
-struct wg_source_create_params
-{
-    const char *url;
-    UINT64 file_size;
-    const void *data;
-    UINT32 size;
-    char mime_type[256];
-    struct wg_source *source;
-};
-
-struct wg_source_get_status_params
-{
-    struct wg_source *source;
-    UINT32 stream_count;
-    UINT64 duration;
-    UINT64 read_offset;
-};
-
-struct wg_source_push_data_params
-{
-    struct wg_source *source;
-    const void *data;
-    UINT32 size;
-};
-
-struct wg_source_get_stream_format_params
-{
-    struct wg_source *source;
-    UINT32 index;
-    struct wg_format format;
-};
-
-struct wg_source_get_stream_tag_params
-{
-    struct wg_source *source;
-    UINT32 index;
-    enum wg_parser_tag tag;
-    UINT32 size;
-    char *buffer;
-};
-
 enum unix_funcs
 {
     unix_wg_init_gstreamer,
@@ -413,14 +366,6 @@ enum unix_funcs
     unix_wg_transform_push_data,
     unix_wg_transform_read_data,
     unix_wg_transform_get_status,
-    unix_wg_transform_drain,
-
-    unix_wg_source_create,
-    unix_wg_source_destroy,
-    unix_wg_source_get_status,
-    unix_wg_source_push_data,
-    unix_wg_source_get_stream_format,
-    unix_wg_source_get_stream_tag,
 };
 
 #endif /* __WINE_WINEGSTREAMER_UNIXLIB_H */

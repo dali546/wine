@@ -175,7 +175,6 @@ struct pid_effect_state
 struct hid_joystick
 {
     struct dinput_device base;
-    BOOL wgi_device;
 
     HANDLE device;
     OVERLAPPED read_ovl;

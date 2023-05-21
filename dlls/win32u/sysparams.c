@@ -247,7 +247,6 @@ struct adapter
 
 #define MONITOR_INFO_HAS_MONITOR_ID 0x00000001
 #define MONITOR_INFO_HAS_MONITOR_NAME 0x00000002
-#define MONITOR_INFO_HAS_PREFERRED_MODE 0x00000004
 struct edid_monitor_info
 {
     unsigned int flags;
@@ -256,8 +255,6 @@ struct edid_monitor_info
     char monitor_id_string[8];
     /* MONITOR_INFO_HAS_MONITOR_NAME */
     WCHAR monitor_name[14];
-    /* MONITOR_INFO_HAS_PREFERRED_MODE */
-    unsigned int preferred_width, preferred_height;
 };
 
 struct monitor
@@ -509,16 +506,6 @@ static void get_monitor_info_from_edid( struct edid_monitor_info *info, const un
 
     for (i = 0; i < 4; ++i)
     {
-        if (edid[54 + i * 18] || edid[54 + i * 18 + 1])
-        {
-            /* Detailed timing descriptor. */
-            if (info->flags & MONITOR_INFO_HAS_PREFERRED_MODE) continue;
-            info->preferred_width = edid[54 + i * 18 + 2] | ((UINT32)(edid[54 + i * 18 + 4] & 0xf0) << 4);
-            info->preferred_height = edid[54 + i * 18 + 5] | ((UINT32)(edid[54 + i * 18 + 7] & 0xf0) << 4);
-            if (info->preferred_width && info->preferred_height)
-                info->flags |= MONITOR_INFO_HAS_PREFERRED_MODE;
-            continue;
-        }
         if (edid[54 + i * 18 + 3] != 0xfc) continue;
         /* "Display name" ASCII descriptor. */
         s = (const char *)&edid[54 + i * 18 + 5];

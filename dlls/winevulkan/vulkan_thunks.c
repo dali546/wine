@@ -2410,6 +2410,14 @@ typedef struct VkPhysicalDeviceSubpassShadingFeaturesHUAWEI32
     VkBool32 subpassShading;
 } VkPhysicalDeviceSubpassShadingFeaturesHUAWEI32;
 
+typedef struct VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI32
+{
+    VkStructureType sType;
+    PTR32 pNext;
+    VkBool32 clustercullingShader;
+    VkBool32 multiviewClusterCullingShader;
+} VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI32;
+
 typedef struct VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT32
 {
     VkStructureType sType;
@@ -2744,6 +2752,13 @@ typedef struct VkPhysicalDeviceFaultFeaturesEXT32
     VkBool32 deviceFault;
     VkBool32 deviceFaultVendorBinary;
 } VkPhysicalDeviceFaultFeaturesEXT32;
+
+typedef struct VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT32
+{
+    VkStructureType sType;
+    PTR32 pNext;
+    VkBool32 pipelineLibraryGroupHandles;
+} VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT32;
 
 typedef struct VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM32
 {
@@ -3224,6 +3239,15 @@ typedef struct VkGraphicsPipelineCreateInfo32
     int32_t basePipelineIndex;
 } VkGraphicsPipelineCreateInfo32;
 
+typedef struct VkSubresourceLayout32
+{
+    VkDeviceSize DECLSPEC_ALIGN(8) offset;
+    VkDeviceSize DECLSPEC_ALIGN(8) size;
+    VkDeviceSize DECLSPEC_ALIGN(8) rowPitch;
+    VkDeviceSize DECLSPEC_ALIGN(8) arrayPitch;
+    VkDeviceSize DECLSPEC_ALIGN(8) depthPitch;
+} VkSubresourceLayout32;
+
 typedef struct VkDedicatedAllocationImageCreateInfoNV32
 {
     VkStructureType sType;
@@ -3254,6 +3278,23 @@ typedef struct VkImageFormatListCreateInfo32
     PTR32 pViewFormats;
 } VkImageFormatListCreateInfo32;
 typedef VkImageFormatListCreateInfo32 VkImageFormatListCreateInfoKHR32;
+
+typedef struct VkImageDrmFormatModifierListCreateInfoEXT32
+{
+    VkStructureType sType;
+    PTR32 pNext;
+    uint32_t drmFormatModifierCount;
+    PTR32 pDrmFormatModifiers;
+} VkImageDrmFormatModifierListCreateInfoEXT32;
+
+typedef struct VkImageDrmFormatModifierExplicitCreateInfoEXT32
+{
+    VkStructureType sType;
+    PTR32 pNext;
+    uint64_t DECLSPEC_ALIGN(8) drmFormatModifier;
+    uint32_t drmFormatModifierPlaneCount;
+    PTR32 pPlaneLayouts;
+} VkImageDrmFormatModifierExplicitCreateInfoEXT32;
 
 typedef struct VkImageStencilUsageCreateInfo32
 {
@@ -4294,15 +4335,6 @@ typedef struct VkImageSparseMemoryRequirementsInfo232
 } VkImageSparseMemoryRequirementsInfo232;
 typedef VkImageSparseMemoryRequirementsInfo232 VkImageSparseMemoryRequirementsInfo2KHR32;
 
-typedef struct VkSubresourceLayout32
-{
-    VkDeviceSize DECLSPEC_ALIGN(8) offset;
-    VkDeviceSize DECLSPEC_ALIGN(8) size;
-    VkDeviceSize DECLSPEC_ALIGN(8) rowPitch;
-    VkDeviceSize DECLSPEC_ALIGN(8) arrayPitch;
-    VkDeviceSize DECLSPEC_ALIGN(8) depthPitch;
-} VkSubresourceLayout32;
-
 typedef struct VkImageSubresource2EXT32
 {
     VkStructureType sType;
@@ -4478,6 +4510,28 @@ typedef struct VkExternalSemaphoreProperties32
 } VkExternalSemaphoreProperties32;
 typedef VkExternalSemaphoreProperties32 VkExternalSemaphorePropertiesKHR32;
 
+typedef struct VkDrmFormatModifierPropertiesEXT32
+{
+    uint64_t DECLSPEC_ALIGN(8) drmFormatModifier;
+    uint32_t drmFormatModifierPlaneCount;
+    VkFormatFeatureFlags drmFormatModifierTilingFeatures;
+} VkDrmFormatModifierPropertiesEXT32;
+
+typedef struct VkDrmFormatModifierProperties2EXT32
+{
+    uint64_t DECLSPEC_ALIGN(8) drmFormatModifier;
+    uint32_t drmFormatModifierPlaneCount;
+    VkFormatFeatureFlags2 DECLSPEC_ALIGN(8) drmFormatModifierTilingFeatures;
+} VkDrmFormatModifierProperties2EXT32;
+
+typedef struct VkDrmFormatModifierPropertiesListEXT32
+{
+    VkStructureType sType;
+    PTR32 pNext;
+    uint32_t drmFormatModifierCount;
+    PTR32 pDrmFormatModifierProperties;
+} VkDrmFormatModifierPropertiesListEXT32;
+
 typedef struct VkSubpassResolvePerformanceQueryEXT32
 {
     VkStructureType sType;
@@ -4494,6 +4548,14 @@ typedef struct VkFormatProperties332
     VkFormatFeatureFlags2 DECLSPEC_ALIGN(8) bufferFeatures;
 } VkFormatProperties332;
 typedef VkFormatProperties332 VkFormatProperties3KHR32;
+
+typedef struct VkDrmFormatModifierPropertiesList2EXT32
+{
+    VkStructureType sType;
+    PTR32 pNext;
+    uint32_t drmFormatModifierCount;
+    PTR32 pDrmFormatModifierProperties;
+} VkDrmFormatModifierPropertiesList2EXT32;
 
 typedef struct VkFormatProperties232
 {
@@ -4527,6 +4589,16 @@ typedef struct VkPhysicalDeviceExternalImageFormatInfo32
     VkExternalMemoryHandleTypeFlagBits handleType;
 } VkPhysicalDeviceExternalImageFormatInfo32;
 typedef VkPhysicalDeviceExternalImageFormatInfo32 VkPhysicalDeviceExternalImageFormatInfoKHR32;
+
+typedef struct VkPhysicalDeviceImageDrmFormatModifierInfoEXT32
+{
+    VkStructureType sType;
+    PTR32 pNext;
+    uint64_t DECLSPEC_ALIGN(8) drmFormatModifier;
+    VkSharingMode sharingMode;
+    uint32_t queueFamilyIndexCount;
+    PTR32 pQueueFamilyIndices;
+} VkPhysicalDeviceImageDrmFormatModifierInfoEXT32;
 
 typedef struct VkPhysicalDeviceImageViewImageFormatInfoEXT32
 {
@@ -5258,6 +5330,15 @@ typedef struct VkPhysicalDeviceSubpassShadingPropertiesHUAWEI32
     PTR32 pNext;
     uint32_t maxSubpassShadingWorkgroupSizeAspectRatio;
 } VkPhysicalDeviceSubpassShadingPropertiesHUAWEI32;
+
+typedef struct VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI32
+{
+    VkStructureType sType;
+    PTR32 pNext;
+    uint32_t maxWorkGroupCount[3];
+    uint32_t maxWorkGroupSize[3];
+    uint32_t maxOutputClusterCount;
+} VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI32;
 
 typedef struct VkPhysicalDeviceLineRasterizationPropertiesEXT32
 {
@@ -6347,18 +6428,7 @@ static inline void convert_VkDescriptorSetAllocateInfo_win32_to_host(struct conv
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -6550,6 +6620,18 @@ static inline void convert_VkMemoryAllocateInfo_win32_to_host(struct conversion_
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
+        {
+            VkImportMemoryFdInfoKHR *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkImportMemoryFdInfoKHR32 *in_ext = (const VkImportMemoryFdInfoKHR32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+            out_ext->pNext = NULL;
+            out_ext->handleType = in_ext->handleType;
+            out_ext->fd = in_ext->fd;
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO:
         {
             VkMemoryAllocateFlagsInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -6609,18 +6691,7 @@ static inline void convert_VkMemoryAllocateInfo_win32_to_host(struct conversion_
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -6725,18 +6796,7 @@ static inline void convert_VkCommandBufferInheritanceInfo_win32_to_host(struct c
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -6786,18 +6846,7 @@ static inline void convert_VkCommandBufferBeginInfo_win32_to_host(struct convers
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -6910,18 +6959,7 @@ static inline void convert_VkBindBufferMemoryInfo_win32_to_host(struct conversio
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -7090,18 +7128,7 @@ static inline void convert_VkBindImageMemoryInfo_win32_to_host(struct conversion
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -7208,18 +7235,7 @@ static inline void convert_VkAccelerationStructureGeometryTrianglesDataKHR_win32
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -7541,18 +7557,7 @@ static inline void convert_VkRenderPassBeginInfo_win32_to_host(struct conversion
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -7688,18 +7693,7 @@ static inline void convert_VkRenderingInfo_win32_to_host(struct conversion_conte
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -7733,18 +7727,7 @@ static inline void convert_VkDescriptorBufferBindingInfoEXT_win32_to_host(struct
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -7796,18 +7779,7 @@ static inline void convert_VkImageBlit2_win32_to_host(struct conversion_context 
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -8087,18 +8059,7 @@ static inline void convert_VkBufferImageCopy2_win32_to_host(struct conversion_co
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -8337,18 +8298,7 @@ static inline void convert_VkSubpassEndInfo_win32_to_host(struct conversion_cont
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -8546,18 +8496,7 @@ static inline void convert_VkImageMemoryBarrier_win32_to_host(struct conversion_
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -8683,18 +8622,7 @@ static inline void convert_VkImageMemoryBarrier2_win32_to_host(struct conversion
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -8842,18 +8770,7 @@ static inline void convert_VkWriteDescriptorSet_win32_to_host(struct conversion_
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -9136,18 +9053,7 @@ static inline void convert_VkAccelerationStructureCreateInfoKHR_win32_to_host(st
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -9181,18 +9087,7 @@ static inline void convert_VkAccelerationStructureCreateInfoNV_win32_to_host(str
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -9369,18 +9264,7 @@ static inline void convert_VkBufferCreateInfo_win32_to_host(struct conversion_co
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -9589,18 +9473,7 @@ static inline void convert_VkPipelineShaderStageCreateInfo_win64_to_host(struct 
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -9701,18 +9574,7 @@ static inline void convert_VkPipelineShaderStageCreateInfo_win32_to_host(struct 
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -9803,18 +9665,7 @@ static inline void convert_VkComputePipelineCreateInfo_win32_to_host(struct conv
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -10012,18 +9863,7 @@ static inline void convert_VkDescriptorPoolCreateInfo_win32_to_host(struct conve
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -10098,18 +9938,7 @@ static inline void convert_VkDescriptorSetLayoutCreateInfo_win32_to_host(struct 
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -10225,18 +10054,7 @@ static inline void convert_VkDeviceQueueCreateInfo_win32_to_host(struct conversi
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -11569,6 +11387,18 @@ static inline void convert_VkDeviceCreateInfo_win64_to_host(struct conversion_co
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI:
+        {
+            VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *in_ext = (const VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI;
+            out_ext->pNext = NULL;
+            out_ext->clustercullingShader = in_ext->clustercullingShader;
+            out_ext->multiviewClusterCullingShader = in_ext->multiviewClusterCullingShader;
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
         {
             VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -12073,6 +11903,17 @@ static inline void convert_VkDeviceCreateInfo_win64_to_host(struct conversion_co
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT:
+        {
+            VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *in_ext = (const VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT;
+            out_ext->pNext = NULL;
+            out_ext->pipelineLibraryGroupHandles = in_ext->pipelineLibraryGroupHandles;
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM:
         {
             VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -12118,18 +11959,7 @@ static inline void convert_VkDeviceCreateInfo_win64_to_host(struct conversion_co
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -13430,6 +13260,18 @@ static inline void convert_VkDeviceCreateInfo_win32_to_host(struct conversion_co
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI:
+        {
+            VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI32 *in_ext = (const VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI;
+            out_ext->pNext = NULL;
+            out_ext->clustercullingShader = in_ext->clustercullingShader;
+            out_ext->multiviewClusterCullingShader = in_ext->multiviewClusterCullingShader;
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
         {
             VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -13934,6 +13776,17 @@ static inline void convert_VkDeviceCreateInfo_win32_to_host(struct conversion_co
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT:
+        {
+            VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT32 *in_ext = (const VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT;
+            out_ext->pNext = NULL;
+            out_ext->pipelineLibraryGroupHandles = in_ext->pipelineLibraryGroupHandles;
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM:
         {
             VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -13979,18 +13832,7 @@ static inline void convert_VkDeviceCreateInfo_win32_to_host(struct conversion_co
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -14034,18 +13876,7 @@ static inline void convert_VkFenceCreateInfo_win32_to_host(struct conversion_con
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -14118,18 +13949,7 @@ static inline void convert_VkFramebufferCreateInfo_win32_to_host(struct conversi
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -14201,18 +14021,7 @@ static inline void convert_VkPipelineVertexInputStateCreateInfo_win32_to_host(st
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -14262,18 +14071,7 @@ static inline void convert_VkPipelineTessellationStateCreateInfo_win32_to_host(s
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -14481,18 +14279,7 @@ static inline void convert_VkPipelineViewportStateCreateInfo_win32_to_host(struc
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -14613,18 +14400,7 @@ static inline void convert_VkPipelineRasterizationStateCreateInfo_win32_to_host(
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -14720,18 +14496,7 @@ static inline void convert_VkPipelineMultisampleStateCreateInfo_win32_to_host(st
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -14835,18 +14600,7 @@ static inline void convert_VkPipelineColorBlendStateCreateInfo_win32_to_host(str
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -15095,18 +14849,7 @@ static inline void convert_VkGraphicsPipelineCreateInfo_win64_to_host(struct con
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -15310,18 +15053,7 @@ static inline void convert_VkGraphicsPipelineCreateInfo_win32_to_host(struct con
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -15401,143 +15133,32 @@ static inline void convert_VkGraphicsPipelineCreateInfo_array_host_to_win32(cons
     }
 }
 
-#ifdef _WIN64
-static inline void convert_VkImageCreateInfo_win64_to_host(struct conversion_context *ctx, const VkImageCreateInfo *in, VkImageCreateInfo *out)
+static inline void convert_VkSubresourceLayout_win32_to_host(const VkSubresourceLayout32 *in, VkSubresourceLayout *out)
 {
-    const VkBaseInStructure *in_header;
-    VkBaseOutStructure *out_header = (void *)out;
-
     if (!in) return;
 
-    out->sType = in->sType;
-    out->pNext = NULL;
-    out->flags = in->flags;
-    out->imageType = in->imageType;
-    out->format = in->format;
-    out->extent = in->extent;
-    out->mipLevels = in->mipLevels;
-    out->arrayLayers = in->arrayLayers;
-    out->samples = in->samples;
-    out->tiling = in->tiling;
-    out->usage = in->usage;
-    out->sharingMode = in->sharingMode;
-    out->queueFamilyIndexCount = in->queueFamilyIndexCount;
-    out->pQueueFamilyIndices = in->pQueueFamilyIndices;
-    out->initialLayout = in->initialLayout;
-
-    for (in_header = (void *)in->pNext; in_header; in_header = (void *)in_header->pNext)
-    {
-        switch (in_header->sType)
-        {
-        case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV:
-        {
-            VkDedicatedAllocationImageCreateInfoNV *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkDedicatedAllocationImageCreateInfoNV *in_ext = (const VkDedicatedAllocationImageCreateInfoNV *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV;
-            out_ext->pNext = NULL;
-            out_ext->dedicatedAllocation = in_ext->dedicatedAllocation;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
-        {
-            VkExternalMemoryImageCreateInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkExternalMemoryImageCreateInfo *in_ext = (const VkExternalMemoryImageCreateInfo *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
-            out_ext->pNext = NULL;
-            out_ext->handleTypes = in_ext->handleTypes;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR:
-        {
-            VkImageSwapchainCreateInfoKHR *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkImageSwapchainCreateInfoKHR *in_ext = (const VkImageSwapchainCreateInfoKHR *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR;
-            out_ext->pNext = NULL;
-            out_ext->swapchain = in_ext->swapchain ? wine_swapchain_from_handle(in_ext->swapchain)->swapchain : 0;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
-        {
-            VkImageFormatListCreateInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkImageFormatListCreateInfo *in_ext = (const VkImageFormatListCreateInfo *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO;
-            out_ext->pNext = NULL;
-            out_ext->viewFormatCount = in_ext->viewFormatCount;
-            out_ext->pViewFormats = in_ext->pViewFormats;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
-        {
-            VkImageStencilUsageCreateInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkImageStencilUsageCreateInfo *in_ext = (const VkImageStencilUsageCreateInfo *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO;
-            out_ext->pNext = NULL;
-            out_ext->stencilUsage = in_ext->stencilUsage;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT:
-        {
-            VkOpaqueCaptureDescriptorDataCreateInfoEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkOpaqueCaptureDescriptorDataCreateInfoEXT *in_ext = (const VkOpaqueCaptureDescriptorDataCreateInfoEXT *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT;
-            out_ext->pNext = NULL;
-            out_ext->opaqueCaptureDescriptorData = in_ext->opaqueCaptureDescriptorData;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT:
-        {
-            VkImageCompressionControlEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkImageCompressionControlEXT *in_ext = (const VkImageCompressionControlEXT *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT;
-            out_ext->pNext = NULL;
-            out_ext->flags = in_ext->flags;
-            out_ext->compressionControlPlaneCount = in_ext->compressionControlPlaneCount;
-            out_ext->pFixedRateFlags = in_ext->pFixedRateFlags;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_OPTICAL_FLOW_IMAGE_FORMAT_INFO_NV:
-        {
-            VkOpticalFlowImageFormatInfoNV *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkOpticalFlowImageFormatInfoNV *in_ext = (const VkOpticalFlowImageFormatInfoNV *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_OPTICAL_FLOW_IMAGE_FORMAT_INFO_NV;
-            out_ext->pNext = NULL;
-            out_ext->usage = in_ext->usage;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
-            break;
-        }
-    }
+    out->offset = in->offset;
+    out->size = in->size;
+    out->rowPitch = in->rowPitch;
+    out->arrayPitch = in->arrayPitch;
+    out->depthPitch = in->depthPitch;
 }
-#endif /* _WIN64 */
+
+static inline const VkSubresourceLayout *convert_VkSubresourceLayout_array_win32_to_host(struct conversion_context *ctx, const VkSubresourceLayout32 *in, uint32_t count)
+{
+    VkSubresourceLayout *out;
+    unsigned int i;
+
+    if (!in || !count) return NULL;
+
+    out = conversion_context_alloc(ctx, count * sizeof(*out));
+    for (i = 0; i < count; i++)
+    {
+        convert_VkSubresourceLayout_win32_to_host(&in[i], &out[i]);
+    }
+
+    return out;
+}
 
 static inline void convert_VkImageCreateInfo_win32_to_host(struct conversion_context *ctx, const VkImageCreateInfo32 *in, VkImageCreateInfo *out)
 {
@@ -15611,6 +15232,31 @@ static inline void convert_VkImageCreateInfo_win32_to_host(struct conversion_con
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT:
+        {
+            VkImageDrmFormatModifierListCreateInfoEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkImageDrmFormatModifierListCreateInfoEXT32 *in_ext = (const VkImageDrmFormatModifierListCreateInfoEXT32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT;
+            out_ext->pNext = NULL;
+            out_ext->drmFormatModifierCount = in_ext->drmFormatModifierCount;
+            out_ext->pDrmFormatModifiers = (const uint64_t *)UlongToPtr(in_ext->pDrmFormatModifiers);
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
+        case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT:
+        {
+            VkImageDrmFormatModifierExplicitCreateInfoEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkImageDrmFormatModifierExplicitCreateInfoEXT32 *in_ext = (const VkImageDrmFormatModifierExplicitCreateInfoEXT32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT;
+            out_ext->pNext = NULL;
+            out_ext->drmFormatModifier = in_ext->drmFormatModifier;
+            out_ext->drmFormatModifierPlaneCount = in_ext->drmFormatModifierPlaneCount;
+            out_ext->pPlaneLayouts = convert_VkSubresourceLayout_array_win32_to_host(ctx, (const VkSubresourceLayout32 *)UlongToPtr(in_ext->pPlaneLayouts), in_ext->drmFormatModifierPlaneCount);
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
         {
             VkImageStencilUsageCreateInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -15658,18 +15304,7 @@ static inline void convert_VkImageCreateInfo_win32_to_host(struct conversion_con
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -15764,18 +15399,7 @@ static inline void convert_VkImageViewCreateInfo_win32_to_host(struct conversion
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -15945,18 +15569,7 @@ static inline void convert_VkInstanceCreateInfo_win64_to_host(struct conversion_
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16040,18 +15653,7 @@ static inline void convert_VkInstanceCreateInfo_win32_to_host(struct conversion_
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16110,18 +15712,7 @@ static inline void convert_VkOpticalFlowSessionCreateInfoNV_win32_to_host(struct
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16209,18 +15800,7 @@ static inline void convert_VkQueryPoolCreateInfo_win32_to_host(struct conversion
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16390,18 +15970,7 @@ static inline void convert_VkRayTracingPipelineCreateInfoKHR_win32_to_host(struc
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16568,18 +16137,7 @@ static inline void convert_VkRayTracingPipelineCreateInfoNV_win32_to_host(struct
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16752,18 +16310,7 @@ static inline void convert_VkRenderPassCreateInfo_win32_to_host(struct conversio
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16805,18 +16352,7 @@ static inline void convert_VkAttachmentDescription2_win32_to_host(struct convers
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16867,18 +16403,7 @@ static inline void convert_VkAttachmentReference2_win32_to_host(struct conversio
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -16985,18 +16510,7 @@ static inline void convert_VkSubpassDescription2_win32_to_host(struct conversion
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -17055,18 +16569,7 @@ static inline void convert_VkSubpassDependency2_win32_to_host(struct conversion_
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -17145,18 +16648,7 @@ static inline void convert_VkRenderPassCreateInfo2_win32_to_host(struct conversi
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -17250,18 +16742,7 @@ static inline void convert_VkSamplerCreateInfo_win32_to_host(struct conversion_c
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -17386,18 +16867,7 @@ static inline void convert_VkSemaphoreCreateInfo_win32_to_host(struct conversion
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -17432,18 +16902,7 @@ static inline void convert_VkShaderModuleCreateInfo_win32_to_host(struct convers
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -17552,18 +17011,7 @@ static inline void convert_VkSwapchainCreateInfoKHR_win32_to_unwrapped_host(stru
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -17995,18 +17443,7 @@ static inline void convert_VkMemoryRequirements2_win32_to_host(struct conversion
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -18202,18 +17639,7 @@ static inline void convert_VkDescriptorSetLayoutSupport_win32_to_host(struct con
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -18721,18 +18147,7 @@ static inline void convert_VkImageMemoryRequirementsInfo2_win32_to_host(struct c
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -18770,17 +18185,6 @@ static inline void convert_VkImageSparseMemoryRequirementsInfo2_win32_to_host(co
     out->image = in->image;
     if (in->pNext)
         FIXME("Unexpected pNext\n");
-}
-
-static inline void convert_VkSubresourceLayout_win32_to_host(const VkSubresourceLayout32 *in, VkSubresourceLayout *out)
-{
-    if (!in) return;
-
-    out->offset = in->offset;
-    out->size = in->size;
-    out->rowPitch = in->rowPitch;
-    out->arrayPitch = in->arrayPitch;
-    out->depthPitch = in->depthPitch;
 }
 
 static inline void convert_VkSubresourceLayout_host_to_win32(const VkSubresourceLayout *in, VkSubresourceLayout32 *out)
@@ -18829,18 +18233,7 @@ static inline void convert_VkSubresourceLayout2EXT_win32_to_host(struct conversi
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -19251,18 +18644,7 @@ static inline void convert_VkPhysicalDeviceExternalSemaphoreInfo_win32_to_host(s
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -20516,6 +19898,18 @@ static inline void convert_VkPhysicalDeviceFeatures2_win32_to_host(struct conver
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI:
+        {
+            VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI32 *in_ext = (const VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI;
+            out_ext->pNext = NULL;
+            out_ext->clustercullingShader = in_ext->clustercullingShader;
+            out_ext->multiviewClusterCullingShader = in_ext->multiviewClusterCullingShader;
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
         {
             VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -21020,6 +20414,17 @@ static inline void convert_VkPhysicalDeviceFeatures2_win32_to_host(struct conver
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT:
+        {
+            VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT32 *in_ext = (const VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT;
+            out_ext->pNext = NULL;
+            out_ext->pipelineLibraryGroupHandles = in_ext->pipelineLibraryGroupHandles;
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM:
         {
             VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -21065,18 +20470,7 @@ static inline void convert_VkPhysicalDeviceFeatures2_win32_to_host(struct conver
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -22125,6 +21519,16 @@ static inline void convert_VkPhysicalDeviceFeatures2_host_to_win32(const VkPhysi
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI:
+        {
+            VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI);
+            const VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *in_ext = (const VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI;
+            out_ext->clustercullingShader = in_ext->clustercullingShader;
+            out_ext->multiviewClusterCullingShader = in_ext->multiviewClusterCullingShader;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
         {
             VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT);
@@ -22541,6 +21945,15 @@ static inline void convert_VkPhysicalDeviceFeatures2_host_to_win32(const VkPhysi
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT:
+        {
+            VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT);
+            const VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *in_ext = (const VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT;
+            out_ext->pipelineLibraryGroupHandles = in_ext->pipelineLibraryGroupHandles;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM:
         {
             VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM);
@@ -22583,6 +21996,68 @@ static inline void convert_VkPhysicalDeviceFeatures2_host_to_win32(const VkPhysi
     }
 }
 
+static inline void convert_VkDrmFormatModifierPropertiesEXT_host_to_win32(const VkDrmFormatModifierPropertiesEXT *in, VkDrmFormatModifierPropertiesEXT32 *out)
+{
+    if (!in) return;
+
+    out->drmFormatModifier = in->drmFormatModifier;
+    out->drmFormatModifierPlaneCount = in->drmFormatModifierPlaneCount;
+    out->drmFormatModifierTilingFeatures = in->drmFormatModifierTilingFeatures;
+}
+
+static inline VkDrmFormatModifierPropertiesEXT *convert_VkDrmFormatModifierPropertiesEXT_array_win32_to_host(struct conversion_context *ctx, const VkDrmFormatModifierPropertiesEXT32 *in, uint32_t count)
+{
+    VkDrmFormatModifierPropertiesEXT *out;
+    if (!in || !count) return NULL;
+
+    out = conversion_context_alloc(ctx, count * sizeof(*out));
+
+    return out;
+}
+
+static inline void convert_VkDrmFormatModifierPropertiesEXT_array_host_to_win32(const VkDrmFormatModifierPropertiesEXT *in, VkDrmFormatModifierPropertiesEXT32 *out, uint32_t count)
+{
+    unsigned int i;
+
+    if (!in) return;
+
+    for (i = 0; i < count; i++)
+    {
+        convert_VkDrmFormatModifierPropertiesEXT_host_to_win32(&in[i], &out[i]);
+    }
+}
+
+static inline void convert_VkDrmFormatModifierProperties2EXT_host_to_win32(const VkDrmFormatModifierProperties2EXT *in, VkDrmFormatModifierProperties2EXT32 *out)
+{
+    if (!in) return;
+
+    out->drmFormatModifier = in->drmFormatModifier;
+    out->drmFormatModifierPlaneCount = in->drmFormatModifierPlaneCount;
+    out->drmFormatModifierTilingFeatures = in->drmFormatModifierTilingFeatures;
+}
+
+static inline VkDrmFormatModifierProperties2EXT *convert_VkDrmFormatModifierProperties2EXT_array_win32_to_host(struct conversion_context *ctx, const VkDrmFormatModifierProperties2EXT32 *in, uint32_t count)
+{
+    VkDrmFormatModifierProperties2EXT *out;
+    if (!in || !count) return NULL;
+
+    out = conversion_context_alloc(ctx, count * sizeof(*out));
+
+    return out;
+}
+
+static inline void convert_VkDrmFormatModifierProperties2EXT_array_host_to_win32(const VkDrmFormatModifierProperties2EXT *in, VkDrmFormatModifierProperties2EXT32 *out, uint32_t count)
+{
+    unsigned int i;
+
+    if (!in) return;
+
+    for (i = 0; i < count; i++)
+    {
+        convert_VkDrmFormatModifierProperties2EXT_host_to_win32(&in[i], &out[i]);
+    }
+}
+
 static inline void convert_VkFormatProperties2_win32_to_host(struct conversion_context *ctx, const VkFormatProperties232 *in, VkFormatProperties2 *out)
 {
     const VkBaseInStructure32 *in_header;
@@ -22597,6 +22072,17 @@ static inline void convert_VkFormatProperties2_win32_to_host(struct conversion_c
     {
         switch (in_header->sType)
         {
+        case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
+        {
+            VkDrmFormatModifierPropertiesListEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkDrmFormatModifierPropertiesListEXT32 *in_ext = (const VkDrmFormatModifierPropertiesListEXT32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+            out_ext->pNext = NULL;
+            out_ext->pDrmFormatModifierProperties = convert_VkDrmFormatModifierPropertiesEXT_array_win32_to_host(ctx, (VkDrmFormatModifierPropertiesEXT32 *)UlongToPtr(in_ext->pDrmFormatModifierProperties), in_ext->drmFormatModifierCount);
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT:
         {
             VkSubpassResolvePerformanceQueryEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -22615,19 +22101,19 @@ static inline void convert_VkFormatProperties2_win32_to_host(struct conversion_c
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT:
+        {
+            VkDrmFormatModifierPropertiesList2EXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkDrmFormatModifierPropertiesList2EXT32 *in_ext = (const VkDrmFormatModifierPropertiesList2EXT32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT;
+            out_ext->pNext = NULL;
+            out_ext->pDrmFormatModifierProperties = convert_VkDrmFormatModifierProperties2EXT_array_win32_to_host(ctx, (VkDrmFormatModifierProperties2EXT32 *)UlongToPtr(in_ext->pDrmFormatModifierProperties), in_ext->drmFormatModifierCount);
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -22646,6 +22132,16 @@ static inline void convert_VkFormatProperties2_host_to_win32(const VkFormatPrope
     {
         switch (in_header->sType)
         {
+        case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
+        {
+            VkDrmFormatModifierPropertiesListEXT32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT);
+            const VkDrmFormatModifierPropertiesListEXT *in_ext = (const VkDrmFormatModifierPropertiesListEXT *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT;
+            out_ext->drmFormatModifierCount = in_ext->drmFormatModifierCount;
+            convert_VkDrmFormatModifierPropertiesEXT_array_host_to_win32(in_ext->pDrmFormatModifierProperties, (VkDrmFormatModifierPropertiesEXT32 *)UlongToPtr(out_ext->pDrmFormatModifierProperties), in_ext->drmFormatModifierCount);
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT:
         {
             VkSubpassResolvePerformanceQueryEXT32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT);
@@ -22663,6 +22159,16 @@ static inline void convert_VkFormatProperties2_host_to_win32(const VkFormatPrope
             out_ext->linearTilingFeatures = in_ext->linearTilingFeatures;
             out_ext->optimalTilingFeatures = in_ext->optimalTilingFeatures;
             out_ext->bufferFeatures = in_ext->bufferFeatures;
+            out_header = (void *)out_ext;
+            break;
+        }
+        case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT:
+        {
+            VkDrmFormatModifierPropertiesList2EXT32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT);
+            const VkDrmFormatModifierPropertiesList2EXT *in_ext = (const VkDrmFormatModifierPropertiesList2EXT *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT;
+            out_ext->drmFormatModifierCount = in_ext->drmFormatModifierCount;
+            convert_VkDrmFormatModifierProperties2EXT_array_host_to_win32(in_ext->pDrmFormatModifierProperties, (VkDrmFormatModifierProperties2EXT32 *)UlongToPtr(out_ext->pDrmFormatModifierProperties), in_ext->drmFormatModifierCount);
             out_header = (void *)out_ext;
             break;
         }
@@ -22879,6 +22385,20 @@ static inline void convert_VkPhysicalDeviceImageFormatInfo2_win32_to_host(struct
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
+        {
+            VkPhysicalDeviceImageDrmFormatModifierInfoEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            const VkPhysicalDeviceImageDrmFormatModifierInfoEXT32 *in_ext = (const VkPhysicalDeviceImageDrmFormatModifierInfoEXT32 *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT;
+            out_ext->pNext = NULL;
+            out_ext->drmFormatModifier = in_ext->drmFormatModifier;
+            out_ext->sharingMode = in_ext->sharingMode;
+            out_ext->queueFamilyIndexCount = in_ext->queueFamilyIndexCount;
+            out_ext->pQueueFamilyIndices = (const uint32_t *)UlongToPtr(in_ext->pQueueFamilyIndices);
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
         {
             VkImageStencilUsageCreateInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -22926,18 +22446,7 @@ static inline void convert_VkPhysicalDeviceImageFormatInfo2_win32_to_host(struct
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -23003,18 +22512,7 @@ static inline void convert_VkImageFormatProperties2_win32_to_host(struct convers
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -23140,18 +22638,7 @@ static inline void convert_VkPhysicalDeviceMemoryProperties2_win32_to_host(struc
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -23796,6 +23283,15 @@ static inline void convert_VkPhysicalDeviceProperties2_win32_to_host(struct conv
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI:
+        {
+            VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI;
+            out_ext->pNext = NULL;
+            out_header->pNext = (void *)out_ext;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT:
         {
             VkPhysicalDeviceLineRasterizationPropertiesEXT *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
@@ -24002,18 +23498,7 @@ static inline void convert_VkPhysicalDeviceProperties2_win32_to_host(struct conv
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -24612,6 +24097,17 @@ static inline void convert_VkPhysicalDeviceProperties2_host_to_win32(const VkPhy
             out_header = (void *)out_ext;
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI:
+        {
+            VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI);
+            const VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI *in_ext = (const VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI *)in_header;
+            out_ext->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI;
+            memcpy(out_ext->maxWorkGroupCount, in_ext->maxWorkGroupCount, 3 * sizeof(uint32_t));
+            memcpy(out_ext->maxWorkGroupSize, in_ext->maxWorkGroupSize, 3 * sizeof(uint32_t));
+            out_ext->maxOutputClusterCount = in_ext->maxOutputClusterCount;
+            out_header = (void *)out_ext;
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT:
         {
             VkPhysicalDeviceLineRasterizationPropertiesEXT32 *out_ext = find_next_struct32(out_header, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT);
@@ -25082,18 +24578,7 @@ static inline void convert_VkQueueFamilyProperties2_win32_to_host(struct convers
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -25309,18 +24794,7 @@ static inline void convert_VkPhysicalDeviceSurfaceInfo2KHR_win32_to_unwrapped_ho
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -25377,18 +24851,7 @@ static inline void convert_VkSurfaceCapabilities2KHR_win32_to_host(struct conver
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -25483,18 +24946,7 @@ static inline void convert_VkPhysicalDeviceSurfaceInfo2KHR_win32_to_host(struct 
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -25524,18 +24976,7 @@ static inline void convert_VkSurfaceFormat2KHR_win32_to_host(struct conversion_c
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -26302,18 +25743,7 @@ static inline void convert_VkBindSparseInfo_win32_to_unwrapped_host(struct conve
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -26594,18 +26024,7 @@ static inline void convert_VkPresentInfoKHR_win32_to_unwrapped_host(struct conve
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -26782,111 +26201,7 @@ static inline void convert_VkSubmitInfo_win32_to_unwrapped_host(struct conversio
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
-            break;
-        }
-    }
-}
-
-void copy_VkSubmitInfo(struct conversion_context *ctx, const VkSubmitInfo *in, VkSubmitInfo *out)
-{
-    const VkBaseInStructure *in_header;
-    VkBaseOutStructure *out_header = (void *)out;
-
-    if (!in) return;
-
-    out->sType = in->sType;
-    out->pNext = NULL;
-    out->waitSemaphoreCount = in->waitSemaphoreCount;
-    MEMDUP(ctx, out->pWaitSemaphores, in->pWaitSemaphores, in->waitSemaphoreCount);
-    MEMDUP(ctx, out->pWaitDstStageMask, in->pWaitDstStageMask, in->waitSemaphoreCount);
-    out->commandBufferCount = in->commandBufferCount;
-    MEMDUP(ctx, out->pCommandBuffers, in->pCommandBuffers, in->commandBufferCount);
-    out->signalSemaphoreCount = in->signalSemaphoreCount;
-    MEMDUP(ctx, out->pSignalSemaphores, in->pSignalSemaphores, in->signalSemaphoreCount);
-
-    for (in_header = (void *)in->pNext; in_header; in_header = (void *)in_header->pNext)
-    {
-        switch (in_header->sType)
-        {
-        case VK_STRUCTURE_TYPE_D3D12_FENCE_SUBMIT_INFO_KHR:
-            break;
-        case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
-        {
-            VkDeviceGroupSubmitInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkDeviceGroupSubmitInfo *in_ext = (const VkDeviceGroupSubmitInfo *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO;
-            out_ext->pNext = NULL;
-            out_ext->waitSemaphoreCount = in_ext->waitSemaphoreCount;
-            MEMDUP(ctx, out_ext->pWaitSemaphoreDeviceIndices, in_ext->pWaitSemaphoreDeviceIndices, in_ext->waitSemaphoreCount);
-            out_ext->commandBufferCount = in_ext->commandBufferCount;
-            MEMDUP(ctx, out_ext->pCommandBufferDeviceMasks, in_ext->pCommandBufferDeviceMasks, in_ext->commandBufferCount);
-            out_ext->signalSemaphoreCount = in_ext->signalSemaphoreCount;
-            MEMDUP(ctx, out_ext->pSignalSemaphoreDeviceIndices, in_ext->pSignalSemaphoreDeviceIndices, in_ext->signalSemaphoreCount);
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
-        {
-            VkProtectedSubmitInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkProtectedSubmitInfo *in_ext = (const VkProtectedSubmitInfo *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO;
-            out_ext->pNext = NULL;
-            out_ext->protectedSubmit = in_ext->protectedSubmit;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
-        {
-            VkTimelineSemaphoreSubmitInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkTimelineSemaphoreSubmitInfo *in_ext = (const VkTimelineSemaphoreSubmitInfo *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-            out_ext->pNext = NULL;
-            out_ext->waitSemaphoreValueCount = in_ext->waitSemaphoreValueCount;
-            MEMDUP(ctx, out_ext->pWaitSemaphoreValues, in_ext->pWaitSemaphoreValues, in_ext->waitSemaphoreValueCount);
-            out_ext->signalSemaphoreValueCount = in_ext->signalSemaphoreValueCount;
-            MEMDUP(ctx, out_ext->pSignalSemaphoreValues, in_ext->pSignalSemaphoreValues, in_ext->signalSemaphoreValueCount);
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        case VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR:
-        {
-            VkPerformanceQuerySubmitInfoKHR *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkPerformanceQuerySubmitInfoKHR *in_ext = (const VkPerformanceQuerySubmitInfoKHR *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR;
-            out_ext->pNext = NULL;
-            out_ext->counterPassIndex = in_ext->counterPassIndex;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -27069,68 +26384,7 @@ static inline void convert_VkSubmitInfo2_win32_to_unwrapped_host(struct conversi
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
-            break;
-        }
-    }
-}
-
-void copy_VkSubmitInfo2(struct conversion_context *ctx, const VkSubmitInfo2 *in, VkSubmitInfo2 *out)
-{
-    const VkBaseInStructure *in_header;
-    VkBaseOutStructure *out_header = (void *)out;
-
-    if (!in) return;
-
-    out->sType = in->sType;
-    out->pNext = NULL;
-    out->flags = in->flags;
-    out->waitSemaphoreInfoCount = in->waitSemaphoreInfoCount;
-    MEMDUP(ctx, out->pWaitSemaphoreInfos, in->pWaitSemaphoreInfos, in->waitSemaphoreInfoCount);
-    out->commandBufferInfoCount = in->commandBufferInfoCount;
-    MEMDUP(ctx, out->pCommandBufferInfos, in->pCommandBufferInfos, in->commandBufferInfoCount);
-    out->signalSemaphoreInfoCount = in->signalSemaphoreInfoCount;
-    MEMDUP(ctx, out->pSignalSemaphoreInfos, in->pSignalSemaphoreInfos, in->signalSemaphoreInfoCount);
-
-    for (in_header = (void *)in->pNext; in_header; in_header = (void *)in_header->pNext)
-    {
-        switch (in_header->sType)
-        {
-        case VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR:
-        {
-            VkPerformanceQuerySubmitInfoKHR *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkPerformanceQuerySubmitInfoKHR *in_ext = (const VkPerformanceQuerySubmitInfoKHR *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR;
-            out_ext->pNext = NULL;
-            out_ext->counterPassIndex = in_ext->counterPassIndex;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
-        default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -27252,40 +26506,6 @@ static inline void convert_VkDebugUtilsObjectTagInfoEXT_win32_to_host(const VkDe
         FIXME("Unexpected pNext\n");
 }
 
-#ifdef _WIN64
-static inline const VkSwapchainKHR *convert_VkSwapchainKHR_array_win64_to_host(struct conversion_context *ctx, const VkSwapchainKHR *in, uint32_t count)
-{
-    VkSwapchainKHR *out;
-    unsigned int i;
-
-    if (!in || !count) return NULL;
-
-    out = conversion_context_alloc(ctx, count * sizeof(*out));
-    for (i = 0; i < count; i++)
-    {
-        out[i] = wine_swapchain_from_handle(in[i])->swapchain;
-    }
-
-    return out;
-}
-#endif /* _WIN64 */
-
-static inline const VkSwapchainKHR *convert_VkSwapchainKHR_array_win32_to_host(struct conversion_context *ctx, const VkSwapchainKHR *in, uint32_t count)
-{
-    VkSwapchainKHR *out;
-    unsigned int i;
-
-    if (!in || !count) return NULL;
-
-    out = conversion_context_alloc(ctx, count * sizeof(*out));
-    for (i = 0; i < count; i++)
-    {
-        out[i] = wine_swapchain_from_handle(in[i])->swapchain;
-    }
-
-    return out;
-}
-
 static inline void convert_VkHdrMetadataEXT_win32_to_host(const VkHdrMetadataEXT32 *in, VkHdrMetadataEXT *out)
 {
     if (!in) return;
@@ -27320,7 +26540,7 @@ static inline const VkHdrMetadataEXT *convert_VkHdrMetadataEXT_array_win32_to_ho
     return out;
 }
 
-static inline void convert_VkSemaphoreSignalInfo_win32_to_unwrapped_host(const VkSemaphoreSignalInfo32 *in, VkSemaphoreSignalInfo *out)
+static inline void convert_VkSemaphoreSignalInfo_win32_to_host(const VkSemaphoreSignalInfo32 *in, VkSemaphoreSignalInfo *out)
 {
     if (!in) return;
 
@@ -27441,18 +26661,7 @@ static inline void convert_VkDebugUtilsMessengerCallbackDataEXT_win32_to_host(st
             break;
         }
         default:
-            if ((in_header->sType >> 16) == 0x7ead)
-            {
-                VkBaseOutStructure *out_ext = conversion_context_alloc(ctx, 32);
-                memcpy(out_ext, in_header, 32);
-                out_ext->pNext = NULL;
-                out_header->pNext = (void *)out_ext;
-                out_header = (void *)out_ext;
-            }
-            else
-            {
-                FIXME("Unhandled sType %u.\n", in_header->sType);
-            }
+            FIXME("Unhandled sType %u.\n", in_header->sType);
             break;
         }
     }
@@ -29681,6 +28890,49 @@ static void thunk32_vkCmdDraw(void *args)
     } *params = args;
 
     wine_cmd_buffer_from_handle((VkCommandBuffer)UlongToPtr(params->commandBuffer))->device->funcs.p_vkCmdDraw(wine_cmd_buffer_from_handle((VkCommandBuffer)UlongToPtr(params->commandBuffer))->command_buffer, params->vertexCount, params->instanceCount, params->firstVertex, params->firstInstance);
+}
+
+#ifdef _WIN64
+static void thunk64_vkCmdDrawClusterHUAWEI(void *args)
+{
+    struct vkCmdDrawClusterHUAWEI_params *params = args;
+
+    wine_cmd_buffer_from_handle(params->commandBuffer)->device->funcs.p_vkCmdDrawClusterHUAWEI(wine_cmd_buffer_from_handle(params->commandBuffer)->command_buffer, params->groupCountX, params->groupCountY, params->groupCountZ);
+}
+#endif /* _WIN64 */
+
+static void thunk32_vkCmdDrawClusterHUAWEI(void *args)
+{
+    struct
+    {
+        PTR32 commandBuffer;
+        uint32_t groupCountX;
+        uint32_t groupCountY;
+        uint32_t groupCountZ;
+    } *params = args;
+
+    wine_cmd_buffer_from_handle((VkCommandBuffer)UlongToPtr(params->commandBuffer))->device->funcs.p_vkCmdDrawClusterHUAWEI(wine_cmd_buffer_from_handle((VkCommandBuffer)UlongToPtr(params->commandBuffer))->command_buffer, params->groupCountX, params->groupCountY, params->groupCountZ);
+}
+
+#ifdef _WIN64
+static void thunk64_vkCmdDrawClusterIndirectHUAWEI(void *args)
+{
+    struct vkCmdDrawClusterIndirectHUAWEI_params *params = args;
+
+    wine_cmd_buffer_from_handle(params->commandBuffer)->device->funcs.p_vkCmdDrawClusterIndirectHUAWEI(wine_cmd_buffer_from_handle(params->commandBuffer)->command_buffer, params->buffer, params->offset);
+}
+#endif /* _WIN64 */
+
+static void thunk32_vkCmdDrawClusterIndirectHUAWEI(void *args)
+{
+    struct
+    {
+        PTR32 commandBuffer;
+        VkBuffer DECLSPEC_ALIGN(8) buffer;
+        VkDeviceSize DECLSPEC_ALIGN(8) offset;
+    } *params = args;
+
+    wine_cmd_buffer_from_handle((VkCommandBuffer)UlongToPtr(params->commandBuffer))->device->funcs.p_vkCmdDrawClusterIndirectHUAWEI(wine_cmd_buffer_from_handle((VkCommandBuffer)UlongToPtr(params->commandBuffer))->command_buffer, params->buffer, params->offset);
 }
 
 #ifdef _WIN64
@@ -41899,15 +41151,10 @@ static NTSTATUS thunk32_vkSetEvent(void *args)
 static NTSTATUS thunk64_vkSetHdrMetadataEXT(void *args)
 {
     struct vkSetHdrMetadataEXT_params *params = args;
-    const VkSwapchainKHR *pSwapchains_host;
-    struct conversion_context ctx;
 
     TRACE("%p, %u, %p, %p\n", params->device, params->swapchainCount, params->pSwapchains, params->pMetadata);
 
-    init_conversion_context(&ctx);
-    pSwapchains_host = convert_VkSwapchainKHR_array_win64_to_host(&ctx, params->pSwapchains, params->swapchainCount);
-    wine_device_from_handle(params->device)->funcs.p_vkSetHdrMetadataEXT(wine_device_from_handle(params->device)->device, params->swapchainCount, pSwapchains_host, params->pMetadata);
-    free_conversion_context(&ctx);
+    wine_device_from_handle(params->device)->funcs.p_vkSetHdrMetadataEXT(wine_device_from_handle(params->device)->device, params->swapchainCount, params->pSwapchains, params->pMetadata);
     return STATUS_SUCCESS;
 }
 #endif /* _WIN64 */
@@ -41921,16 +41168,14 @@ static NTSTATUS thunk32_vkSetHdrMetadataEXT(void *args)
         PTR32 pSwapchains;
         PTR32 pMetadata;
     } *params = args;
-    const VkSwapchainKHR *pSwapchains_host;
     const VkHdrMetadataEXT *pMetadata_host;
     struct conversion_context ctx;
 
     TRACE("%#x, %u, %#x, %#x\n", params->device, params->swapchainCount, params->pSwapchains, params->pMetadata);
 
     init_conversion_context(&ctx);
-    pSwapchains_host = convert_VkSwapchainKHR_array_win32_to_host(&ctx, (const VkSwapchainKHR *)UlongToPtr(params->pSwapchains), params->swapchainCount);
     pMetadata_host = convert_VkHdrMetadataEXT_array_win32_to_host(&ctx, (const VkHdrMetadataEXT32 *)UlongToPtr(params->pMetadata), params->swapchainCount);
-    wine_device_from_handle((VkDevice)UlongToPtr(params->device))->funcs.p_vkSetHdrMetadataEXT(wine_device_from_handle((VkDevice)UlongToPtr(params->device))->device, params->swapchainCount, pSwapchains_host, pMetadata_host);
+    wine_device_from_handle((VkDevice)UlongToPtr(params->device))->funcs.p_vkSetHdrMetadataEXT(wine_device_from_handle((VkDevice)UlongToPtr(params->device))->device, params->swapchainCount, (const VkSwapchainKHR *)UlongToPtr(params->pSwapchains), pMetadata_host);
     free_conversion_context(&ctx);
     return STATUS_SUCCESS;
 }
@@ -42540,6 +41785,7 @@ static const char * const vk_device_extensions[] =
     "VK_EXT_pci_bus_info",
     "VK_EXT_pipeline_creation_cache_control",
     "VK_EXT_pipeline_creation_feedback",
+    "VK_EXT_pipeline_library_group_handles",
     "VK_EXT_pipeline_properties",
     "VK_EXT_pipeline_protected_access",
     "VK_EXT_pipeline_robustness",
@@ -42580,6 +41826,7 @@ static const char * const vk_device_extensions[] =
     "VK_GOOGLE_decorate_string",
     "VK_GOOGLE_hlsl_functionality1",
     "VK_GOOGLE_user_type",
+    "VK_HUAWEI_cluster_culling_shader",
     "VK_HUAWEI_invocation_mask",
     "VK_HUAWEI_subpass_shading",
     "VK_IMG_filter_cubic",
@@ -42854,6 +42101,8 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
     (void *)thunk64_vkCmdDispatchBaseKHR,
     (void *)thunk64_vkCmdDispatchIndirect,
     (void *)thunk64_vkCmdDraw,
+    (void *)thunk64_vkCmdDrawClusterHUAWEI,
+    (void *)thunk64_vkCmdDrawClusterIndirectHUAWEI,
     (void *)thunk64_vkCmdDrawIndexed,
     (void *)thunk64_vkCmdDrawIndexedIndirect,
     (void *)thunk64_vkCmdDrawIndexedIndirectCount,
@@ -43404,6 +42653,8 @@ const unixlib_entry_t __wine_unix_call_funcs[] =
     (void *)thunk32_vkCmdDispatchBaseKHR,
     (void *)thunk32_vkCmdDispatchIndirect,
     (void *)thunk32_vkCmdDraw,
+    (void *)thunk32_vkCmdDrawClusterHUAWEI,
+    (void *)thunk32_vkCmdDrawClusterIndirectHUAWEI,
     (void *)thunk32_vkCmdDrawIndexed,
     (void *)thunk32_vkCmdDrawIndexedIndirect,
     (void *)thunk32_vkCmdDrawIndexedIndirectCount,

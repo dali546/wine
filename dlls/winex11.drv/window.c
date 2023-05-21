@@ -1177,7 +1177,7 @@ static void update_net_wm_fullscreen_monitors( struct x11drv_win_data *data )
     if (!(data->net_wm_state & (1 << NET_WM_STATE_FULLSCREEN)) || is_virtual_desktop())
         return;
 
-    /* If the current display device handler can not detect dynamic device changes, do not use
+    /* If the current display device handler cannot detect dynamic device changes, do not use
      * _NET_WM_FULLSCREEN_MONITORS because xinerama_get_fullscreen_monitors() may report wrong
      * indices because of stale xinerama monitor information */
     if (!X11DRV_DisplayDevices_SupportEventHandlers())
@@ -2490,7 +2490,7 @@ HWND create_foreign_window( Display *display, Window xwin )
     unsigned int nchildren;
     XWindowAttributes attr;
     UINT style = WS_CLIPCHILDREN;
-    UNICODE_STRING class_name;
+    UNICODE_STRING class_name = RTL_CONSTANT_STRING( classW );
 
     if (!class_registered)
     {
@@ -2501,7 +2501,6 @@ HWND create_foreign_window( Display *display, Window xwin )
         class.cbSize        = sizeof(class);
         class.lpfnWndProc   = client_foreign_window_proc;
         class.lpszClassName = classW;
-        RtlInitUnicodeString( &class_name, classW );
         if (!NtUserRegisterClassExWOW( &class, &class_name, &version, NULL, 0, 0, NULL ) &&
             RtlGetLastWin32Error() != ERROR_CLASS_ALREADY_EXISTS)
         {
@@ -3337,8 +3336,8 @@ void X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags,
 /* check if the window icon should be hidden (i.e. moved off-screen) */
 static BOOL hide_icon( struct x11drv_win_data *data )
 {
-    static const WCHAR trayW[] = {'S','h','e','l','l','_','T','r','a','y','W','n','d'};
-    UNICODE_STRING str = { sizeof(trayW), sizeof(trayW), (WCHAR *)trayW };
+    static const WCHAR trayW[] = {'S','h','e','l','l','_','T','r','a','y','W','n','d',0};
+    UNICODE_STRING str = RTL_CONSTANT_STRING( trayW );
 
     if (data->managed) return TRUE;
     /* hide icons in desktop mode when the taskbar is active */

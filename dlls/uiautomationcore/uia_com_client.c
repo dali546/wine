@@ -23,10 +23,14 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(uiautomation);
 
+/*
+ * IUIAutomationElement interface.
+ */
 struct uia_element {
     IUIAutomationElement9 IUIAutomationElement9_iface;
     LONG ref;
 
+    BOOL from_cui8;
     HUIANODE node;
 };
 
@@ -35,526 +39,15 @@ static inline struct uia_element *impl_from_IUIAutomationElement9(IUIAutomationE
     return CONTAINING_RECORD(iface, struct uia_element, IUIAutomationElement9_iface);
 }
 
-enum uia_com_event_types {
-    UIA_COM_FOCUS_EVENT_TYPE,
-    UIA_COM_EVENT_TYPE_COUNT,
-};
-
-struct uia_com_event {
-    struct list main_event_list_entry;
-    struct list event_type_list_entry;
-
-    const struct uia_event_info *event_info;
-    struct UiaCacheRequest cache_req;
-    IUIAutomationElement *elem;
-    HUIAEVENT uia_event;
-
-    int event_type;
-    union {
-        IUnknown *handler;
-        IUIAutomationFocusChangedEventHandler *focus_handler;
-    } u;
-};
-
-/*
- * UI Automation COM client event thread functions.
- */
-struct uia_com_event_thread
-{
-    HANDLE hthread;
-    HWND hwnd;
-    LONG ref;
-
-    struct list *winevent_queue;
-    struct list events_list;
-    struct list event_type_list[UIA_COM_EVENT_TYPE_COUNT];
-};
-
-static struct uia_com_event_thread com_event_thread;
-static CRITICAL_SECTION com_event_thread_cs;
-static CRITICAL_SECTION_DEBUG com_event_thread_cs_debug =
-{
-    0, 0, &com_event_thread_cs,
-    { &com_event_thread_cs_debug.ProcessLocksList, &com_event_thread_cs_debug.ProcessLocksList },
-      0, 0, { (DWORD_PTR)(__FILE__ ": com_event_thread_cs") }
-};
-static CRITICAL_SECTION com_event_thread_cs = { &com_event_thread_cs_debug, -1, 0, 0, 0, 0 };
-
-#define WM_UIA_COM_EVENT_THREAD_PROCESS_WINEVENT (WM_USER + 1)
-#define WM_UIA_COM_EVENT_THREAD_STOP (WM_USER + 2)
-static LRESULT CALLBACK uia_com_event_thread_msg_proc(HWND hwnd, UINT msg, WPARAM wparam,
-        LPARAM lparam)
-{
-    switch (msg)
-    {
-    default:
-        break;
-    }
-
-    return DefWindowProcW(hwnd, msg, wparam, lparam);
-}
-
-struct uia_queue_winevent
-{
-    DWORD event_id;
-    HWND hwnd;
-    LONG objid;
-    LONG cid;
-    DWORD thread;
-    DWORD event_time;
-
-    struct list winevent_queue_entry;
-};
-
-void CALLBACK uia_com_client_winevent_proc(HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG objid, LONG cid,
-        DWORD thread, DWORD event_time)
-{
-    struct uia_queue_winevent *queue_winevent = heap_alloc_zero(sizeof(*queue_winevent));
-
-    TRACE("%p, %ld, %p, %ld, %ld, %ld, %ld\n", hook, event, hwnd, objid, cid, thread, event_time);
-
-    if (!queue_winevent)
-    {
-        ERR("Failed to allocate queue_winevent\n");
-        return;
-    }
-
-    queue_winevent->event_id = event;
-    queue_winevent->hwnd = hwnd;
-    queue_winevent->objid = objid;
-    queue_winevent->cid = cid;
-    queue_winevent->thread = thread;
-    queue_winevent->event_time = event_time;
-    EnterCriticalSection(&com_event_thread_cs);
-    if (com_event_thread.winevent_queue)
-        list_add_tail(com_event_thread.winevent_queue, &queue_winevent->winevent_queue_entry);
-    else
-        heap_free(queue_winevent);
-    LeaveCriticalSection(&com_event_thread_cs);
-
-    PostMessageW(com_event_thread.hwnd, WM_UIA_COM_EVENT_THREAD_PROCESS_WINEVENT, 0, 0);
-}
-
-static const WCHAR *ignored_window_classes[] = {
-    L"OleMainThreadWndClass",
-    L"IME",
-    L"Message",
-};
-
-static BOOL is_ignored_hwnd(HWND hwnd)
-{
-    WCHAR buf[256] = { 0 };
-
-    if (GetClassNameW(hwnd, buf, ARRAY_SIZE(buf)))
-    {
-        int i;
-
-        for (i = 0; i < ARRAY_SIZE(ignored_window_classes); i++)
-        {
-            if (!lstrcmpW(buf, ignored_window_classes[i]))
-                return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static HRESULT uia_com_event_thread_handle_winevent(struct uia_queue_winevent *winevent)
-{
-    switch (winevent->event_id)
-    {
-    case EVENT_OBJECT_CREATE:
-    {
-        struct list *cursor, *cursor2;
-
-        if (winevent->objid != OBJID_WINDOW)
-            break;
-
-        LIST_FOR_EACH_SAFE(cursor, cursor2, &com_event_thread.events_list)
-        {
-            struct uia_com_event *event = LIST_ENTRY(cursor, struct uia_com_event, main_event_list_entry);
-            HRESULT hr;
-
-            hr = UiaEventAddWindow(event->uia_event, winevent->hwnd);
-            if (FAILED(hr))
-                WARN("UiaEventAddWindow failed with hr %#lx\n", hr);
-        }
-        break;
-    }
-
-    case EVENT_OBJECT_FOCUS:
-    {
-        IRawElementProviderSimple *elprov = NULL;
-        HRESULT hr;
-
-        if (winevent->cid == CHILDID_SELF)
-        {
-            hr = create_base_hwnd_provider(winevent->hwnd, &elprov);
-            if (FAILED(hr))
-                WARN("Failed to create BaseHwnd provider with hr %#lx\n", hr);
-        }
-        else
-        {
-            IAccessible *acc = NULL;
-            VARIANT v;
-
-            hr = AccessibleObjectFromEvent(winevent->hwnd, winevent->objid, winevent->cid, &acc, &v);
-            if (FAILED(hr) || !acc)
-                break;
-
-            hr = create_msaa_provider(acc, V_I4(&v), winevent->hwnd, FALSE, TRUE, &elprov);
-            IAccessible_Release(acc);
-            if (FAILED(hr))
-                WARN("Failed to create MSAA proxy provider with hr %#lx\n", hr);
-        }
-
-        if (!elprov)
-            break;
-
-        hr = UiaRaiseAutomationEvent(elprov, UIA_AutomationFocusChangedEventId);
-        if (FAILED(hr))
-            WARN("Failed to raise event with hr %#lx\n", hr);
-
-        IRawElementProviderSimple_Release(elprov);
-        break;
-    }
-
-    default:
-        break;
-    }
-
-    return S_OK;
-}
-
-static HRESULT uia_com_event_thread_process_winevent_queue(struct list *winevent_queue)
-{
-    struct uia_queue_winevent prev_winevent = { 0 };
-    struct list *cursor, *cursor2;
-
-    if (list_empty(winevent_queue))
-        return S_OK;
-
-    LIST_FOR_EACH_SAFE(cursor, cursor2, winevent_queue)
-    {
-        struct uia_queue_winevent *winevent = LIST_ENTRY(cursor, struct uia_queue_winevent, winevent_queue_entry);
-        HRESULT hr;
-
-        list_remove(cursor);
-        TRACE("Processing: event_id %ld, hwnd %p, objid %ld, cid %ld, thread %ld, event_time %ld\n", winevent->event_id,
-                winevent->hwnd,winevent->objid, winevent->cid, winevent->thread, winevent->event_time);
-
-        if (is_ignored_hwnd(winevent->hwnd) || ((prev_winevent.event_id == winevent->event_id) &&
-                    (prev_winevent.hwnd == winevent->hwnd) && (prev_winevent.objid == winevent->objid) &&
-                    (prev_winevent.cid == winevent->cid) && (prev_winevent.thread == winevent->thread) &&
-                    (prev_winevent.event_time == winevent->event_time)))
-        {
-            heap_free(winevent);
-            continue;
-        }
-
-        hr = uia_com_event_thread_handle_winevent(winevent);
-        if (FAILED(hr))
-            WARN("Failed to handle winevent, hr %#lx\n", hr);
-        prev_winevent = *winevent;
-        heap_free(winevent);
-    }
-
-    return S_OK;
-}
-
-static DWORD WINAPI uia_com_event_thread_proc(void *arg)
-{
-    HANDLE initialized_event = arg;
-    struct list winevent_queue;
-    HWINEVENTHOOK hook;
-    HWND hwnd;
-    MSG msg;
-
-    list_init(&winevent_queue);
-    CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    hwnd = CreateWindowW(L"Message", NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
-    if (!hwnd)
-    {
-        WARN("CreateWindow failed: %ld\n", GetLastError());
-        CoUninitialize();
-        FreeLibraryAndExitThread(huia_module, 1);
-    }
-
-    SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)uia_com_event_thread_msg_proc);
-    com_event_thread.hwnd = hwnd;
-    com_event_thread.winevent_queue = &winevent_queue;
-    hook = SetWinEventHook(EVENT_MIN, EVENT_MAX, 0, uia_com_client_winevent_proc, 0, 0,
-            WINEVENT_OUTOFCONTEXT);
-
-    /* Initialization complete, thread can now process window messages. */
-    SetEvent(initialized_event);
-    TRACE("Event thread started.\n");
-    while (GetMessageW(&msg, NULL, 0, 0))
-    {
-        if (msg.message == WM_UIA_COM_EVENT_THREAD_STOP || msg.message == WM_UIA_COM_EVENT_THREAD_PROCESS_WINEVENT)
-        {
-            HRESULT hr;
-
-            hr = uia_com_event_thread_process_winevent_queue(&winevent_queue);
-            if (FAILED(hr))
-                WARN("Process winevent queue failed with hr %#lx\n", hr);
-
-            if (msg.message == WM_UIA_COM_EVENT_THREAD_STOP)
-                break;
-        }
-
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-
-    TRACE("Shutting down UI Automation COM event thread.\n");
-
-    UnhookWinEvent(hook);
-    DestroyWindow(hwnd);
-    CoUninitialize();
-    FreeLibraryAndExitThread(huia_module, 0);
-}
-
-static BOOL uia_start_com_event_thread(void)
-{
-    BOOL started = TRUE;
-
-    EnterCriticalSection(&com_event_thread_cs);
-    if (++com_event_thread.ref == 1)
-    {
-        HANDLE ready_event = NULL;
-        HANDLE events[2];
-        HMODULE hmodule;
-        DWORD wait_obj;
-        int i;
-
-        /* Increment DLL reference count. */
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                (const WCHAR *)uia_start_com_event_thread, &hmodule);
-
-        list_init(&com_event_thread.events_list);
-        for (i = 0; i < UIA_COM_EVENT_TYPE_COUNT; i++)
-            list_init(&com_event_thread.event_type_list[i]);
-
-        events[0] = ready_event = CreateEventW(NULL, FALSE, FALSE, NULL);
-        if (!(com_event_thread.hthread = CreateThread(NULL, 0, uia_com_event_thread_proc,
-                ready_event, 0, NULL)))
-        {
-            FreeLibrary(hmodule);
-            started = FALSE;
-            goto exit;
-        }
-
-        events[1] = com_event_thread.hthread;
-        wait_obj = WaitForMultipleObjects(2, events, FALSE, INFINITE);
-        if (wait_obj != WAIT_OBJECT_0)
-        {
-            CloseHandle(com_event_thread.hthread);
-            started = FALSE;
-        }
-
-exit:
-        if (ready_event)
-            CloseHandle(ready_event);
-        if (!started)
-            memset(&com_event_thread, 0, sizeof(com_event_thread));
-    }
-
-    LeaveCriticalSection(&com_event_thread_cs);
-    return started;
-}
-
-static void uia_stop_com_event_thread(void)
-{
-    EnterCriticalSection(&com_event_thread_cs);
-    if (!--com_event_thread.ref)
-    {
-        PostMessageW(com_event_thread.hwnd, WM_UIA_COM_EVENT_THREAD_STOP, 0, 0);
-        CloseHandle(com_event_thread.hthread);
-        memset(&com_event_thread, 0, sizeof(com_event_thread));
-    }
-    LeaveCriticalSection(&com_event_thread_cs);
-}
-
-static HRESULT create_uia_element(IUIAutomationElement **iface, HUIANODE node);
-static void WINAPI uia_com_event_callback(struct UiaEventArgs *args, SAFEARRAY *req_data, BSTR tree_struct)
-{
-    struct uia_event_args *event_args = impl_from_UiaEventArgs(args);
-    struct uia_com_event *com_event;
-    IUIAutomationElement *elem;
-    LONG idx[2] = { 0 };
-    HUIANODE node;
-    HRESULT hr;
-    VARIANT v;
-
-    TRACE("%p, %p, %p\n", args, req_data, tree_struct);
-
-    hr = SafeArrayGetElement(req_data, idx, &v);
-    if (FAILED(hr))
-        WARN("%d: hr %#lx\n", __LINE__, hr);
-
-    hr = UiaHUiaNodeFromVariant(&v, &node);
-    if (FAILED(hr))
-        WARN("%d: hr %#lx\n", __LINE__, hr);
-    VariantClear(&v);
-
-    hr = create_uia_element(&elem, node);
-    if (FAILED(hr))
-        WARN("%d: hr %#lx\n", __LINE__, hr);
-
-    com_event = (struct uia_com_event *)event_args->event_handler_data;
-    switch (args->Type)
-    {
-    case EventArgsType_Simple:
-        if (args->EventId == UIA_AutomationFocusChangedEventId)
-            hr = IUIAutomationFocusChangedEventHandler_HandleFocusChangedEvent(com_event->u.focus_handler, elem);
-        break;
-
-    case EventArgsType_PropertyChanged:
-    case EventArgsType_StructureChanged:
-    case EventArgsType_AsyncContentLoaded:
-    case EventArgsType_WindowClosed:
-    case EventArgsType_TextEditTextChanged:
-    case EventArgsType_Changes:
-    default:
-        break;
-    }
-
-    if (FAILED(hr))
-        WARN("Event handler failed with hr %#lx\n", hr);
-
-    IUIAutomationElement_Release(elem);
-    SafeArrayDestroy(req_data);
-    SysFreeString(tree_struct);
-}
-
-static const struct UiaCondition UiaTrueCondition  = { ConditionType_True };
-static const struct UiaCacheRequest DefaultCacheReq = {
-    (struct UiaCondition *)&UiaTrueCondition,
-    TreeScope_Element,
-    NULL, 0,
-    NULL, 0,
-    AutomationElementMode_Full,
-};
-
-static HRESULT add_uia_com_event(const struct uia_event_info *event_info, int com_event_type,
-        IUIAutomationElement *elem, IUnknown *handler, int scope, int *prop_ids, int prop_ids_count,
-        struct UiaCacheRequest *cache_req)
-{
-    struct uia_com_event *com_event = heap_alloc_zero(sizeof(*com_event));
-    struct uia_element *element;
-    HUIAEVENT event;
-    HRESULT hr;
-
-    element = impl_from_IUIAutomationElement9((IUIAutomationElement9 *)elem);
-    hr = uia_add_event(element->node, event_info->event_id, (UiaEventCallback *)uia_com_event_callback, scope,
-            prop_ids, prop_ids_count, cache_req, (void *)com_event, &event);
-    if (FAILED(hr))
-    {
-        heap_free(com_event);
-        return hr;
-    }
-
-    if (!uia_start_com_event_thread())
-    {
-        ERR("Failed to start COM event thread!\n");
-        heap_free(com_event);
-        return E_FAIL;
-    }
-
-    switch (com_event_type)
-    {
-    case UIA_COM_FOCUS_EVENT_TYPE:
-        hr = IUnknown_QueryInterface(handler, &IID_IUIAutomationFocusChangedEventHandler,
-                (void **)&com_event->u.focus_handler);
-        break;
-
-    default:
-        break;
-    }
-
-    if (FAILED(hr))
-    {
-        ERR("Failed to get event handler interface, hr %#lx\n", hr);
-        uia_stop_com_event_thread();
-        heap_free(com_event);
-        return hr;
-    }
-
-    com_event->cache_req = *cache_req;
-    com_event->uia_event = event;
-    com_event->event_info = event_info;
-    list_add_tail(&com_event_thread.events_list, &com_event->main_event_list_entry);
-    list_add_tail(&com_event_thread.event_type_list[com_event_type], &com_event->event_type_list_entry);
-
-    return S_OK;
-}
-
-static void remove_uia_com_event(struct uia_com_event *event)
-{
-    HRESULT hr;
-
-    list_remove(&event->main_event_list_entry);
-    list_remove(&event->event_type_list_entry);
-    hr = UiaRemoveEvent(event->uia_event);
-    if (FAILED(hr))
-        WARN("UiaRemoveEvent failed with hr %#lx\n", hr);
-
-    if (event->elem)
-        IUIAutomationElement_Release(event->elem);
-    IUnknown_Release(event->u.handler);
-    heap_free(event);
-
-    uia_stop_com_event_thread();
-}
-
-static HRESULT find_uia_com_event(const struct uia_event_info *event_info, int com_event_type,
-        IUIAutomationElement *elem, IUnknown *handler, struct uia_com_event **out_event)
-{
-    struct list *cursor, *cursor2;
-    IUnknown *unk, *unk2;
-    HRESULT hr;
-
-    *out_event = NULL;
-    hr = IUnknown_QueryInterface(handler, &IID_IUnknown, (void **)&unk);
-    if (FAILED(hr) || !unk)
-        return hr;
-
-    LIST_FOR_EACH_SAFE(cursor, cursor2, &com_event_thread.event_type_list[com_event_type])
-    {
-        struct uia_com_event *event = LIST_ENTRY(cursor, struct uia_com_event, event_type_list_entry);
-        HRESULT hr;
-
-        if (event->event_info != event_info)
-            continue;
-
-        hr = IUnknown_QueryInterface(event->u.handler, &IID_IUnknown, (void **)&unk2);
-        if (FAILED(hr) || !unk2)
-            continue;
-
-        if ((unk == unk2) && (!elem || (elem == event->elem)))
-            *out_event = event;
-
-        IUnknown_Release(unk2);
-        if (*out_event)
-            break;
-    }
-
-    IUnknown_Release(unk);
-
-    return S_OK;
-}
-
-/*
- * IUIAutomationElement interface.
- */
 static HRESULT WINAPI uia_element_QueryInterface(IUIAutomationElement9 *iface, REFIID riid, void **ppv)
 {
-    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IUIAutomationElement) ||
-            IsEqualIID(riid, &IID_IUIAutomationElement2) || IsEqualIID(riid, &IID_IUIAutomationElement3) ||
+    struct uia_element *element = impl_from_IUIAutomationElement9(iface);
+
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IUIAutomationElement) || (element->from_cui8 &&
+            (IsEqualIID(riid, &IID_IUIAutomationElement2) || IsEqualIID(riid, &IID_IUIAutomationElement3) ||
             IsEqualIID(riid, &IID_IUIAutomationElement4) || IsEqualIID(riid, &IID_IUIAutomationElement5) ||
             IsEqualIID(riid, &IID_IUIAutomationElement6) || IsEqualIID(riid, &IID_IUIAutomationElement7) ||
-            IsEqualIID(riid, &IID_IUIAutomationElement8) || IsEqualIID(riid, &IID_IUIAutomationElement9))
+            IsEqualIID(riid, &IID_IUIAutomationElement8) || IsEqualIID(riid, &IID_IUIAutomationElement9))))
         *ppv = iface;
     else
         return E_NOINTERFACE;
@@ -637,26 +130,48 @@ static HRESULT WINAPI uia_element_BuildUpdatedCache(IUIAutomationElement9 *iface
 static HRESULT WINAPI uia_element_GetCurrentPropertyValue(IUIAutomationElement9 *iface, PROPERTYID prop_id,
         VARIANT *ret_val)
 {
-    TRACE("%p, %d, %p\n", iface, prop_id, ret_val);
-
-    return IUIAutomationElement9_GetCurrentPropertyValueEx(iface, prop_id, FALSE, ret_val);
+    FIXME("%p: stub\n", iface);
+    return E_NOTIMPL;
 }
 
+static HRESULT create_uia_element(IUIAutomationElement **iface, BOOL from_cui8, HUIANODE node);
 static HRESULT WINAPI uia_element_GetCurrentPropertyValueEx(IUIAutomationElement9 *iface, PROPERTYID prop_id,
         BOOL ignore_default, VARIANT *ret_val)
 {
+    const struct uia_prop_info *prop_info = uia_prop_info_from_id(prop_id);
     struct uia_element *element = impl_from_IUIAutomationElement9(iface);
     HRESULT hr;
-    VARIANT v;
 
     TRACE("%p, %d, %d, %p\n", iface, prop_id, ignore_default, ret_val);
 
     if (!ignore_default)
-        FIXME("Default property values currently unimplemented\n");
+        FIXME("Default values currently unimplemented\n");
 
-    VariantInit(&v);
-    hr = UiaGetPropertyValue(element->node, prop_id, &v);
-    *ret_val = v;
+    VariantInit(ret_val);
+    if (prop_info->type == UIAutomationType_ElementArray)
+    {
+        FIXME("ElementArray property types currently unsupported for IUIAutomationElement\n");
+        return E_NOTIMPL;
+    }
+
+    hr = UiaGetPropertyValue(element->node, prop_id, ret_val);
+    if ((prop_info->type == UIAutomationType_Element) && (V_VT(ret_val) != VT_UNKNOWN))
+    {
+        IUIAutomationElement *out_elem;
+        HUIANODE node;
+
+        hr = UiaHUiaNodeFromVariant(ret_val, &node);
+        VariantClear(ret_val);
+        if (FAILED(hr))
+            return hr;
+
+        hr = create_uia_element(&out_elem, element->from_cui8, node);
+        if (SUCCEEDED(hr))
+        {
+            V_VT(ret_val) = VT_UNKNOWN;
+            V_UNKNOWN(ret_val) = (IUnknown *)out_elem;
+        }
+    }
 
     return hr;
 }
@@ -725,18 +240,25 @@ static HRESULT WINAPI uia_element_get_CurrentProcessId(IUIAutomationElement9 *if
 static HRESULT WINAPI uia_element_get_CurrentControlType(IUIAutomationElement9 *iface, CONTROLTYPEID *ret_val)
 {
     struct uia_element *element = impl_from_IUIAutomationElement9(iface);
+    const struct uia_control_type_info *control_type_info = NULL;
     HRESULT hr;
     VARIANT v;
 
-    TRACE("%p, %p\n", element, ret_val);
+    TRACE("%p, %p\n", iface, ret_val);
 
-    *ret_val = 0;
     VariantInit(&v);
+    *ret_val = UIA_CustomControlTypeId;
     hr = UiaGetPropertyValue(element->node, UIA_ControlTypePropertyId, &v);
     if (SUCCEEDED(hr) && V_VT(&v) == VT_I4)
-        *ret_val = V_I4(&v);
+    {
+        if ((control_type_info = uia_control_type_info_from_id(V_I4(&v))))
+            *ret_val = control_type_info->control_type_id;
+        else
+            WARN("Provider returned invalid control type ID %ld\n", V_I4(&v));
+    }
 
-    return S_OK;
+    VariantClear(&v);
+    return hr;
 }
 
 static HRESULT WINAPI uia_element_get_CurrentLocalizedControlType(IUIAutomationElement9 *iface, BSTR *ret_val)
@@ -751,15 +273,17 @@ static HRESULT WINAPI uia_element_get_CurrentName(IUIAutomationElement9 *iface, 
     HRESULT hr;
     VARIANT v;
 
-    TRACE("%p, %p\n", element, ret_val);
+    TRACE("%p, %p\n", iface, ret_val);
 
-    *ret_val = NULL;
     VariantInit(&v);
     hr = UiaGetPropertyValue(element->node, UIA_NamePropertyId, &v);
-    if (SUCCEEDED(hr) && V_VT(&v) == VT_BSTR)
-        *ret_val = V_BSTR(&v);
+    if (SUCCEEDED(hr) && V_VT(&v) == VT_BSTR && V_BSTR(&v))
+        *ret_val = SysAllocString(V_BSTR(&v));
+    else
+        *ret_val = SysAllocString(L"");
 
-    return S_OK;
+    VariantClear(&v);
+    return hr;
 }
 
 static HRESULT WINAPI uia_element_get_CurrentAcceleratorKey(IUIAutomationElement9 *iface, BSTR *ret_val)
@@ -899,10 +423,10 @@ static HRESULT WINAPI uia_element_get_CurrentBoundingRectangle(IUIAutomationElem
         ret_val->top = vals[1];
         ret_val->right = ret_val->left + vals[2];
         ret_val->bottom = ret_val->top + vals[3];
-        VariantClear(&v);
     }
 
-    return S_OK;
+    VariantClear(&v);
+    return hr;
 }
 
 static HRESULT WINAPI uia_element_get_CurrentLabeledBy(IUIAutomationElement9 *iface, IUIAutomationElement **ret_val)
@@ -1494,7 +1018,7 @@ static const IUIAutomationElement9Vtbl uia_element_vtbl = {
     uia_element_get_CachedIsDialog,
 };
 
-static HRESULT create_uia_element(IUIAutomationElement **iface, HUIANODE node)
+static HRESULT create_uia_element(IUIAutomationElement **iface, BOOL from_cui8, HUIANODE node)
 {
     struct uia_element *element = heap_alloc_zero(sizeof(*element));
 
@@ -1504,11 +1028,13 @@ static HRESULT create_uia_element(IUIAutomationElement **iface, HUIANODE node)
 
     element->IUIAutomationElement9_iface.lpVtbl = &uia_element_vtbl;
     element->ref = 1;
+    element->from_cui8 = from_cui8;
     element->node = node;
 
     *iface = (IUIAutomationElement *)&element->IUIAutomationElement9_iface;
     return S_OK;
 }
+
 /*
  * IUIAutomation interface.
  */
@@ -1587,16 +1113,17 @@ static HRESULT WINAPI uia_iface_GetRootElement(IUIAutomation6 *iface, IUIAutomat
 
 static HRESULT WINAPI uia_iface_ElementFromHandle(IUIAutomation6 *iface, UIA_HWND hwnd, IUIAutomationElement **out_elem)
 {
+    struct uia_iface *uia_iface = impl_from_IUIAutomation6(iface);
     HUIANODE node;
     HRESULT hr;
 
     TRACE("%p, %p, %p\n", iface, hwnd, out_elem);
 
     hr = UiaNodeFromHandle((HWND)hwnd, &node);
-    if (FAILED(hr) || !node)
+    if (FAILED(hr))
         return hr;
 
-    return create_uia_element(out_elem, node);
+    return create_uia_element(out_elem, uia_iface->is_cui8, node);
 }
 
 static HRESULT WINAPI uia_iface_ElementFromPoint(IUIAutomation6 *iface, POINT pt, IUIAutomationElement **out_elem)
@@ -1819,40 +1346,15 @@ static HRESULT WINAPI uia_iface_RemoveStructureChangedEventHandler(IUIAutomation
 static HRESULT WINAPI uia_iface_AddFocusChangedEventHandler(IUIAutomation6 *iface,
         IUIAutomationCacheRequest *cache_req, IUIAutomationFocusChangedEventHandler *handler)
 {
-    const struct uia_event_info *event_info = uia_event_info_from_id(UIA_AutomationFocusChangedEventId);
-    IUIAutomationElement *element;
-    HRESULT hr;
-
-    TRACE("%p, %p, %p\n", iface, cache_req, handler);
-
-    if (cache_req)
-        FIXME("Cache req parameter currently ignored\n");
-
-    hr = IUIAutomation6_ElementFromHandle(iface, GetDesktopWindow(), &element);
-    if (FAILED(hr) || !element)
-    {
-        WARN("Failed to get desktop element, hr %#lx\n", hr);
-        return hr;
-    }
-
-    return add_uia_com_event(event_info, UIA_COM_FOCUS_EVENT_TYPE, element, (IUnknown *)handler, TreeScope_SubTree, NULL,
-            0, (struct UiaCacheRequest *)&DefaultCacheReq);
+    FIXME("%p, %p, %p: stub\n", iface, cache_req, handler);
+    return E_NOTIMPL;
 }
 
 static HRESULT WINAPI uia_iface_RemoveFocusChangedEventHandler(IUIAutomation6 *iface,
         IUIAutomationFocusChangedEventHandler *handler)
 {
-    const struct uia_event_info *event_info = uia_event_info_from_id(UIA_AutomationFocusChangedEventId);
-    struct uia_com_event *event;
-    HRESULT hr;
-
-    TRACE("%p, %p\n", iface, handler);
-
-    hr = find_uia_com_event(event_info, UIA_COM_FOCUS_EVENT_TYPE, NULL, (IUnknown *)handler, &event);
-    if (SUCCEEDED(hr) && event)
-        remove_uia_com_event(event);
-
-    return S_OK;
+    FIXME("%p, %p: stub\n", iface, handler);
+    return E_NOTIMPL;
 }
 
 static HRESULT WINAPI uia_iface_RemoveAllEventHandlers(IUIAutomation6 *iface)
@@ -1864,15 +1366,80 @@ static HRESULT WINAPI uia_iface_RemoveAllEventHandlers(IUIAutomation6 *iface)
 static HRESULT WINAPI uia_iface_IntNativeArrayToSafeArray(IUIAutomation6 *iface, int *arr, int arr_count,
         SAFEARRAY **out_sa)
 {
-    FIXME("%p, %p, %d, %p: stub\n", iface, arr, arr_count, out_sa);
-    return E_NOTIMPL;
+    HRESULT hr = S_OK;
+    SAFEARRAY *sa;
+    int *sa_arr;
+
+    TRACE("%p, %p, %d, %p\n", iface, arr, arr_count, out_sa);
+
+    if (!out_sa || !arr || !arr_count)
+        return E_INVALIDARG;
+
+    *out_sa = NULL;
+    if (!(sa = SafeArrayCreateVector(VT_I4, 0, arr_count)))
+        return E_OUTOFMEMORY;
+
+    hr = SafeArrayAccessData(sa, (void **)&sa_arr);
+    if (FAILED(hr))
+        goto exit;
+
+    memcpy(sa_arr, arr, sizeof(*arr) * arr_count);
+    hr = SafeArrayUnaccessData(sa);
+    if (SUCCEEDED(hr))
+        *out_sa = sa;
+
+exit:
+    if (FAILED(hr))
+        SafeArrayDestroy(sa);
+
+    return hr;
 }
 
 static HRESULT WINAPI uia_iface_IntSafeArrayToNativeArray(IUIAutomation6 *iface, SAFEARRAY *sa, int **out_arr,
         int *out_arr_count)
 {
-    FIXME("%p, %p, %p, %p: stub\n", iface, sa, out_arr, out_arr_count);
-    return E_NOTIMPL;
+    LONG lbound, elems;
+    int *arr, *sa_arr;
+    VARTYPE vt;
+    HRESULT hr;
+
+    TRACE("%p, %p, %p, %p\n", iface, sa, out_arr, out_arr_count);
+
+    if (!sa || !out_arr || !out_arr_count)
+        return E_INVALIDARG;
+
+    *out_arr = NULL;
+    hr = SafeArrayGetVartype(sa, &vt);
+    if (FAILED(hr))
+        return hr;
+
+    if (vt != VT_I4)
+        return E_INVALIDARG;
+
+    hr = get_safearray_bounds(sa, &lbound, &elems);
+    if (FAILED(hr))
+        return hr;
+
+    if (!(arr = CoTaskMemAlloc(elems * sizeof(*arr))))
+        return E_OUTOFMEMORY;
+
+    hr = SafeArrayAccessData(sa, (void **)&sa_arr);
+    if (FAILED(hr))
+        goto exit;
+
+    memcpy(arr, sa_arr, sizeof(*arr) * elems);
+    hr = SafeArrayUnaccessData(sa);
+    if (FAILED(hr))
+        goto exit;
+
+    *out_arr = arr;
+    *out_arr_count = elems;
+
+exit:
+    if (FAILED(hr))
+        CoTaskMemFree(arr);
+
+    return hr;
 }
 
 static HRESULT WINAPI uia_iface_RectToVariant(IUIAutomation6 *iface, RECT rect, VARIANT *out_var)
@@ -1936,20 +1503,30 @@ static HRESULT WINAPI uia_iface_PollForPotentialSupportedProperties(IUIAutomatio
 
 static HRESULT WINAPI uia_iface_CheckNotSupported(IUIAutomation6 *iface, VARIANT in_val, BOOL *match)
 {
-    FIXME("%p, %s, %p: stub\n", iface, debugstr_variant(&in_val), match);
-    return E_NOTIMPL;
+    IUnknown *unk;
+
+    TRACE("%p, %s, %p\n", iface, debugstr_variant(&in_val), match);
+
+    *match = FALSE;
+    UiaGetReservedNotSupportedValue(&unk);
+    if (V_VT(&in_val) == VT_UNKNOWN && (V_UNKNOWN(&in_val) == unk))
+        *match = TRUE;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI uia_iface_get_ReservedNotSupportedValue(IUIAutomation6 *iface, IUnknown **out_unk)
 {
-    FIXME("%p, %p: stub\n", iface, out_unk);
-    return E_NOTIMPL;
+    TRACE("%p, %p\n", iface, out_unk);
+
+    return UiaGetReservedNotSupportedValue(out_unk);
 }
 
 static HRESULT WINAPI uia_iface_get_ReservedMixedAttributeValue(IUIAutomation6 *iface, IUnknown **out_unk)
 {
-    FIXME("%p, %p: stub\n", iface, out_unk);
-    return E_NOTIMPL;
+    TRACE("%p, %p\n", iface, out_unk);
+
+    return UiaGetReservedMixedAttributeValue(out_unk);
 }
 
 static HRESULT WINAPI uia_iface_ElementFromIAccessible(IUIAutomation6 *iface, IAccessible *acc, int cid,

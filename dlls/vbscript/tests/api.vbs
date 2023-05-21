@@ -292,17 +292,43 @@ Call ok(Lbound(arr2) = 0, "Lbound(x) = " & Lbound(x))
 Call ok(Lbound(arr2, 1) = 0, "Lbound(x) = " & Lbound(x))
 Call ok(Lbound(arr2, 2) = 0, "Lbound(x) = " & Lbound(x))
 
+sub testLBoundError()
+    on error resume next
+    call Err.clear()
+    call LBound()
+    call ok(Err.number = 450, "Err.number = " & Err.number)
+    call Err.clear()
+    call LBound(Empty)
+    call ok(Err.number = 13, "Err.number = " & Err.number)
+    call Err.clear()
+    call LBound(Null)
+    call ok(Err.number = 13, "Err.number = " & Err.number)
+    call Err.clear()
+    call LBound(arr, 1, 2)
+    call ok(Err.number = 450, "Err.number = " & Err.number)
+    if isEnglishLang then call ok(Err.description = "Wrong number of arguments or invalid property assignment", _
+                                  "Err.description = " & Err.description)
+end sub
+
 sub testUBoundError()
     on error resume next
     call Err.clear()
     call UBound()
     call ok(Err.number = 450, "Err.number = " & Err.number)
     call Err.clear()
+    call UBound(Empty)
+    call ok(Err.number = 13, "Err.number = " & Err.number)
+    call Err.clear()
+    call UBound(Null)
+    call ok(Err.number = 13, "Err.number = " & Err.number)
+    call Err.clear()
     call UBound(arr, 1, 2)
     call ok(Err.number = 450, "Err.number = " & Err.number)
     if isEnglishLang then call ok(Err.description = "Wrong number of arguments or invalid property assignment", _
                                   "Err.description = " & Err.description)
 end sub
+
+call testLBoundError()
 call testUBoundError()
 
 Dim newObject
@@ -1646,6 +1672,7 @@ Call ok(Abs(True) = 1, "Abs(True) = " & Abs(True))
 Call ok(getVT(Abs(True)) = "VT_I2", "getVT(Abs(True)) = " & getVT(Abs(True)))
 Call ok(Abs(CByte(1)) = 1, "Abs(CByte(1)) = " & Abs(CByte(1)))
 Call ok(getVT(Abs(CByte(1))) = "VT_UI1", "getVT(Abs(CByte(1))) = " & getVT(Abs(CByte(1))))
+Call ok(Abs("30000") = 30000, "Abs(""30000"") = " & Abs("30000"))
 
 Sub testAbsError(strings, error_num1, error_num2)
     on error resume next

@@ -2246,9 +2246,8 @@ static inline void check_for_driver_events( UINT msg )
     struct user_thread_info *thread_info = get_user_thread_info();
     if (thread_info->message_count > 200)
     {
-        LARGE_INTEGER zero = { .QuadPart = 0 };
         flush_window_surfaces( FALSE );
-        user_driver->pMsgWaitForMultipleObjectsEx( 0, NULL, &zero, QS_ALLINPUT, 0 );
+        user_driver->pProcessEvents( QS_ALLINPUT );
     }
     else if (msg == WM_TIMER || msg == WM_SYSTIMER)
     {
@@ -2277,13 +2276,20 @@ static DWORD wait_message( DWORD count, const HANDLE *handles, DWORD timeout, DW
     if (enable_thunk_lock)
         lock = KeUserModeCallback( NtUserThunkLock, NULL, 0, &ret_ptr, &ret_len );
 
-    ret = user_driver->pMsgWaitForMultipleObjectsEx( count, handles, get_nt_timeout( &time, timeout ),
-                                                     mask, flags );
-    if (HIWORD(ret))  /* is it an error code? */
+    if (user_driver->pProcessEvents( mask )) ret = count ? count - 1 : 0;
+    else if (count)
     {
-        if (count) RtlSetLastWin32Error( RtlNtStatusToDosError(ret) );
-        ret = WAIT_FAILED;
+        ret = NtWaitForMultipleObjects( count, handles, !(flags & MWMO_WAITALL),
+                                        !!(flags & MWMO_ALERTABLE), get_nt_timeout( &time, timeout ));
+        if (ret == count - 1) user_driver->pProcessEvents( mask );
+        else if (HIWORD(ret)) /* is it an error code? */
+        {
+            RtlSetLastWin32Error( RtlNtStatusToDosError(ret) );
+            ret = WAIT_FAILED;
+        }
     }
+    else ret = WAIT_TIMEOUT;
+
     if (ret == WAIT_TIMEOUT && !count && !timeout) NtYieldExecution();
     if ((mask & QS_INPUT) == QS_INPUT) get_user_thread_info()->message_count = 0;
 
@@ -3093,8 +3099,8 @@ static BOOL map_wparam_AtoW( UINT message, WPARAM *wparam, enum wm_char_mapping 
  *
  * Call a window procedure, translating args from Ansi to Unicode.
  */
-LRESULT call_messageAtoW( winproc_callback_t callback, HWND hwnd, UINT msg, WPARAM wparam,
-                          LPARAM lparam, LRESULT *result, void *arg, enum wm_char_mapping mapping )
+static LRESULT call_messageAtoW( winproc_callback_t callback, HWND hwnd, UINT msg, WPARAM wparam,
+                                 LPARAM lparam, LRESULT *result, void *arg, enum wm_char_mapping mapping )
 {
     LRESULT ret = 0;
 
@@ -3550,6 +3556,20 @@ static BOOL send_message_callback( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
     info.params   = NULL;
 
     return process_message( &info, NULL, ansi );
+}
+
+/***********************************************************************
+ *		     __wine_send_internal_message_timeout  (win32u.@)
+ *
+ * Same as SendMessageTimeoutW but sends the message to a specific thread
+ * without requiring a window handle. Only works for internal Wine messages.
+ */
+LRESULT CDECL __wine_send_internal_message_timeout( DWORD dest_pid, DWORD dest_tid,
+                                                    UINT msg, WPARAM wparam, LPARAM lparam,
+                                                    UINT flags, UINT timeout, PDWORD_PTR res_ptr )
+{
+    return send_internal_message_timeout( dest_pid, dest_tid, msg, wparam, lparam,
+                                          flags, timeout, res_ptr );
 }
 
 /***********************************************************************

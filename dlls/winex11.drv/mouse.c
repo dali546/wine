@@ -465,6 +465,7 @@ static BOOL grab_clipping_window( const RECT *clip )
 {
 #ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
     struct x11drv_thread_data *data = x11drv_thread_data();
+    UNICODE_STRING class_name = RTL_CONSTANT_STRING( messageW );
     Window clip_window;
     HWND msg_hwnd = 0;
     POINT pos;
@@ -476,7 +477,9 @@ static BOOL grab_clipping_window( const RECT *clip )
     if (!data) return FALSE;
     if (!(clip_window = init_clip_window())) return TRUE;
 
-    if (!(msg_hwnd = get_clip_hwnd()))
+    if (!(msg_hwnd = NtUserCreateWindowEx( 0, &class_name, &class_name, NULL, 0, 0, 0, 0, 0,
+                                           HWND_MESSAGE, 0, NtCurrentTeb()->Peb->ImageBaseAddress,
+                                           NULL, 0, NULL, 0, FALSE )))
         return TRUE;
 
     /* enable XInput2 unless we are already clipping */

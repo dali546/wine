@@ -52,6 +52,9 @@ extern HANDLE steam_keyboard_event DECLSPEC_HIDDEN;
 extern void dinput_internal_addref( struct dinput *dinput );
 extern void dinput_internal_release( struct dinput *dinput );
 
+extern void dinput_internal_addref( struct dinput *dinput );
+extern void dinput_internal_release( struct dinput *dinput );
+
 extern HRESULT mouse_enum_device( DWORD type, DWORD flags, DIDEVICEINSTANCEW *instance, DWORD version );
 extern HRESULT mouse_create_device( struct dinput *dinput, const GUID *guid, IDirectInputDevice8W **out );
 extern HRESULT keyboard_enum_device( DWORD type, DWORD flags, DIDEVICEINSTANCEW *instance, DWORD version );

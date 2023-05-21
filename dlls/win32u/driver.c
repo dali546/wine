@@ -806,13 +806,9 @@ static void nulldrv_GetDC( HDC hdc, HWND hwnd, HWND top_win, const RECT *win_rec
 {
 }
 
-static NTSTATUS nulldrv_MsgWaitForMultipleObjectsEx( DWORD count, const HANDLE *handles,
-                                                     const LARGE_INTEGER *timeout,
-                                                     DWORD mask, DWORD flags )
+static BOOL nulldrv_ProcessEvents( DWORD mask )
 {
-    if (!count && timeout && !timeout->QuadPart) return WAIT_TIMEOUT;
-    return NtWaitForMultipleObjects( count, handles, !(flags & MWMO_WAITALL),
-                                     !!(flags & MWMO_ALERTABLE), timeout );
+    return FALSE;
 }
 
 static void nulldrv_ReleaseDC( HWND hwnd, HDC hdc )
@@ -1193,7 +1189,7 @@ static const struct user_driver_funcs lazy_load_driver =
     nulldrv_DestroyWindow,
     loaderdrv_FlashWindowEx,
     loaderdrv_GetDC,
-    nulldrv_MsgWaitForMultipleObjectsEx,
+    nulldrv_ProcessEvents,
     nulldrv_ReleaseDC,
     nulldrv_ScrollDC,
     nulldrv_SetCapture,
@@ -1237,7 +1233,10 @@ void __wine_set_user_driver( const struct user_driver_funcs *funcs, UINT version
     }
 
     driver = malloc( sizeof(*driver) );
-    *driver = *funcs;
+    if (funcs)
+        *driver = *funcs;
+    else
+        *driver = null_user_driver;
 
 #define SET_USER_FUNC(name) \
     do { if (!driver->p##name) driver->p##name = nulldrv_##name; } while(0)
@@ -1268,7 +1267,7 @@ void __wine_set_user_driver( const struct user_driver_funcs *funcs, UINT version
     SET_USER_FUNC(DestroyWindow);
     SET_USER_FUNC(FlashWindowEx);
     SET_USER_FUNC(GetDC);
-    SET_USER_FUNC(MsgWaitForMultipleObjectsEx);
+    SET_USER_FUNC(ProcessEvents);
     SET_USER_FUNC(ReleaseDC);
     SET_USER_FUNC(ScrollDC);
     SET_USER_FUNC(SetCapture);

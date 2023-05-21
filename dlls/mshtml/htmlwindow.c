@@ -71,7 +71,7 @@ static inline BOOL is_outer_window(HTMLWindow *window)
 static void get_location(HTMLOuterWindow *This, HTMLLocation **ret)
 {
     if(!This->location.dispex.outer)
-        HTMLLocation_Init(This);
+        HTMLLocation_Init(&This->location);
 
     IHTMLLocation_AddRef(&This->location.IHTMLLocation_iface);
     *ret = &This->location;
@@ -134,6 +134,9 @@ static ULONG detach_inner_window(HTMLInnerWindow *window)
 
     if(doc)
         detach_document_node(doc);
+
+    if(outer_window && outer_window->location.dispex.outer)
+        dispex_unlink(&outer_window->location.dispex);
 
     abort_window_bindings(window);
     remove_target_tasks(window->task_magic);
@@ -485,6 +488,9 @@ static void release_outer_window(HTMLOuterWindow *This)
     if(This->location.dispex.outer)
         release_dispex(&This->location.dispex);
 
+    if(This->location.dispex.outer)
+        release_dispex(&This->location.dispex);
+
     if(This->frame_element)
         This->frame_element->content_window = NULL;
 
@@ -525,18 +531,19 @@ static void release_inner_window(HTMLInnerWindow *This)
         free(This->global_props[i].name);
     free(This->global_props);
 
-    for(i = 0; i < ARRAY_SIZE(This->legacy_ctors); i++) {
-        if(This->legacy_ctors[i]) {
-            This->legacy_ctors[i]->window = NULL;
-            IUnknown_Release(&This->legacy_ctors[i]->IUnknown_iface);
-        }
+    if(This->image_factory) {
+        This->image_factory->window = NULL;
+        IHTMLImageElementFactory_Release(&This->image_factory->IHTMLImageElementFactory_iface);
     }
 
-    for(i = 0; i < ARRAY_SIZE(This->legacy_prototypes); i++) {
-        if(This->legacy_prototypes[i]) {
-            This->legacy_prototypes[i]->window = NULL;
-            IUnknown_Release(&This->legacy_prototypes[i]->IUnknown_iface);
-        }
+    if(This->option_factory) {
+        This->option_factory->window = NULL;
+        IHTMLOptionElementFactory_Release(&This->option_factory->IHTMLOptionElementFactory_iface);
+    }
+
+    if(This->xhr_factory) {
+        This->xhr_factory->window = NULL;
+        IHTMLXMLHttpRequestFactory_Release(&This->xhr_factory->IHTMLXMLHttpRequestFactory_iface);
     }
 
     if(This->screen)
@@ -2292,6 +2299,15 @@ static HRESULT WINAPI HTMLWindow5_get_XMLHttpRequest(IHTMLWindow5 *iface, VARIAN
         return S_OK;
     }
 
+    if(!window->xhr_factory) {
+        HRESULT hres;
+
+        hres = HTMLXMLHttpRequestFactory_Create(window, &window->xhr_factory);
+        if(FAILED(hres)) {
+            return hres;
+        }
+    }
+
     hres = get_legacy_ctor(window, LEGACY_CTOR_ID_HTMLXMLHttpRequest_builtin, PROTO_ID_HTMLXMLHttpRequest,
                            &HTMLXMLHttpRequestFactory_dispex, &HTMLXMLHttpRequestFactoryVtbl, &disp);
     if(SUCCEEDED(hres)) {
@@ -2594,22 +2610,20 @@ static IHTMLWindow2 *get_source_window(IServiceProvider *caller, compat_mode_t c
 }
 
 struct post_message_task {
-    task_t header;
-    HTMLInnerWindow *window;
+    event_task_t header;
     DOMEvent *event;
-} ;
+};
 
-static void post_message_proc(task_t *_task)
+static void post_message_proc(event_task_t *_task)
 {
     struct post_message_task *task = (struct post_message_task *)_task;
-    dispatch_event(&task->window->event_target, task->event);
+    dispatch_event(&task->header.window->event_target, task->event);
 }
 
-static void post_message_destr(task_t *_task)
+static void post_message_destr(event_task_t *_task)
 {
     struct post_message_task *task = (struct post_message_task *)_task;
     IDOMEvent_Release(&task->event->IDOMEvent_iface);
-    IHTMLWindow2_Release(&task->window->base.IHTMLWindow2_iface);
 }
 
 static HRESULT post_message(HTMLInnerWindow *window, VARIANT msg, BSTR targetOrigin, VARIANT transfer,
@@ -3631,6 +3645,152 @@ static HRESULT WINAPI window_private_matchMedia(IWineHTMLWindowPrivate *iface, B
     return create_media_query_list(This, media_query, media_query_list);
 }
 
+static HRESULT check_target_origin(HTMLInnerWindow *window, const WCHAR *target_origin)
+{
+    IUri *uri, *target;
+    DWORD port, port2;
+    BSTR bstr, bstr2;
+    HRESULT hres;
+
+    if(!target_origin)
+        return E_INVALIDARG;
+
+    if(!wcscmp(target_origin, L"*"))
+        return S_OK;
+
+    hres = create_uri(target_origin, Uri_CREATE_NOFRAG | Uri_CREATE_NO_DECODE_EXTRA_INFO, &target);
+    if(FAILED(hres))
+        return hres;
+
+    if(!(uri = window->base.outer_window->uri)) {
+        FIXME("window with no URI\n");
+        hres = S_FALSE;
+        goto done;
+    }
+
+    bstr = NULL;
+    hres = IUri_GetSchemeName(uri, &bstr);
+    if(hres != S_OK) {
+        SysFreeString(bstr);
+        goto done;
+    }
+    hres = IUri_GetSchemeName(target, &bstr2);
+    if(SUCCEEDED(hres)) {
+        if(hres == S_OK && wcsicmp(bstr, bstr2))
+            hres = S_FALSE;
+        SysFreeString(bstr2);
+    }
+    SysFreeString(bstr);
+    if(hres != S_OK)
+        goto done;
+
+    bstr = NULL;
+    hres = IUri_GetHost(uri, &bstr);
+    if(hres != S_OK) {
+        SysFreeString(bstr);
+        goto done;
+    }
+    hres = IUri_GetHost(target, &bstr2);
+    if(SUCCEEDED(hres)) {
+        if(hres == S_OK && wcsicmp(bstr, bstr2))
+            hres = S_FALSE;
+        SysFreeString(bstr2);
+    }
+    SysFreeString(bstr);
+    if(hres != S_OK)
+        goto done;
+
+    /* Legacy modes ignore port */
+    if(dispex_compat_mode(&window->event_target.dispex) < COMPAT_MODE_IE9)
+        goto done;
+
+    hres = IUri_GetPort(uri, &port);
+    if(hres != S_OK)
+        goto done;
+    hres = IUri_GetPort(target, &port2);
+    if(hres == S_OK && port != port2)
+        hres = S_FALSE;
+
+done:
+    IUri_Release(target);
+    return hres;
+}
+
+static HRESULT WINAPI window_private_postMessage(IWineHTMLWindowPrivate *iface, VARIANT msg, BSTR targetOrigin, VARIANT transfer)
+{
+    HTMLWindow *This = impl_from_IWineHTMLWindowPrivateVtbl(iface);
+    HTMLInnerWindow *window = This->inner_window;
+    DOMEvent *event;
+    HRESULT hres;
+
+    TRACE("iface %p, msg %s, targetOrigin %s, transfer %s\n", iface, debugstr_variant(&msg),
+          debugstr_w(targetOrigin), debugstr_variant(&transfer));
+
+    if(V_VT(&transfer) != VT_EMPTY && V_VT(&transfer) != VT_ERROR)
+        FIXME("transfer not implemented, ignoring\n");
+
+    hres = check_target_origin(window, targetOrigin);
+    if(hres != S_OK)
+        return SUCCEEDED(hres) ? S_OK : hres;
+
+    switch(V_VT(&msg)) {
+        case VT_EMPTY:
+        case VT_NULL:
+        case VT_VOID:
+        case VT_I1:
+        case VT_I2:
+        case VT_I4:
+        case VT_I8:
+        case VT_UI1:
+        case VT_UI2:
+        case VT_UI4:
+        case VT_UI8:
+        case VT_INT:
+        case VT_UINT:
+        case VT_R4:
+        case VT_R8:
+        case VT_BOOL:
+        case VT_BSTR:
+        case VT_CY:
+        case VT_DATE:
+        case VT_DECIMAL:
+        case VT_HRESULT:
+            break;
+        case VT_ERROR:
+            V_VT(&msg) = VT_EMPTY;
+            break;
+        default:
+            FIXME("Unsupported vt %d\n", V_VT(&msg));
+            return E_NOTIMPL;
+    }
+
+    if(!window->doc) {
+        FIXME("No document\n");
+        return E_FAIL;
+    }
+
+    hres = create_message_event(window->doc, &msg, &event);
+    if(FAILED(hres))
+        return hres;
+
+    if(dispex_compat_mode(&window->event_target.dispex) >= COMPAT_MODE_IE9) {
+        struct post_message_task *task;
+        if(!(task = malloc(sizeof(*task)))) {
+            IDOMEvent_Release(&event->IDOMEvent_iface);
+            return E_OUTOFMEMORY;
+        }
+
+        /* Because message events can be sent to different windows, they get blocked by any context */
+        task->header.thread_blocked = TRUE;
+        task->event = event;
+        return push_event_task(&task->header, window, post_message_proc, post_message_destr, window->task_magic);
+    }
+
+    dispatch_event(&window->event_target, event);
+    IDOMEvent_Release(&event->IDOMEvent_iface);
+    return S_OK;
+}
+
 static HRESULT WINAPI window_private_get_console(IWineHTMLWindowPrivate *iface, IDispatch **console)
 {
     HTMLWindow *This = impl_from_IWineHTMLWindowPrivateVtbl(iface);
@@ -3960,8 +4120,24 @@ static HRESULT lookup_custom_prop(HTMLWindow *html_window, BSTR name, DISPID *pi
         if(!prop)
             return E_OUTOFMEMORY;
 
-        *pid = prop_to_dispid(window, prop);
-        return S_OK;
+    hres = IDispatchEx_GetDispID(&window->base.inner_window->event_target.dispex.IDispatchEx_iface, bstrName, grfdex, pid);
+    if(hres != DISP_E_UNKNOWNNAME)
+        return hres;
+
+    if(This->outer_window) {
+        HTMLOuterWindow *frame;
+
+        hres = get_frame_by_name(This->outer_window, bstrName, FALSE, &frame);
+        if(SUCCEEDED(hres) && frame) {
+            global_prop_t *prop;
+
+            prop = alloc_global_prop(window, GLOBAL_FRAMEVAR, bstrName);
+            if(!prop)
+                return E_OUTOFMEMORY;
+
+            *pid = prop_to_dispid(window, prop);
+            return S_OK;
+        }
     }
 
     if(window->doc) {

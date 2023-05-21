@@ -350,8 +350,33 @@ static int terminate_processes(void)
         }
         if (!TerminateProcess(process, 1))
         {
-            taskkill_message_print_process(STRING_TERMINATE_FAILED, i);
-            status_code = 1;
+            DWORD pid = wcstol(task_list[i], NULL, 10);
+            HANDLE process;
+
+            if (pid == self_pid)
+            {
+                taskkill_message(STRING_SELF_TERMINATION);
+                status_code = 1;
+                continue;
+            }
+
+            process = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+            if (!process)
+            {
+                taskkill_message_printfW(STRING_SEARCH_FAILED, task_list[i]);
+                status_code = 128;
+                continue;
+            }
+
+            if (!TerminateProcess(process, 1))
+            {
+                taskkill_message_printfW(STRING_TERMINATE_FAILED, task_list[i]);
+                status_code = 1;
+                CloseHandle(process);
+                continue;
+            }
+
+            taskkill_message_printfW(STRING_TERM_PID_SEARCH, pid);
             CloseHandle(process);
             continue;
         }
@@ -360,8 +385,54 @@ static int terminate_processes(void)
         else if (process_list[i].is_numeric)
             taskkill_message_printfW(STRING_TERM_PID_SEARCH, pid);
         else
-            taskkill_message_printfW(STRING_TERM_PROC_SEARCH, process_name, pid);
-        CloseHandle(process);
+        {
+            DWORD index;
+            BOOL found_process = FALSE;
+
+            for (index = 0; index < pid_list_size; index++)
+            {
+                WCHAR process_name[MAX_PATH];
+
+                if (get_process_name_from_pid(pid_list[index], process_name, MAX_PATH) &&
+                    !wcsicmp(process_name, task_list[i]))
+                {
+                    HANDLE process;
+
+                    if (pid_list[index] == self_pid)
+                    {
+                        taskkill_message(STRING_SELF_TERMINATION);
+                        status_code = 1;
+                        continue;
+                    }
+
+                    process = OpenProcess(PROCESS_TERMINATE, FALSE, pid_list[index]);
+                    if (!process)
+                    {
+                        taskkill_message_printfW(STRING_SEARCH_FAILED, task_list[i]);
+                        status_code = 128;
+                        continue;
+                    }
+
+                    if (!TerminateProcess(process, 1))
+                    {
+                        taskkill_message_printfW(STRING_TERMINATE_FAILED, task_list[i]);
+                        status_code = 1;
+                        CloseHandle(process);
+                        continue;
+                    }
+
+                    found_process = TRUE;
+                    taskkill_message_printfW(STRING_TERM_PROC_SEARCH, task_list[i], pid_list[index]);
+                    CloseHandle(process);
+                }
+            }
+
+            if (!found_process)
+            {
+                taskkill_message_printfW(STRING_SEARCH_FAILED, task_list[i]);
+                status_code = 128;
+            }
+        }
     }
     return status_code;
 }

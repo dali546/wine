@@ -336,6 +336,7 @@ typedef struct ScriptHost ScriptHost;
     XIID(IHTMLPerformanceTiming) \
     XIID(IHTMLPluginsCollection) \
     XIID(IHTMLRect) \
+    XIID(IHTMLRect2) \
     XIID(IHTMLRectCollection) \
     XIID(IHTMLScreen) \
     XIID(IHTMLScriptElement) \
@@ -805,8 +806,8 @@ struct HTMLOuterWindow {
     struct list browser_entry;
 
     READYSTATE readystate;
-    BOOL readystate_locked;
-    unsigned readystate_pending;
+    unsigned readystate_locked;
+    BOOL readystate_pending;
 
     HTMLInnerWindow *pending_window;
     HTMLLocation location;
@@ -842,6 +843,7 @@ struct HTMLInnerWindow {
     VARIANT performance;
     HTMLPerformanceTiming *performance_timing;
 
+    unsigned blocking_depth;
     unsigned parser_callback_cnt;
     struct list script_queue;
 
@@ -1236,16 +1238,12 @@ void set_window_uninitialized(HTMLOuterWindow*,HTMLDocumentNode*) DECLSPEC_HIDDE
 HRESULT update_window_doc(HTMLInnerWindow*) DECLSPEC_HIDDEN;
 HTMLOuterWindow *mozwindow_to_window(const mozIDOMWindowProxy*) DECLSPEC_HIDDEN;
 void get_top_window(HTMLOuterWindow*,HTMLOuterWindow**) DECLSPEC_HIDDEN;
-struct legacy_prototype *get_legacy_prototype(HTMLInnerWindow*,prototype_id_t,compat_mode_t) DECLSPEC_HIDDEN;
-HRESULT legacy_ctor_value(DispatchEx*,LCID,WORD,DISPPARAMS*,VARIANT*,EXCEPINFO*,IServiceProvider*);
-HRESULT legacy_ctor_get_dispid(DispatchEx*,BSTR,DWORD,DISPID*) DECLSPEC_HIDDEN;
-HRESULT legacy_ctor_get_name(DispatchEx*,DISPID,BSTR*) DECLSPEC_HIDDEN;
-HRESULT legacy_ctor_invoke(DispatchEx*,IDispatch*,DISPID,LCID,WORD,DISPPARAMS*,VARIANT*,EXCEPINFO*,IServiceProvider*) DECLSPEC_HIDDEN;
-HRESULT legacy_ctor_delete(DispatchEx*,DISPID) DECLSPEC_HIDDEN;
-void HTMLLocation_Init(HTMLOuterWindow*) DECLSPEC_HIDDEN;
-HRESULT create_navigator(HTMLInnerWindow*,IOmNavigator**) DECLSPEC_HIDDEN;
-void detach_navigator(IOmNavigator*) DECLSPEC_HIDDEN;
-HRESULT create_html_screen(HTMLInnerWindow*,IHTMLScreen**) DECLSPEC_HIDDEN;
+HRESULT HTMLOptionElementFactory_Create(HTMLInnerWindow*,HTMLOptionElementFactory**) DECLSPEC_HIDDEN;
+HRESULT HTMLImageElementFactory_Create(HTMLInnerWindow*,HTMLImageElementFactory**) DECLSPEC_HIDDEN;
+HRESULT HTMLXMLHttpRequestFactory_Create(HTMLInnerWindow*,HTMLXMLHttpRequestFactory**) DECLSPEC_HIDDEN;
+void HTMLLocation_Init(HTMLLocation*) DECLSPEC_HIDDEN;
+HRESULT create_navigator(compat_mode_t,IOmNavigator**) DECLSPEC_HIDDEN;
+HRESULT create_html_screen(compat_mode_t,IHTMLScreen**) DECLSPEC_HIDDEN;
 HRESULT create_performance(HTMLInnerWindow*,IHTMLPerformance**) DECLSPEC_HIDDEN;
 HRESULT create_performance_timing(HTMLPerformanceTiming**) DECLSPEC_HIDDEN;
 HRESULT create_history(HTMLInnerWindow*,OmHistory**) DECLSPEC_HIDDEN;
@@ -1543,6 +1541,18 @@ struct task_t {
     struct list entry;
 };
 
+typedef struct event_task_t event_task_t;
+typedef void (*event_task_proc_t)(event_task_t*);
+
+struct event_task_t {
+    LONG target_magic;
+    BOOL thread_blocked;
+    event_task_proc_t proc;
+    event_task_proc_t destr;
+    struct list entry;
+    HTMLInnerWindow *window;
+};
+
 typedef struct {
     task_t header;
     HTMLDocumentObj *doc;
@@ -1551,17 +1561,22 @@ typedef struct {
 typedef struct {
     HWND thread_hwnd;
     struct list task_list;
+    struct list event_task_list;
     struct list timer_list;
+    struct list *pending_xhr_events_tail;
     struct wine_rb_tree session_storage_map;
+    void *blocking_xhr;
 } thread_data_t;
 
 thread_data_t *get_thread_data(BOOL) DECLSPEC_HIDDEN;
 HWND get_thread_hwnd(void) DECLSPEC_HIDDEN;
+void unblock_tasks_and_timers(thread_data_t*) DECLSPEC_HIDDEN;
 int session_storage_map_cmp(const void*,const struct wine_rb_entry*) DECLSPEC_HIDDEN;
 void destroy_session_storage(thread_data_t*) DECLSPEC_HIDDEN;
 
 LONG get_task_target_magic(void) DECLSPEC_HIDDEN;
 HRESULT push_task(task_t*,task_proc_t,task_proc_t,LONG) DECLSPEC_HIDDEN;
+HRESULT push_event_task(event_task_t*,HTMLInnerWindow*,event_task_proc_t,event_task_proc_t,LONG) DECLSPEC_HIDDEN;
 void remove_target_tasks(LONG) DECLSPEC_HIDDEN;
 ULONGLONG get_time_stamp(void) DECLSPEC_HIDDEN;
 

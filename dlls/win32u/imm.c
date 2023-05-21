@@ -277,12 +277,11 @@ BOOL register_imm_window( HWND hwnd )
     /* Create default IME window */
     if (!thread_data->window_cnt++)
     {
-        UNICODE_STRING class_name, name;
         static const WCHAR imeW[] = {'I','M','E',0};
         static const WCHAR default_imeW[] = {'D','e','f','a','u','l','t',' ','I','M','E',0};
+        UNICODE_STRING class_name = RTL_CONSTANT_STRING( imeW );
+        UNICODE_STRING name = RTL_CONSTANT_STRING( default_imeW );
 
-        RtlInitUnicodeString( &class_name, imeW );
-        RtlInitUnicodeString( &name, default_imeW );
         thread_data->default_hwnd = NtUserCreateWindowEx( 0, &class_name, &class_name, &name,
                                                           WS_POPUP | WS_DISABLED | WS_CLIPSIBLINGS,
                                                           0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, FALSE );
@@ -394,7 +393,7 @@ void cleanup_imm_thread(void)
     NtUserDestroyInputContext( UlongToHandle( thread_info->client_info.default_imc ));
 }
 
-BOOL WINAPI ImmProcessKey( HWND hwnd, HKL hkl, UINT vkey, LPARAM key_data, DWORD unknown )
+BOOL WINAPI DECLSPEC_HIDDEN ImmProcessKey( HWND hwnd, HKL hkl, UINT vkey, LPARAM key_data, DWORD unknown )
 {
     struct imm_process_key_params params =
         { .hwnd = hwnd, .hkl = hkl, .vkey = vkey, .key_data = key_data };
@@ -403,7 +402,7 @@ BOOL WINAPI ImmProcessKey( HWND hwnd, HKL hkl, UINT vkey, LPARAM key_data, DWORD
     return KeUserModeCallback( NtUserImmProcessKey, &params, sizeof(params), &ret_ptr, &ret_len );
 }
 
-BOOL WINAPI ImmTranslateMessage( HWND hwnd, UINT msg, WPARAM wparam, LPARAM key_data )
+BOOL WINAPI DECLSPEC_HIDDEN ImmTranslateMessage( HWND hwnd, UINT msg, WPARAM wparam, LPARAM key_data )
 {
     struct imm_translate_message_params params =
         { .hwnd = hwnd, .msg = msg, .wparam = wparam, .key_data = key_data };

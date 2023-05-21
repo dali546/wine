@@ -437,7 +437,6 @@ extern XPixmapFormatValues **pixmap_formats DECLSPEC_HIDDEN;
 extern Window root_window DECLSPEC_HIDDEN;
 extern BOOL clipping_cursor DECLSPEC_HIDDEN;
 extern unsigned int screen_bpp DECLSPEC_HIDDEN;
-extern BOOL use_xkb DECLSPEC_HIDDEN;
 extern BOOL usexrandr DECLSPEC_HIDDEN;
 extern BOOL usexvidmode DECLSPEC_HIDDEN;
 extern BOOL ximInComposeMode DECLSPEC_HIDDEN;
@@ -460,9 +459,7 @@ extern int xrender_error_base DECLSPEC_HIDDEN;
 extern int xfixes_event_base DECLSPEC_HIDDEN;
 extern char *process_name DECLSPEC_HIDDEN;
 extern Display *clipboard_display DECLSPEC_HIDDEN;
-extern WNDPROC client_foreign_window_proc;
-extern HANDLE steam_overlay_event DECLSPEC_HIDDEN;
-extern HANDLE steam_keyboard_event DECLSPEC_HIDDEN;
+extern WNDPROC client_foreign_window_proc DECLSPEC_HIDDEN;
 
 /* atoms */
 
@@ -746,10 +743,7 @@ extern void reset_clipping_window(void) DECLSPEC_HIDDEN;
 extern BOOL clip_fullscreen_window( HWND hwnd, BOOL reset ) DECLSPEC_HIDDEN;
 extern void move_resize_window( HWND hwnd, int dir ) DECLSPEC_HIDDEN;
 extern void X11DRV_InitKeyboard( Display *display ) DECLSPEC_HIDDEN;
-extern void X11DRV_InitMouse( Display *display ) DECLSPEC_HIDDEN;
-extern NTSTATUS X11DRV_MsgWaitForMultipleObjectsEx( DWORD count, const HANDLE *handles,
-                                                    const LARGE_INTEGER *timeout,
-                                                    DWORD mask, DWORD flags ) DECLSPEC_HIDDEN;
+extern BOOL X11DRV_ProcessEvents( DWORD mask ) DECLSPEC_HIDDEN;
 extern HWND *build_hwnd_list(void) DECLSPEC_HIDDEN;
 
 typedef int (*x11drv_error_callback)( Display *display, XErrorEvent *event, void *arg );

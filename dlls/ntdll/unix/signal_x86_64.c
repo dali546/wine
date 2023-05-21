@@ -824,7 +824,7 @@ static inline void set_sigcontext( const CONTEXT *context, ucontext_t *sigcontex
 /***********************************************************************
  *           init_handler
  */
-static inline void init_handler( const ucontext_t *sigcontext )
+static inline ucontext_t *init_handler( void *sigcontext )
 {
 #ifdef __linux__
     if (fs32_sel)
@@ -833,6 +833,7 @@ static inline void init_handler( const ucontext_t *sigcontext )
         arch_prctl( ARCH_SET_FS, ((struct amd64_thread_data *)thread_data->cpu_data)->pthread_teb );
     }
 #endif
+    return sigcontext;
 }
 
 
@@ -856,8 +857,6 @@ static inline void leave_handler( const ucontext_t *sigcontext )
 static void save_context( struct xcontext *xcontext, const ucontext_t *sigcontext )
 {
     CONTEXT *context = &xcontext->c;
-
-    init_handler( sigcontext );
 
     context->ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_DEBUG_REGISTERS;
     context->Rax    = RAX_sig(sigcontext);
@@ -1013,6 +1012,10 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
     if (!self)
     {
         ret = set_thread_context( handle, context, &self, IMAGE_FILE_MACHINE_AMD64 );
+#ifdef __APPLE__
+        if ((flags & CONTEXT_DEBUG_REGISTERS) && (ret == STATUS_UNSUCCESSFUL))
+            WARN_(seh)( "Setting debug registers is not supported under Rosetta\n" );
+#endif
         if (ret || !self) return ret;
         if (flags & CONTEXT_DEBUG_REGISTERS)
         {
@@ -1600,7 +1603,7 @@ NTSTATUS call_user_exception_dispatcher( EXCEPTION_RECORD *rec, CONTEXT *context
  *           call_user_mode_callback
  */
 extern NTSTATUS CDECL call_user_mode_callback( void *func, void *stack, void **ret_ptr,
-                                               ULONG *ret_len, TEB *teb );
+                                               ULONG *ret_len, TEB *teb ) DECLSPEC_HIDDEN;
 __ASM_GLOBAL_FUNC( call_user_mode_callback,
                    "subq $0xe8,%rsp\n\t"
                    __ASM_SEH(".seh_stackalloc 0xf0\n\t")
@@ -1671,7 +1674,7 @@ __ASM_GLOBAL_FUNC( call_user_mode_callback,
  *           user_mode_callback_return
  */
 extern void CDECL DECLSPEC_NORETURN user_mode_callback_return( void *ret_ptr, ULONG ret_len,
-                                                               NTSTATUS status, TEB *teb );
+                                                               NTSTATUS status, TEB *teb ) DECLSPEC_HIDDEN;
 __ASM_GLOBAL_FUNC( user_mode_callback_return,
                    "movq 0x328(%r9),%r10\n\t"  /* amd64_thread_data()->syscall_frame */
                    "movq 0xa0(%r10),%r11\n\t"  /* frame->prev_frame */
@@ -2262,13 +2265,13 @@ static BOOL handle_syscall_trap( ucontext_t *sigcontext )
 
     if ((void *)RIP_sig( sigcontext ) == __wine_syscall_dispatcher)
     {
-        extern void __wine_syscall_dispatcher_prolog_end(void);
+        extern void __wine_syscall_dispatcher_prolog_end(void) DECLSPEC_HIDDEN;
 
         RIP_sig( sigcontext ) = (ULONG64)__wine_syscall_dispatcher_prolog_end;
     }
     else if ((void *)RIP_sig( sigcontext ) == __wine_unix_call_dispatcher)
     {
-        extern void __wine_unix_call_dispatcher_prolog_end(void);
+        extern void __wine_unix_call_dispatcher_prolog_end(void) DECLSPEC_HIDDEN;
 
         RIP_sig( sigcontext ) = (ULONG64)__wine_unix_call_dispatcher_prolog_end;
         R10_sig( sigcontext ) = RCX_sig( sigcontext );
@@ -2298,10 +2301,10 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
 {
     EXCEPTION_RECORD rec = { 0 };
     struct xcontext context;
-    ucontext_t *ucontext = sigcontext;
+    ucontext_t *ucontext = init_handler( sigcontext );
 
     rec.ExceptionAddress = (void *)RIP_sig(ucontext);
-    save_context( &context, sigcontext );
+    save_context( &context, ucontext );
 
     switch(TRAP_sig(ucontext))
     {
@@ -2337,15 +2340,24 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
                                                   (void *)RSP_sig(ucontext) );
         if (!rec.ExceptionCode)
         {
-            leave_handler( sigcontext );
+            leave_handler( ucontext );
             return;
+        }
+        if (rec.ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+            rec.ExceptionInformation[0] == EXCEPTION_EXECUTE_FAULT)
+        {
+            ULONG flags;
+            NtQueryInformationProcess( GetCurrentProcess(), ProcessExecuteFlags,
+                                       &flags, sizeof(flags), NULL );
+            /* send EXCEPTION_EXECUTE_FAULT only if data execution prevention is enabled */
+            if (!(flags & MEM_EXECUTE_OPTION_DISABLE)) rec.ExceptionInformation[0] = EXCEPTION_READ_FAULT;
         }
         break;
     case TRAP_x86_ALIGNFLT:  /* Alignment check exception */
         if (EFL_sig(ucontext) & 0x00040000)
         {
             EFL_sig(ucontext) &= ~0x00040000;  /* reset AC flag */
-            leave_handler( sigcontext );
+            leave_handler( ucontext );
             return;
         }
         rec.ExceptionCode = EXCEPTION_DATATYPE_MISALIGNMENT;
@@ -2362,8 +2374,8 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
         rec.ExceptionCode = EXCEPTION_ILLEGAL_INSTRUCTION;
         break;
     }
-    if (handle_syscall_fault( sigcontext, &rec, &context.c )) return;
-    setup_raise_exception( sigcontext, &rec, &context );
+    if (handle_syscall_fault( ucontext, &rec, &context.c )) return;
+    setup_raise_exception( ucontext, &rec, &context );
 }
 
 
@@ -2376,12 +2388,12 @@ static void trap_handler( int signal, siginfo_t *siginfo, void *sigcontext )
 {
     EXCEPTION_RECORD rec = { 0 };
     struct xcontext context;
-    ucontext_t *ucontext = sigcontext;
+    ucontext_t *ucontext = init_handler( sigcontext );
 
-    if (handle_syscall_trap( sigcontext )) return;
+    if (handle_syscall_trap( ucontext )) return;
 
     rec.ExceptionAddress = (void *)RIP_sig(ucontext);
-    save_context( &context, sigcontext );
+    save_context( &context, ucontext );
 
     switch (TRAP_sig(ucontext))
     {
@@ -2397,7 +2409,7 @@ static void trap_handler( int signal, siginfo_t *siginfo, void *sigcontext )
         rec.ExceptionInformation[0] = 0;
         break;
     }
-    setup_raise_exception( sigcontext, &rec, &context );
+    setup_raise_exception( ucontext, &rec, &context );
 }
 
 
@@ -2409,7 +2421,7 @@ static void trap_handler( int signal, siginfo_t *siginfo, void *sigcontext )
 static void fpe_handler( int signal, siginfo_t *siginfo, void *sigcontext )
 {
     EXCEPTION_RECORD rec = { 0 };
-    ucontext_t *ucontext = sigcontext;
+    ucontext_t *ucontext = init_handler( sigcontext );
 
     switch (siginfo->si_code)
     {
@@ -2450,7 +2462,7 @@ static void fpe_handler( int signal, siginfo_t *siginfo, void *sigcontext )
         rec.ExceptionInformation[1] = FPU_sig(ucontext) ? FPU_sig(ucontext)->MxCsr : 0;
         if (CS_sig(ucontext) != cs64_sel) rec.ExceptionCode = STATUS_FLOAT_MULTIPLE_TRAPS;
     }
-    setup_exception( sigcontext, &rec );
+    setup_exception( ucontext, &rec );
 }
 
 
@@ -2461,12 +2473,16 @@ static void fpe_handler( int signal, siginfo_t *siginfo, void *sigcontext )
  */
 static void int_handler( int signal, siginfo_t *siginfo, void *sigcontext )
 {
+    ucontext_t *ucontext = init_handler( sigcontext );
     HANDLE handle;
 
-    if (!p__wine_ctrl_routine) return;
-    if (!NtCreateThreadEx( &handle, THREAD_ALL_ACCESS, NULL, NtCurrentProcess(),
-                           p__wine_ctrl_routine, 0 /* CTRL_C_EVENT */, 0, 0, 0, 0, NULL ))
-        NtClose( handle );
+    if (p__wine_ctrl_routine)
+    {
+        if (!NtCreateThreadEx( &handle, THREAD_ALL_ACCESS, NULL, NtCurrentProcess(),
+                               p__wine_ctrl_routine, 0 /* CTRL_C_EVENT */, 0, 0, 0, 0, NULL ))
+            NtClose( handle );
+    }
+    leave_handler( ucontext );
 }
 
 
@@ -2477,9 +2493,10 @@ static void int_handler( int signal, siginfo_t *siginfo, void *sigcontext )
  */
 static void abrt_handler( int signal, siginfo_t *siginfo, void *sigcontext )
 {
+    ucontext_t *ucontext = init_handler( sigcontext );
     EXCEPTION_RECORD rec = { EXCEPTION_WINE_ASSERTION, EH_NONCONTINUABLE };
 
-    setup_exception( sigcontext, &rec );
+    setup_exception( ucontext, &rec );
 }
 
 
@@ -2500,11 +2517,11 @@ static void quit_handler( int signal, siginfo_t *siginfo, void *ucontext )
  *
  * Handler for SIGUSR1, used to signal a thread that it got suspended.
  */
-static void usr1_handler( int signal, siginfo_t *siginfo, void *ucontext )
+static void usr1_handler( int signal, siginfo_t *siginfo, void *sigcontext )
 {
+    ucontext_t *ucontext = init_handler( sigcontext );
     struct xcontext context;
 
-    init_handler( ucontext );
     if (is_inside_syscall( ucontext ))
     {
         DECLSPEC_ALIGN(64) XSTATE xs;
@@ -3108,7 +3125,7 @@ __ASM_GLOBAL_FUNC( __wine_syscall_dispatcher,
                    "leaq -0x98(%rbp),%rcx\n\t"
                    /* $rcx is now pointing to "frame" again */
                    __ASM_CFI(".cfi_restore_state\n")
-                   ".L__wine_syscall_dispatcher_return:\n\t"
+                   __ASM_LOCAL_LABEL("__wine_syscall_dispatcher_return") ":\n\t"
                    "movl 0x94(%rcx),%edx\n\t"  /* frame->restore_flags */
 #ifdef __linux__
                    "testl $12,%r14d\n\t"           /* SYSCALL_HAVE_PTHREAD_TEB | SYSCALL_HAVE_WRFSGSBASE */
@@ -3200,7 +3217,7 @@ __ASM_GLOBAL_FUNC( __wine_syscall_dispatcher,
                    __ASM_NAME("__wine_syscall_dispatcher_return") ":\n\t"
                    "movl 0xb0(%rcx),%r14d\n\t"     /* frame->syscall_flags */
                    "movq %rdx,%rax\n\t"
-                   "jmp .L__wine_syscall_dispatcher_return" )
+                   "jmp " __ASM_LOCAL_LABEL("__wine_syscall_dispatcher_return") )
 
 
 /***********************************************************************
@@ -3282,7 +3299,7 @@ __ASM_GLOBAL_FUNC( __wine_unix_call_dispatcher,
                    "movdqa 0x240(%rcx),%xmm14\n\t"
                    "movdqa 0x250(%rcx),%xmm15\n\t"
                    "testl $0xffff,0x94(%rcx)\n\t"  /* frame->restore_flags */
-                   "jnz .L__wine_syscall_dispatcher_return\n\t"
+                   "jnz " __ASM_LOCAL_LABEL("__wine_syscall_dispatcher_return") "\n\t"
 #ifdef __linux__
                    "testl $12,%r14d\n\t"           /* SYSCALL_HAVE_PTHREAD_TEB | SYSCALL_HAVE_WRFSGSBASE */
                    "jz 1f\n\t"

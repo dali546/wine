@@ -387,7 +387,7 @@ extern BOOL             expr_print(const struct expr* exp);
   /* info.c */
 extern void             print_help(void);
 extern void             info_help(void);
-extern void             info_win32_module(DWORD64 mod);
+extern void             info_win32_module(DWORD64 mod, BOOL multi_machine);
 extern void             info_win32_class(HWND hWnd, const char* clsName);
 extern void             info_win32_window(HWND hWnd, BOOL detailed);
 extern void             info_win32_processes(void);
@@ -416,6 +416,7 @@ extern BOOL             memory_get_string(struct dbg_process* pcs, void* addr, B
 extern BOOL             memory_get_string_indirect(struct dbg_process* pcs, void* addr, BOOL unicode, WCHAR* buffer, int size);
 extern BOOL             memory_get_register(DWORD regno, struct dbg_lvalue* value, char* buffer, int len);
 extern void             memory_disassemble(const struct dbg_lvalue*, const struct dbg_lvalue*, int instruction_count);
+extern void             memory_disasm_one_x86_insn(ADDRESS64 *addr, int display);
 extern BOOL             memory_disasm_one_insn(ADDRESS64* addr);
 #define MAX_OFFSET_TO_STR_LEN 19
 extern char*            memory_offset_to_string(char *str, DWORD64 offset, unsigned mode);

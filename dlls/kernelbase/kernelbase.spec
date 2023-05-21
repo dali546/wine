@@ -1235,8 +1235,8 @@
 @ stdcall QueryFullProcessImageNameW(ptr long ptr ptr)
 # @ stub QueryIdleProcessorCycleTime
 # @ stub QueryIdleProcessorCycleTimeEx
-# @ stub QueryInterruptTime
-# @ stub QueryInterruptTimePrecise
+@ stdcall QueryInterruptTime(ptr)
+@ stdcall QueryInterruptTimePrecise(ptr)
 @ stdcall QueryMemoryResourceNotification(ptr ptr)
 # @ stub QueryOptionalDelayLoadedAPI
 @ stdcall QueryPerformanceCounter(ptr) ntdll.RtlQueryPerformanceCounter
@@ -1251,7 +1251,7 @@
 @ stdcall QueryThreadCycleTime(long ptr)
 @ stdcall QueryThreadpoolStackInformation(ptr ptr)
 @ stdcall QueryUnbiasedInterruptTime(ptr) ntdll.RtlQueryUnbiasedInterruptTime
-# @ stub QueryUnbiasedInterruptTimePrecise
+@ stdcall QueryUnbiasedInterruptTimePrecise(ptr)
 @ stdcall QueryVirtualMemoryInformation(long ptr long ptr long ptr)
 @ stdcall QueryWorkingSet(long ptr long)
 @ stdcall QueryWorkingSetEx(long ptr long)
@@ -1735,7 +1735,7 @@
 @ stdcall WaitForMultipleObjectsEx(long ptr long long long)
 @ stdcall WaitForSingleObject(long long)
 @ stdcall WaitForSingleObjectEx(long long long)
-@ stdcall WaitForThreadpoolIoCallbacks(ptr) ntdll.TpWaitForIoCompletion
+@ stdcall WaitForThreadpoolIoCallbacks(ptr long) ntdll.TpWaitForIoCompletion
 @ stdcall WaitForThreadpoolTimerCallbacks(ptr long) ntdll.TpWaitForTimer
 @ stdcall WaitForThreadpoolWaitCallbacks(ptr long) ntdll.TpWaitForWait
 @ stdcall WaitForThreadpoolWorkCallbacks(ptr long) ntdll.TpWaitForWork

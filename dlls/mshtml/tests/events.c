@@ -115,15 +115,8 @@ DEFINE_EXPECT(window1_onstorage);
 DEFINE_EXPECT(doc2_onstorage);
 DEFINE_EXPECT(doc2_onstoragecommit);
 DEFINE_EXPECT(window2_onstorage);
-DEFINE_EXPECT(QS_IActiveScriptSite);
-DEFINE_EXPECT(QS_IActiveScriptSite_parent);
-DEFINE_EXPECT(QS_IActiveScriptSite_parent2);
-DEFINE_EXPECT(QS_IActiveScriptSite_parent3);
-DEFINE_EXPECT(QS_IActiveScriptSite_parent4);
-DEFINE_EXPECT(QS_GetCaller);
-DEFINE_EXPECT(QS_GetCaller_parent2);
-DEFINE_EXPECT(QS_GetCaller_parent3);
-DEFINE_EXPECT(cmdtarget_Exec);
+DEFINE_EXPECT(async_xhr_done);
+DEFINE_EXPECT(sync_xhr_done);
 
 static HWND container_hwnd = NULL;
 static IHTMLWindow2 *window;
@@ -3959,11 +3952,11 @@ static void test_iframe_connections(IHTMLDocument2 *doc)
 
 static void test_doc_obj(IHTMLDocument2 *doc)
 {
+    static DISPID propput_dispid = DISPID_PROPERTYPUT;
     DISPID dispid, import_node_id, has_own_prop_id;
     IHTMLOptionElementFactory *option, *option2;
     IHTMLImageElementFactory *image, *image2;
     IHTMLXMLHttpRequestFactory *xhr, *xhr2;
-    IHTMLXDomainRequestFactory *xdr, *xdr2;
     IHTMLDocument2 *doc_node, *doc_node2;
     IOmNavigator *navigator, *navigator2;
     IHTMLLocation *location, *location2;
@@ -3972,14 +3965,12 @@ static void test_doc_obj(IHTMLDocument2 *doc)
     IHTMLPerformance *perf, *perf2;
     IOmHistory *history, *history2;
     IHTMLScreen *screen, *screen2;
-    IOleCommandTarget *cmdtarget;
     IEventTarget *event_target;
     IUnknown *site, *site2;
     DISPPARAMS dp = { 0 };
     IHTMLWindow7 *window7;
     IHTMLWindow6 *window6;
     IHTMLWindow5 *window5;
-    IServiceProvider *sp;
     IDispatchEx *dispex;
     IHTMLElement *body;
     VARIANT res, arg;
@@ -3998,7 +3989,7 @@ static void test_doc_obj(IHTMLDocument2 *doc)
         ok(!!event_target, "event_target = NULL\n");
 
         bstr = SysAllocString(L"click");
-        IEventTarget_addEventListener(event_target, bstr, (IDispatch*)&docobj_onclick_obj, TRUE);
+        hres = IEventTarget_addEventListener(event_target, bstr, (IDispatch*)&docobj_onclick_obj, TRUE);
         ok(hres == S_OK, "addEventListener failed: %08lx\n", hres);
         SysFreeString(bstr);
 
@@ -4138,14 +4129,7 @@ static void test_doc_obj(IHTMLDocument2 *doc)
     ok(hres == S_OK, "Could not get IHTMLWindow6: %08lx\n", hres);
     hres = IHTMLWindow6_get_sessionStorage(window6, &storage);
     ok(hres == S_OK, "get_sessionStorage failed: %08lx\n", hres);
-
-    hres = IHTMLWindow6_get_XDomainRequest(window6, &res);
-    ok(hres == S_OK, "get_XDomainRequest failed: %08lx\n", hres);
-    ok(V_VT(&res) == VT_DISPATCH, "V_VT(XDomainRequest) = %d\n", V_VT(&res));
-    hres = IDispatch_QueryInterface(V_DISPATCH(&res), &IID_IHTMLXDomainRequestFactory, (void**)&xdr);
-    ok(hres == S_OK, "Could not get IHTMLXDomainRequestFactory: %08lx\n", hres);
     IHTMLWindow6_Release(window6);
-    VariantClear(&res);
 
     hres = IHTMLWindow2_QueryInterface(window, &IID_IHTMLWindow7, (void**)&window7);
     ok(hres == S_OK, "Could not get IHTMLWindow7: %08lx\n", hres);
@@ -4157,15 +4141,27 @@ static void test_doc_obj(IHTMLDocument2 *doc)
     IHTMLWindow7_Release(window7);
     VariantClear(&res);
 
-    /* and script sites */
-    hres = IHTMLDocument2_QueryInterface(doc_node, &IID_IServiceProvider, (void**)&sp);
-    ok(hres == S_OK, "Could not get IServiceProvider iface: %08lx\n", hres);
-    hres = IServiceProvider_QueryService(sp, &IID_IActiveScriptSite, &IID_IOleCommandTarget, (void**)&cmdtarget);
-    ok(hres == S_OK, "QueryService(IID_IActiveScriptSite->IID_IOleCommandTarget) failed: %08lx\n", hres);
-    hres = IOleCommandTarget_QueryInterface(cmdtarget, &IID_IActiveScriptSite, (void**)&site);
-    ok(hres == S_OK, "Command Target QI for IActiveScriptSite failed: %08lx\n", hres);
-    IOleCommandTarget_Release(cmdtarget);
-    IServiceProvider_Release(sp);
+    /* Add props to location, since it gets lost on navigation, despite being same object */
+    bstr = SysAllocString(L"wineTestProp");
+    hres = IHTMLLocation_QueryInterface(location, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+    hres = IDispatchEx_GetDispID(dispex, bstr, fdexNameEnsure, &dispid);
+    ok(hres == S_OK, "GetDispID(wineTestProp) returned: %08lx\n", hres);
+    SysFreeString(bstr);
+
+    dp.cArgs = dp.cNamedArgs = 1;
+    dp.rgdispidNamedArgs = &propput_dispid;
+    dp.rgvarg = &arg;
+    V_VT(&arg) = VT_I4;
+    V_I4(&arg) = 42;
+    bstr = SysAllocString(L"reload");
+    hres = IDispatchEx_GetDispID(dispex, bstr, 0, &dispid);
+    ok(hres == S_OK, "GetDispID(reload) returned: %08lx\n", hres);
+    hres = IDispatchEx_InvokeEx(dispex, dispid, 0, DISPATCH_PROPERTYPUT, &dp, NULL, NULL, NULL);
+    todo_wine_if(document_mode < 9)
+    ok(hres == (document_mode < 9 ? E_NOTIMPL : S_OK), "InvokeEx returned: %08lx\n", hres);
+    IDispatchEx_Release(dispex);
+    SysFreeString(bstr);
 
     /* Navigate to a different document mode page, checking using the same doc obj.
        Test that it breaks COM rules, since IEventTarget is conditionally exposed.
@@ -4211,26 +4207,29 @@ static void test_doc_obj(IHTMLDocument2 *doc)
     hres = IHTMLWindow2_get_document(window, &doc_node2);
     ok(hres == S_OK, "get_document failed: %08lx\n", hres);
     ok(doc_node != doc_node2, "doc_node == doc_node2\n");
-
-    hres = IHTMLDocument2_QueryInterface(doc_node2, &IID_IServiceProvider, (void**)&sp);
-    ok(hres == S_OK, "Could not get IServiceProvider iface: %08lx\n", hres);
-    hres = IServiceProvider_QueryService(sp, &IID_IActiveScriptSite, &IID_IOleCommandTarget, (void**)&cmdtarget);
-    ok(hres == S_OK, "QueryService(IID_IActiveScriptSite->IID_IOleCommandTarget) failed: %08lx\n", hres);
-    hres = IOleCommandTarget_QueryInterface(cmdtarget, &IID_IActiveScriptSite, (void**)&site2);
-    ok(hres == S_OK, "Command Target QI for IActiveScriptSite failed: %08lx\n", hres);
-    ok(site != site2, "site == site2\n");
-    IOleCommandTarget_Release(cmdtarget);
     IHTMLDocument2_Release(doc_node2);
     IHTMLDocument2_Release(doc_node);
-    IServiceProvider_Release(sp);
-    IUnknown_Release(site2);
-    IUnknown_Release(site);
 
     hres = IHTMLWindow2_get_location(window, &location2);
     ok(hres == S_OK, "get_location failed: %08lx\n", hres);
     ok(location == location2, "location != location2\n");
+
+    bstr = SysAllocString(L"wineTestProp");
+    hres = IHTMLLocation_GetIDsOfNames(location2, &IID_NULL, &bstr, 1, 0, &dispid);
+    ok(hres == DISP_E_UNKNOWNNAME, "GetIDsOfNames(wineTestProp) returned: %08lx\n", hres);
+    SysFreeString(bstr);
+
+    memset(&dp, 0, sizeof(dp));
+    bstr = SysAllocString(L"reload");
+    hres = IHTMLLocation_GetIDsOfNames(location2, &IID_NULL, &bstr, 1, 0, &dispid);
+    ok(hres == S_OK, "GetIDsOfNames(reload) returned: %08lx\n", hres);
+    hres = IHTMLLocation_Invoke(location2, dispid, &IID_NULL, 0, DISPATCH_PROPERTYGET, &dp, &res, NULL, NULL);
+    ok(hres == S_OK, "Invoke failed: %08lx\n", hres);
+    ok(V_VT(&res) == VT_DISPATCH, "VT = %d\n", V_VT(&res));
     IHTMLLocation_Release(location2);
     IHTMLLocation_Release(location);
+    SysFreeString(bstr);
+    VariantClear(&res);
 
     hres = IHTMLWindow2_get_navigator(window, &navigator2);
     ok(hres == S_OK, "get_navigator failed: %08lx\n", hres);
@@ -4282,18 +4281,7 @@ static void test_doc_obj(IHTMLDocument2 *doc)
     ok(storage != storage2, "storage == storage2\n");
     IHTMLStorage_Release(storage2);
     IHTMLStorage_Release(storage);
-
-    ok(hres == S_OK, "Could not get IHTMLWindow6: %08lx\n", hres);
-    hres = IHTMLWindow6_get_XDomainRequest(window6, &res);
-    ok(hres == S_OK, "get_XDomainRequest failed: %08lx\n", hres);
-    ok(V_VT(&res) == VT_DISPATCH, "V_VT(XDomainRequest) = %d\n", V_VT(&res));
-    hres = IDispatch_QueryInterface(V_DISPATCH(&res), &IID_IHTMLXDomainRequestFactory, (void**)&xdr2);
-    ok(hres == S_OK, "Could not get IHTMLXDomainRequestFactory: %08lx\n", hres);
-    ok(xdr != xdr2, "xdr == xdr2\n");
-    IHTMLXDomainRequestFactory_Release(xdr2);
-    IHTMLXDomainRequestFactory_Release(xdr);
     IHTMLWindow6_Release(window6);
-    VariantClear(&res);
 
     hres = IHTMLWindow2_QueryInterface(window, &IID_IHTMLWindow7, (void**)&window7);
     ok(hres == S_OK, "Could not get IHTMLWindow7: %08lx\n", hres);
@@ -4623,6 +4611,60 @@ static HRESULT WINAPI window2_onstorage(IDispatchEx *iface, DISPID id, LCID lcid
 }
 
 EVENT_HANDLER_FUNC_OBJ(window2_onstorage);
+
+static HRESULT WINAPI async_xhr(IDispatchEx *iface, DISPID id, LCID lcid, WORD wFlags, DISPPARAMS *pdp,
+        VARIANT *pvarRes, EXCEPINFO *pei, IServiceProvider *pspCaller)
+{
+    IHTMLXMLHttpRequest *xhr;
+    LONG ready_state;
+    HRESULT hres;
+
+    ok(pdp != NULL, "pdp == NULL\n");
+    ok(pdp->cArgs == (document_mode < 9 ? 1 : 2), "pdp->cArgs = %d\n", pdp->cArgs);
+    ok(pdp->cNamedArgs == 1, "pdp->cNamedArgs = %d\n", pdp->cNamedArgs);
+    ok(pdp->rgdispidNamedArgs[0] == DISPID_THIS, "pdp->rgdispidNamedArgs[0] = %ld\n", pdp->rgdispidNamedArgs[0]);
+    ok(V_VT(pdp->rgvarg) == VT_DISPATCH, "V_VT(this) = %d\n", V_VT(pdp->rgvarg));
+    ok(V_DISPATCH(pdp->rgvarg) != NULL, "V_DISPATCH(this) == NULL\n");
+
+    hres = IDispatch_QueryInterface(V_DISPATCH(pdp->rgvarg), &IID_IHTMLXMLHttpRequest, (void**)&xhr);
+    ok(hres == S_OK, "Could not get IHTMLXMLHttpRequest: %08lx\n", hres);
+
+    hres = IHTMLXMLHttpRequest_get_readyState(xhr, &ready_state);
+    if(SUCCEEDED(hres) && ready_state == 4)
+        CHECK_EXPECT(async_xhr_done);
+
+    IHTMLXMLHttpRequest_Release(xhr);
+    return S_OK;
+}
+
+EVENT_HANDLER_FUNC_OBJ(async_xhr);
+
+static HRESULT WINAPI sync_xhr(IDispatchEx *iface, DISPID id, LCID lcid, WORD wFlags, DISPPARAMS *pdp,
+        VARIANT *pvarRes, EXCEPINFO *pei, IServiceProvider *pspCaller)
+{
+    IHTMLXMLHttpRequest *xhr;
+    LONG ready_state;
+    HRESULT hres;
+
+    ok(pdp != NULL, "pdp == NULL\n");
+    ok(pdp->cArgs == (document_mode < 9 ? 1 : 2), "pdp->cArgs = %d\n", pdp->cArgs);
+    ok(pdp->cNamedArgs == 1, "pdp->cNamedArgs = %d\n", pdp->cNamedArgs);
+    ok(pdp->rgdispidNamedArgs[0] == DISPID_THIS, "pdp->rgdispidNamedArgs[0] = %ld\n", pdp->rgdispidNamedArgs[0]);
+    ok(V_VT(pdp->rgvarg) == VT_DISPATCH, "V_VT(this) = %d\n", V_VT(pdp->rgvarg));
+    ok(V_DISPATCH(pdp->rgvarg) != NULL, "V_DISPATCH(this) == NULL\n");
+
+    hres = IDispatch_QueryInterface(V_DISPATCH(pdp->rgvarg), &IID_IHTMLXMLHttpRequest, (void**)&xhr);
+    ok(hres == S_OK, "Could not get IHTMLXMLHttpRequest: %08lx\n", hres);
+
+    hres = IHTMLXMLHttpRequest_get_readyState(xhr, &ready_state);
+    if(SUCCEEDED(hres) && ready_state == 4)
+        CHECK_EXPECT(sync_xhr_done);
+
+    IHTMLXMLHttpRequest_Release(xhr);
+    return S_OK;
+}
+
+EVENT_HANDLER_FUNC_OBJ(sync_xhr);
 
 static HRESULT QueryInterface(REFIID,void**);
 static HRESULT browserservice_qi(REFIID,void**);
@@ -6024,10 +6066,30 @@ typedef struct {
     IInternetProtocolSink *sink;
     IUri *uri;
 
+    BOOL replied;
     ULONG size;
     const char *data;
     const char *ptr;
+
+    HANDLE delay_event;
+    ULONG delay;
 } ProtocolHandler;
+
+static ProtocolHandler *delay_with_signal_handler;
+
+static DWORD WINAPI delay_proc(void *arg)
+{
+    PROTOCOLDATA protocol_data = {PI_FORCE_ASYNC};
+    ProtocolHandler *protocol_handler = arg;
+
+    if(protocol_handler->delay_event)
+        WaitForSingleObject(protocol_handler->delay_event, INFINITE);
+    else
+        Sleep(protocol_handler->delay);
+    protocol_handler->delay = 0;
+    IInternetProtocolSink_Switch(protocol_handler->sink, &protocol_data);
+    return 0;
+}
 
 static DWORD WINAPI async_switch_proc(void *arg)
 {
@@ -6071,6 +6133,8 @@ static ULONG WINAPI Protocol_Release(IInternetProtocolEx *iface)
     LONG ref = InterlockedDecrement(&This->ref);
 
     if(!ref) {
+        if(This->delay_event)
+            CloseHandle(This->delay_event);
         if(This->sink)
             IInternetProtocolSink_Release(This->sink);
         if(This->uri)
@@ -6097,25 +6161,35 @@ static HRESULT WINAPI Protocol_Continue(IInternetProtocolEx *iface, PROTOCOLDATA
     HRESULT hres;
     BSTR bstr;
 
-    hres = IInternetProtocolSink_QueryInterface(This->sink, &IID_IServiceProvider, (void**)&service_provider);
-    ok(hres == S_OK, "Could not get IServiceProvider iface: %08lx\n", hres);
+    if(!This->replied) {
+        hres = IInternetProtocolSink_QueryInterface(This->sink, &IID_IServiceProvider, (void**)&service_provider);
+        ok(hres == S_OK, "Could not get IServiceProvider iface: %08lx\n", hres);
 
-    hres = IServiceProvider_QueryService(service_provider, &IID_IHttpNegotiate, &IID_IHttpNegotiate, (void**)&http_negotiate);
-    IServiceProvider_Release(service_provider);
-    ok(hres == S_OK, "Could not get IHttpNegotiate interface: %08lx\n", hres);
+        hres = IServiceProvider_QueryService(service_provider, &IID_IHttpNegotiate, &IID_IHttpNegotiate, (void**)&http_negotiate);
+        IServiceProvider_Release(service_provider);
+        ok(hres == S_OK, "Could not get IHttpNegotiate interface: %08lx\n", hres);
 
-    hres = IUri_GetDisplayUri(This->uri, &bstr);
-    ok(hres == S_OK, "Failed to get display uri: %08lx\n", hres);
-    hres = IHttpNegotiate_BeginningTransaction(http_negotiate, bstr, L"", 0, &addl_headers);
-    ok(hres == S_OK, "BeginningTransaction failed: %08lx\n", hres);
-    CoTaskMemFree(addl_headers);
-    SysFreeString(bstr);
+        hres = IUri_GetDisplayUri(This->uri, &bstr);
+        ok(hres == S_OK, "Failed to get display uri: %08lx\n", hres);
+        hres = IHttpNegotiate_BeginningTransaction(http_negotiate, bstr, L"", 0, &addl_headers);
+        ok(hres == S_OK, "BeginningTransaction failed: %08lx\n", hres);
+        CoTaskMemFree(addl_headers);
+        SysFreeString(bstr);
 
-    bstr = SysAllocString(L"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
-    hres = IHttpNegotiate_OnResponse(http_negotiate, 200, bstr, NULL, NULL);
-    ok(hres == S_OK, "OnResponse failed: %08lx\n", hres);
-    IHttpNegotiate_Release(http_negotiate);
-    SysFreeString(bstr);
+        bstr = SysAllocString(L"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n");
+        hres = IHttpNegotiate_OnResponse(http_negotiate, 200, bstr, NULL, NULL);
+        ok(hres == S_OK, "OnResponse failed: %08lx\n", hres);
+        IHttpNegotiate_Release(http_negotiate);
+        SysFreeString(bstr);
+
+        This->replied = TRUE;
+
+        if(This->delay || This->delay_event) {
+            IInternetProtocolEx_AddRef(&This->IInternetProtocolEx_iface);
+            QueueUserWorkItem(delay_proc, This, 0);
+            return S_OK;
+        }
+    }
 
     hres = IInternetProtocolSink_ReportData(This->sink, BSCF_FIRSTDATANOTIFICATION | BSCF_LASTDATANOTIFICATION,
                                             This->size, This->size);
@@ -6192,6 +6266,8 @@ static HRESULT WINAPI ProtocolEx_StartEx(IInternetProtocolEx *iface, IUri *uri, 
         IInternetBindInfo *pOIBindInfo, DWORD grfPI, HANDLE *dwReserved)
 {
     ProtocolHandler *This = impl_from_IInternetProtocolEx(iface);
+    HRESULT hres;
+    BSTR query;
 
     This->data = protocol_doc_str;
     This->size = strlen(This->data);
@@ -6199,6 +6275,23 @@ static HRESULT WINAPI ProtocolEx_StartEx(IInternetProtocolEx *iface, IUri *uri, 
     IInternetProtocolSink_AddRef(This->sink = pOIProtSink);
     IUri_AddRef(This->uri = uri);
     This->ptr = This->data;
+
+    hres = IUri_GetQuery(uri, &query);
+    if(hres == S_OK) {
+        if(!wcscmp(query, L"?delay_with_signal")) {
+            if(delay_with_signal_handler) {
+                ProtocolHandler *delayed = delay_with_signal_handler;
+                delay_with_signal_handler = NULL;
+                SetEvent(delayed->delay_event);
+                This->delay = 30;
+            }else {
+                delay_with_signal_handler = This;
+                This->delay_event = CreateEventW(NULL, FALSE, FALSE, NULL);
+                ok(This->delay_event != NULL, "CreateEvent failed: %08lx\n", GetLastError());
+            }
+        }
+        SysFreeString(query);
+    }
 
     IInternetProtocolEx_AddRef(&This->IInternetProtocolEx_iface);
     QueueUserWorkItem(async_switch_proc, This, 0);
@@ -7013,6 +7106,95 @@ done:
     IHTMLDocument2_Release(doc[1]);
 }
 
+static void test_sync_xhr_events(const char *doc_str)
+{
+    IHTMLXMLHttpRequest *xhr[2];
+    IHTMLDocument2 *doc[2];
+    IHTMLDocument6 *doc6;
+    VARIANT var, vempty;
+    HRESULT hres;
+    unsigned i;
+
+    for(i = 0; i < ARRAY_SIZE(doc); i++)
+        doc[i] = create_document_with_origin(doc_str);
+
+    document_mode = 0;
+    V_VT(&vempty) = VT_EMPTY;
+
+    hres = IHTMLDocument2_QueryInterface(doc[0], &IID_IHTMLDocument6, (void**)&doc6);
+    if(SUCCEEDED(hres)) {
+        hres = IHTMLDocument6_get_documentMode(doc6, &var);
+        ok(hres == S_OK, "get_documentMode failed: %08lx\n", hres);
+        ok(V_VT(&var) == VT_R4, "V_VT(documentMode) = %u\n", V_VT(&var));
+        document_mode = V_R4(&var);
+        IHTMLDocument6_Release(doc6);
+    }
+
+    for(i = 0; i < ARRAY_SIZE(doc); i++) {
+        IHTMLXMLHttpRequestFactory *ctor;
+        IHTMLWindow5 *window5;
+        IHTMLWindow2 *window;
+        BSTR bstr, method;
+
+        hres = IHTMLDocument2_get_parentWindow(doc[i], &window);
+        ok(hres == S_OK, "[%u] get_parentWindow failed: %08lx\n", i, hres);
+        ok(window != NULL, "[%u] window == NULL\n", i);
+
+        hres = IHTMLWindow2_QueryInterface(window, &IID_IHTMLWindow5, (void**)&window5);
+        ok(hres == S_OK, "[%u] Could not get IHTMLWindow5: %08lx\n", i, hres);
+        IHTMLWindow2_Release(window);
+
+        hres = IHTMLWindow5_get_XMLHttpRequest(window5, &var);
+        ok(hres == S_OK, "[%u] get_XMLHttpRequest failed: %08lx\n", i, hres);
+        ok(V_VT(&var) == VT_DISPATCH, "[%u] V_VT(XMLHttpRequest) == %d\n", i, V_VT(&var));
+        ok(V_DISPATCH(&var) != NULL, "[%u] V_DISPATCH(XMLHttpRequest) == NULL\n", i);
+        IHTMLWindow5_Release(window5);
+
+        hres = IDispatch_QueryInterface(V_DISPATCH(&var), &IID_IHTMLXMLHttpRequestFactory, (void**)&ctor);
+        ok(hres == S_OK, "[%u] Could not get IHTMLXMLHttpRequestFactory: %08lx\n", i, hres);
+        IDispatch_Release(V_DISPATCH(&var));
+        hres = IHTMLXMLHttpRequestFactory_create(ctor, &xhr[i]);
+        ok(hres == S_OK, "[%u] create failed: %08lx\n", i, hres);
+        IHTMLXMLHttpRequestFactory_Release(ctor);
+
+        V_VT(&var) = VT_BOOL;
+        V_BOOL(&var) = i ? VARIANT_FALSE : VARIANT_TRUE;
+        method = SysAllocString(L"GET");
+        bstr = SysAllocString(L"blank.html?delay_with_signal");
+        hres = IHTMLXMLHttpRequest_open(xhr[i], method, bstr, var, vempty, vempty);
+        ok(hres == S_OK, "[%u] open failed: %08lx\n", i, hres);
+        SysFreeString(method);
+        SysFreeString(bstr);
+
+        V_VT(&var) = VT_DISPATCH;
+        V_DISPATCH(&var) = (IDispatch*)(i ? &sync_xhr_obj : &async_xhr_obj);
+        hres = IHTMLXMLHttpRequest_put_onreadystatechange(xhr[i], var);
+        ok(hres == S_OK, "[%u] put_onreadystatechange failed: %08lx\n", i, hres);
+    }
+
+    /* async xhr */
+    hres = IHTMLXMLHttpRequest_send(xhr[0], vempty);
+    ok(hres == S_OK, "async xhr send failed: %08lx\n", hres);
+
+    /* sync xhr */
+    SET_EXPECT(sync_xhr_done);
+    hres = IHTMLXMLHttpRequest_send(xhr[1], vempty);
+    ok(hres == S_OK, "sync xhr send failed: %08lx\n", hres);
+    CHECK_CALLED(sync_xhr_done);
+
+    SET_EXPECT(async_xhr_done);
+    pump_msgs(&called_async_xhr_done);
+    CHECK_CALLED(async_xhr_done);
+
+    for(i = 0; i < ARRAY_SIZE(xhr); i++)
+        IHTMLXMLHttpRequest_Release(xhr[i]);
+
+    set_client_site(doc[0], FALSE);
+    set_client_site(doc[1], FALSE);
+    IHTMLDocument2_Release(doc[0]);
+    IHTMLDocument2_Release(doc[1]);
+}
+
 static BOOL check_ie(void)
 {
     IHTMLDocument2 *doc;
@@ -7078,8 +7260,11 @@ START_TEST(events)
         test_empty_document();
         test_document_close();
         test_storage_events(empty_doc_str);
-        if(is_ie9plus)
+        test_sync_xhr_events(empty_doc_str);
+        if(is_ie9plus) {
             test_storage_events(empty_doc_ie9_str);
+            test_sync_xhr_events(empty_doc_ie9_str);
+        }
 
         DestroyWindow(container_hwnd);
     }else {

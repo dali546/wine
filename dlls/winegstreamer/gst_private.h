@@ -105,18 +105,6 @@ struct wg_transform *wg_transform_create(const struct wg_format *input_format,
 void wg_transform_destroy(struct wg_transform *transform);
 bool wg_transform_set_output_format(struct wg_transform *transform, struct wg_format *format);
 bool wg_transform_get_status(struct wg_transform *transform, bool *accepts_input);
-HRESULT wg_transform_drain(struct wg_transform *transform, BOOL flush);
-
-struct wg_source *wg_source_create(const WCHAR *url, uint64_t file_size,
-        const void *data, uint32_t size, WCHAR mime_type[256]);
-void wg_source_destroy(struct wg_source *source);
-bool wg_source_get_status(struct wg_source *source, uint32_t *stream_count,
-        uint64_t *duration, uint64_t *read_offset);
-HRESULT wg_source_push_data(struct wg_source *source, const void *data, uint32_t size);
-bool wg_source_get_stream_format(struct wg_source *source, UINT32 index,
-        struct wg_format *format);
-char *wg_source_get_stream_tag(struct wg_source *source, UINT32 index,
-        enum wg_parser_tag tag);
 
 unsigned int wg_format_get_max_size(const struct wg_format *format);
 

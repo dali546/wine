@@ -534,6 +534,134 @@ static WCHAR kbd_tables_vkey_to_wchar( const KBDTABLES *tables, UINT vkey, const
 
 BOOL enable_mouse_in_pointer = FALSE;
 
+
+static void kbd_tables_init_vsc2vk( const KBDTABLES *tables, BYTE vsc2vk[0x300] )
+{
+    const VSC_VK *entry;
+    WORD vsc;
+
+    memset( vsc2vk, 0, 0x300 );
+
+    for (vsc = 0; tables->pusVSCtoVK && vsc <= tables->bMaxVSCtoVK; ++vsc)
+    {
+        if (tables->pusVSCtoVK[vsc] == VK__none_) continue;
+        vsc2vk[vsc] = (BYTE)tables->pusVSCtoVK[vsc];
+    }
+    for (entry = tables->pVSCtoVK_E0; entry && entry->Vsc; entry++)
+    {
+        if (entry->Vk == VK__none_) continue;
+        vsc2vk[entry->Vsc + 0x100] = (BYTE)entry->Vk;
+    }
+    for (entry = tables->pVSCtoVK_E1; entry && entry->Vsc; entry++)
+    {
+        if (entry->Vk == VK__none_) continue;
+        vsc2vk[entry->Vsc + 0x200] = (BYTE)entry->Vk;
+    }
+}
+
+#define NEXT_ENTRY(t, e) ((void *)&(e)->wch[(t)->nModifications])
+
+static void kbd_tables_init_vk2char( const KBDTABLES *tables, BYTE vk2char[0x100] )
+{
+    const VK_TO_WCHAR_TABLE *table;
+    const VK_TO_WCHARS1 *entry;
+
+    memset( vk2char, 0, 0x100 );
+
+    for (table = tables->pVkToWcharTable; table->pVkToWchars; table++)
+    {
+        for (entry = table->pVkToWchars; entry->VirtualKey; entry = NEXT_ENTRY(table, entry))
+        {
+            if (entry->VirtualKey & ~0xff) continue;
+            vk2char[entry->VirtualKey] = entry->wch[0];
+        }
+    }
+}
+
+static UINT kbd_tables_get_mod_bits( const KBDTABLES *tables, UINT mod )
+{
+    const MODIFIERS *mods = tables->pCharModifiers;
+    WORD bits;
+
+    for (bits = 0; bits <= mods->wMaxModBits; ++bits)
+        if (mods->ModNumber[bits] == mod) return bits;
+
+    return -1;
+}
+
+static UINT kbd_tables_get_mod_num( const KBDTABLES *tables, const BYTE *state, BOOL caps )
+{
+    const MODIFIERS *mods = tables->pCharModifiers;
+    const VK_TO_BIT *entry;
+    WORD bits = 0;
+
+    for (entry = mods->pVkToBit; entry->Vk; ++entry)
+        if (state[entry->Vk] & 0x80) bits |= entry->ModBits;
+    if (caps) bits |= KBDSHIFT;
+
+    if (bits > mods->wMaxModBits) return -1;
+    return mods->ModNumber[bits];
+}
+
+static WORD kbd_tables_wchar_to_vkey( const KBDTABLES *tables, WCHAR wch )
+{
+    const VK_TO_WCHAR_TABLE *table;
+    const VK_TO_WCHARS1 *entry;
+    WORD bits;
+    BYTE mod;
+
+    if (wch == '\x001b') return VK_ESCAPE;
+
+    for (table = tables->pVkToWcharTable; table->pVkToWchars; table++)
+    {
+        for (entry = table->pVkToWchars; entry->VirtualKey; entry = NEXT_ENTRY(table, entry))
+        {
+            for (mod = 0; mod < table->nModifications; ++mod)
+            {
+                if (entry->wch[mod] == WCH_NONE || entry->wch[mod] != wch) continue;
+                bits = kbd_tables_get_mod_bits( tables, mod );
+                return (bits << 8) | entry->VirtualKey;
+            }
+        }
+    }
+
+    if (wch >= 0x0001 && wch <= 0x001a) return (0x200) | ('A' + wch - 1);  /* CTRL + A-Z */
+    return wch >= 0x0080 ? -1 : 0;
+}
+
+static WCHAR kbd_tables_vkey_to_wchar( const KBDTABLES *tables, UINT vkey, const BYTE *state )
+{
+    UINT mod, caps_mod, alt, ctrl, caps;
+    const VK_TO_WCHAR_TABLE *table;
+    const VK_TO_WCHARS1 *entry;
+
+    alt = state[VK_MENU] & 0x80;
+    ctrl = state[VK_CONTROL] & 0x80;
+    caps = state[VK_CAPITAL] & 1;
+
+    if (ctrl && alt) return WCH_NONE;
+    if (!ctrl && vkey == VK_ESCAPE) return VK_ESCAPE;
+
+    mod = caps_mod = kbd_tables_get_mod_num( tables, state, FALSE );
+    if (caps) caps_mod = kbd_tables_get_mod_num( tables, state, TRUE );
+
+    for (table = tables->pVkToWcharTable; table->pVkToWchars; table++)
+    {
+        if (table->nModifications <= mod) continue;
+        for (entry = table->pVkToWchars; entry->VirtualKey; entry = NEXT_ENTRY(table, entry))
+        {
+            if (entry->VirtualKey != vkey) continue;
+            if ((entry->Attributes & CAPLOK) && table->nModifications > caps_mod) return entry->wch[caps_mod];
+            return entry->wch[mod];
+        }
+    }
+
+    if (ctrl && vkey >= 'A' && vkey <= 'Z') return vkey - 'A' + 1;
+    return WCH_NONE;
+}
+
+#undef NEXT_ENTRY
+
 /**********************************************************************
  *	     NtUserAttachThreadInput    (win32u.@)
  */
@@ -747,8 +875,7 @@ BOOL WINAPI NtUserGetCursorInfo( CURSORINFO *info )
 
 static void check_for_events( UINT flags )
 {
-    LARGE_INTEGER zero = { .QuadPart = 0 };
-    if (user_driver->pMsgWaitForMultipleObjectsEx( 0, NULL, &zero, flags, 0 ) == WAIT_TIMEOUT)
+    if (!user_driver->pProcessEvents( flags ))
         flush_window_surfaces( TRUE );
 }
 
@@ -2020,7 +2147,7 @@ BOOL set_foreground_window( HWND hwnd, BOOL mouse )
     return ret;
 }
 
-struct
+static struct
 {
     HBITMAP bitmap;
     unsigned int timeout;
@@ -2399,9 +2526,9 @@ void toggle_caret( HWND hwnd )
  */
 BOOL WINAPI NtUserEnableMouseInPointer( BOOL enable )
 {
-    FIXME( "enable %u semi-stub!\n", enable );
-    enable_mouse_in_pointer = TRUE;
-    return TRUE;
+    FIXME( "enable %u stub!\n", enable );
+    RtlSetLastWin32Error( ERROR_CALL_NOT_IMPLEMENTED );
+    return FALSE;
 }
 
 /**********************************************************************
@@ -2412,32 +2539,6 @@ BOOL WINAPI NtUserIsMouseInPointerEnabled(void)
     FIXME( "stub!\n" );
     RtlSetLastWin32Error( ERROR_CALL_NOT_IMPLEMENTED );
     return FALSE;
-}
-
-/**********************************************************************
- *       NtUserIsTouchWindow    (win32u.@)
- */
-BOOL WINAPI NtUserIsTouchWindow( HWND hwnd, ULONG *flags )
-{
-    DWORD win_flags = win_set_flags( hwnd, 0, 0 );
-    TRACE( "hwnd %p, flags %p.\n", hwnd, flags );
-    return (win_flags & WIN_IS_TOUCH) != 0;
-}
-
-
-BOOL register_touch_window( HWND hwnd, UINT flags )
-{
-    DWORD win_flags = win_set_flags( hwnd, WIN_IS_TOUCH, 0 );
-    TRACE( "hwnd %p, flags %#x.\n", hwnd, flags );
-    return (win_flags & WIN_IS_TOUCH) == 0;
-}
-
-
-BOOL unregister_touch_window( HWND hwnd )
-{
-    DWORD win_flags = win_set_flags( hwnd, 0, WIN_IS_TOUCH );
-    TRACE( "hwnd %p.\n", hwnd );
-    return (win_flags & WIN_IS_TOUCH) != 0;
 }
 
 /**********************************************************************

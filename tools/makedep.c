@@ -27,7 +27,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <signal.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -158,6 +157,7 @@ static const char *icotool;
 static const char *msgfmt;
 static const char *ln_s;
 static const char *sed_cmd;
+static const char *wayland_scanner;
 /* per-architecture global variables */
 static const char *arch_dirs[MAX_ARCHS];
 static const char *arch_pe_dirs[MAX_ARCHS];
@@ -194,7 +194,6 @@ struct makefile
     const char     *module;
     const char     *testdll;
     const char     *extlib;
-    const char     *sharedlib;
     const char     *staticlib;
     const char     *importlib;
     const char     *unixlib;
@@ -205,7 +204,6 @@ struct makefile
 
     /* values generated at output time */
     struct strarray in_files;
-    struct strarray ok_files;
     struct strarray pot_files;
     struct strarray test_files;
     struct strarray clean_files;
@@ -220,6 +218,7 @@ struct makefile
     struct strarray dependencies;
     struct strarray object_files[MAX_ARCHS];
     struct strarray implib_files[MAX_ARCHS];
+    struct strarray ok_files[MAX_ARCHS];
     struct strarray res_files[MAX_ARCHS];
     struct strarray all_targets[MAX_ARCHS];
     struct strarray install_rules[NB_INSTALL_RULES];
@@ -472,6 +471,15 @@ static char *replace_filename( const char *path, const char *name )
     return ret;
 }
 
+/*******************************************************************
+ *         get_filename
+ */
+static char *get_filename( const char *name )
+{
+    char *filename = strrchr( name, '/' );
+    if (!filename) return xstrdup( name );
+    return xstrdup( filename + 1 );
+}
 
 /*******************************************************************
  *         replace_substr
@@ -1391,6 +1399,35 @@ static struct file *open_src_file( const struct makefile *make, struct incl_file
     return file;
 }
 
+/*******************************************************************
+ *         open_wayland_protocol_file
+ */
+static struct file *open_wayland_protocol_file( const struct makefile *make,
+                                                struct incl_file *pFile )
+{
+    char *proto_filename;
+    struct incl_file *incl_file;
+    struct file *ret_file = NULL;
+
+    if (!strendswith( pFile->name, "-client-protocol.h" )) return NULL;
+
+    proto_filename = replace_extension( pFile->name, "-client-protocol.h", ".xml" );
+
+    LIST_FOR_EACH_ENTRY( incl_file, &make->sources, struct incl_file, entry )
+    {
+        if (strendswith( incl_file->name, proto_filename ))
+        {
+            pFile->sourcename = incl_file->filename;
+            pFile->filename = obj_dir_path( make, pFile->name );
+            ret_file = incl_file->file;
+            break;
+        }
+    }
+
+    free( proto_filename );
+
+    return ret_file;
+}
 
 /*******************************************************************
  *         find_importlib_module
@@ -1430,6 +1467,7 @@ static struct file *open_include_file( const struct makefile *make, struct incl_
         if ((file = open_local_generated_file( make, pFile, ".cur", ".svg" ))) return file;
         if ((file = open_local_generated_file( make, pFile, ".ico", ".svg" ))) return file;
     }
+    if ((file = open_wayland_protocol_file( make, pFile ))) return file;
 
     /* check for extra targets */
     if (strarray_exists( &make->extra_targets, pFile->name ))
@@ -1804,6 +1842,15 @@ static struct makefile *parse_makefile( const char *path )
     return make;
 }
 
+/*******************************************************************
+ *         is_wayland_protocol
+ */
+static int is_wayland_protocol( struct incl_file *source )
+{
+    return strendswith( source->name, ".xml" ) &&
+           (strstr( source->name, "stable/" ) || strstr( source->name, "unstable/" ) ||
+            strstr( source->name, "staging/" ));
+}
 
 /*******************************************************************
  *         add_generated_sources
@@ -1916,6 +1963,23 @@ static void add_generated_sources( struct makefile *make )
             char *obj = replace_extension( source->name, ".spec", "" );
             strarray_addall_uniq( &make->extra_imports,
                                   get_expanded_file_local_var( make, obj, "IMPORTS" ));
+        }
+        if (is_wayland_protocol( source ))
+        {
+            char *filename = get_filename( source->name );
+            char *code_filename = replace_extension ( filename , ".xml", "-protocol.c" );
+            char *header_filename = replace_extension ( filename , ".xml", "-client-protocol.h" );
+
+            file = add_generated_source( make, code_filename, NULL, 0 );
+            file->file->flags |= FLAG_C_UNIX;
+            file->use_msvcrt = 0;
+            file = add_generated_source( make, header_filename, NULL, 0 );
+            file->file->flags |= FLAG_C_UNIX;
+            file->use_msvcrt = 0;
+
+            free( filename );
+            free( code_filename );
+            free( header_filename );
         }
     }
     if (make->testdll)
@@ -2314,39 +2378,6 @@ static const char *get_include_install_path( const char *name )
     if (!strncmp( name, "wine/", 5 )) return name + 5;
     if (!strncmp( name, "msvcrt/", 7 )) return name;
     return strmake( "windows/%s", name );
-}
-
-
-/*******************************************************************
- *         get_shared_library_name
- *
- * Determine possible names for a shared library with a version number.
- */
-static struct strarray get_shared_lib_names( const char *libname )
-{
-    struct strarray ret = empty_strarray;
-    const char *ext, *p;
-    char *name, *first, *second;
-    size_t len = 0;
-
-    strarray_add( &ret, libname );
-
-    for (p = libname; (p = strchr( p, '.' )); p++)
-        if ((len = strspn( p + 1, "0123456789." ))) break;
-
-    if (!len) return ret;
-    ext = p + 1 + len;
-    if (*ext && ext[-1] == '.') ext--;
-
-    /* keep only the first group of digits */
-    name = xstrdup( libname );
-    first = name + (p - libname);
-    if ((second = strchr( first + 1, '.' )))
-    {
-        strcpy( second, ext );
-        strarray_add( &ret, xstrdup( name ));
-    }
-    return ret;
 }
 
 
@@ -3126,6 +3157,19 @@ static void output_source_spec( struct makefile *make, struct incl_file *source,
     }
 }
 
+static void output_source_xml( struct makefile *make, struct incl_file *source, const char *obj )
+{
+    char *base;
+
+    if (!is_wayland_protocol( source )) return;
+
+    base = get_filename( obj );
+    output( "%s-protocol.c: %s\n", obj_dir_path( make, base ), source->filename );
+    output( "\t%s%s private-code $< $@\n", cmd_prefix( "WAYLAND_SCANNER" ), wayland_scanner );
+    output( "%s-client-protocol.h: %s\n", obj_dir_path( make, base ), source->filename );
+    output( "\t%s%s client-header $< $@\n", cmd_prefix( "WAYLAND_SCANNER" ), wayland_scanner);
+    free( base );
+}
 
 /*******************************************************************
  *         output_source_one_arch
@@ -3170,7 +3214,7 @@ static void output_source_one_arch( struct makefile *make, struct incl_file *sou
     output_filenames( make->extlib ? extra_cflags_extlib[arch] : extra_cflags[arch] );
     if (!arch)
     {
-        if (make->sharedlib || (source->file->flags & FLAG_C_UNIX))
+        if (source->file->flags & FLAG_C_UNIX)
         {
             output_filenames( unix_dllflags );
         }
@@ -3198,7 +3242,7 @@ static void output_source_one_arch( struct makefile *make, struct incl_file *sou
 
         ok_file = strmake( "%s%s.ok", arch_dirs[arch], obj );
         test_exe = replace_extension( make->testdll, ".dll", "_test.exe" );
-        strarray_add( &make->ok_files, ok_file );
+        strarray_add( &make->ok_files[arch], ok_file );
         output( "%s:\n", obj_dir_path( make, ok_file ));
         output( "\t%s%s $(RUNTESTFLAGS) -T . -M %s -p %s %s && touch $@\n",
                 cmd_prefix( "TEST" ),
@@ -3265,6 +3309,7 @@ static const struct
     { "in", output_source_in },
     { "x", output_source_x },
     { "spec", output_source_spec },
+    { "xml", output_source_xml },
     { NULL, output_source_default }
 };
 
@@ -3466,48 +3511,6 @@ static void output_static_lib( struct makefile *make, unsigned int arch )
 
 
 /*******************************************************************
- *         output_shared_lib
- */
-static void output_shared_lib( struct makefile *make )
-{
-    unsigned int i;
-    char *basename, *p;
-    struct strarray names = get_shared_lib_names( make->sharedlib );
-    struct strarray all_libs = empty_strarray;
-    struct strarray dep_libs = empty_strarray;
-    unsigned int arch = 0;  /* shared libs are always native */
-
-    basename = xstrdup( make->sharedlib );
-    if ((p = strchr( basename, '.' ))) *p = 0;
-
-    strarray_addall( &dep_libs, get_local_dependencies( make, basename, make->in_files ));
-    strarray_addall( &all_libs, get_expanded_file_local_var( make, basename, "LDFLAGS" ));
-    strarray_addall( &all_libs, get_expanded_make_var_array( make, "UNIX_LIBS" ));
-    strarray_addall( &all_libs, libs );
-
-    output( "%s:", obj_dir_path( make, make->sharedlib ));
-    output_filenames_obj_dir( make, make->object_files[arch] );
-    output_filenames( dep_libs );
-    output( "\n" );
-    output( "\t%s$(CC) -o $@", cmd_prefix( "CCLD" ));
-    output_filenames_obj_dir( make, make->object_files[arch] );
-    output_filenames( all_libs );
-    output_filename( "$(LDFLAGS)" );
-    output( "\n" );
-    add_install_rule( make, make->sharedlib, arch, make->sharedlib,
-                      strmake( "p%s%s", arch_install_dirs[arch], make->sharedlib ));
-    for (i = 1; i < names.count; i++)
-    {
-        output( "%s: %s\n", obj_dir_path( make, names.str[i] ), obj_dir_path( make, names.str[i-1] ));
-        output_symlink_rule( names.str[i-1], obj_dir_path( make, names.str[i] ), 0 );
-        add_install_rule( make, names.str[i], arch, names.str[i-1],
-                          strmake( "y%s%s", arch_install_dirs[arch], names.str[i] ));
-    }
-    strarray_addall( &make->all_targets[arch], names );
-}
-
-
-/*******************************************************************
  *         output_test_module
  */
 static void output_test_module( struct makefile *make, unsigned int arch )
@@ -3561,10 +3564,10 @@ static void output_test_module( struct makefile *make, unsigned int arch )
 
     if (make->disabled[arch] || (parent && parent->disabled[arch]))
     {
-        make->ok_files = empty_strarray;
+        make->ok_files[arch] = empty_strarray;
         return;
     }
-    output_filenames_obj_dir( make, make->ok_files );
+    output_filenames_obj_dir( make, make->ok_files[arch] );
     output( ": %s", obj_dir_path( make, testmodule ));
     if (parent)
     {
@@ -3574,15 +3577,15 @@ static void output_test_module( struct makefile *make, unsigned int arch )
     }
     output( "\n" );
     output( "%s %s:", obj_dir_path( make, "check" ), obj_dir_path( make, "test" ));
-    output_filenames_obj_dir( make, make->ok_files );
+    output_filenames_obj_dir( make, make->ok_files[arch] );
     output( "\n" );
     strarray_add_uniq( &make->phony_targets, obj_dir_path( make, "check" ));
     strarray_add_uniq( &make->phony_targets, obj_dir_path( make, "test" ));
     output( "%s::\n", obj_dir_path( make, "testclean" ));
     output( "\trm -f" );
-    output_filenames_obj_dir( make, make->ok_files );
+    output_filenames_obj_dir( make, make->ok_files[arch] );
     output( "\n" );
-    strarray_addall( &make->clean_files, make->ok_files );
+    strarray_addall( &make->clean_files, make->ok_files[arch] );
     strarray_add_uniq( &make->phony_targets, obj_dir_path( make, "testclean" ));
 }
 
@@ -3671,13 +3674,13 @@ static void output_subdirs( struct makefile *make )
         strarray_addall_path( &distclean_files, submakes[i]->obj_dir, submakes[i]->distclean_files );
         strarray_addall_path( &distclean_dirs, submakes[i]->obj_dir, subclean );
         strarray_addall_path( &make->maintainerclean_files, submakes[i]->obj_dir, submakes[i]->maintainerclean_files );
-        strarray_addall_path( &testclean_files, submakes[i]->obj_dir, submakes[i]->ok_files );
         strarray_addall_path( &make->pot_files, submakes[i]->obj_dir, submakes[i]->pot_files );
 
         for (arch = 0; arch < archs.count; arch++)
         {
             if (submakes[i]->disabled[arch]) continue;
             strarray_addall_path( &all_targets, submakes[i]->obj_dir, submakes[i]->all_targets[arch] );
+            strarray_addall_path( &testclean_files, submakes[i]->obj_dir, submakes[i]->ok_files[arch] );
         }
         if (submakes[i]->disabled[0]) continue;
 
@@ -3832,7 +3835,6 @@ static void output_sources( struct makefile *make )
         for (arch = 0; arch < archs.count; arch++)
             if (is_multiarch( arch )) output_test_module( make, arch );
     }
-    else if (make->sharedlib) output_shared_lib( make );
     else if (make->programs.count) output_programs( make );
 
     for (i = 0; i < make->scripts.count; i++)
@@ -4122,6 +4124,7 @@ static void output_silent_rules(void)
         "MSG",
         "SED",
         "TEST",
+        "WAYLAND_SCANNER",
         "WIDL",
         "WMC",
         "WRC"
@@ -4221,6 +4224,7 @@ static void load_sources( struct makefile *make )
         "IN_SRCS",
         "PO_SRCS",
         "MANPAGES",
+        "WAYLAND_PROTOCOL_SRCS",
         NULL
     };
     const char **var;
@@ -4234,7 +4238,6 @@ static void load_sources( struct makefile *make )
     make->parent_dir    = get_expanded_make_variable( make, "PARENTSRC" );
     make->module        = get_expanded_make_variable( make, "MODULE" );
     make->testdll       = get_expanded_make_variable( make, "TESTDLL" );
-    make->sharedlib     = get_expanded_make_variable( make, "SHAREDLIB" );
     make->staticlib     = get_expanded_make_variable( make, "STATICLIB" );
     make->importlib     = get_expanded_make_variable( make, "IMPORTLIB" );
     make->extlib        = get_expanded_make_variable( make, "EXTLIB" );
@@ -4418,11 +4421,7 @@ int main( int argc, char *argv[] )
     if (argc > 1) fatal_error( "Directory arguments not supported in this mode\n" );
 
     atexit( cleanup_files );
-    signal( SIGTERM, exit_on_signal );
-    signal( SIGINT, exit_on_signal );
-#ifdef SIGHUP
-    signal( SIGHUP, exit_on_signal );
-#endif
+    init_signals( exit_on_signal );
 
     for (i = 0; i < HASH_SIZE; i++) list_init( &files[i] );
     for (i = 0; i < HASH_SIZE; i++) list_init( &global_includes[i] );
@@ -4456,6 +4455,7 @@ int main( int argc, char *argv[] )
     msgfmt             = get_expanded_make_variable( top_makefile, "MSGFMT" );
     sed_cmd            = get_expanded_make_variable( top_makefile, "SED_CMD" );
     ln_s               = get_expanded_make_variable( top_makefile, "LN_S" );
+    wayland_scanner    = get_expanded_make_variable( top_makefile, "WAYLAND_SCANNER" );
 
     if (root_src_dir && !strcmp( root_src_dir, "." )) root_src_dir = NULL;
     if (tools_dir && !strcmp( tools_dir, "." )) tools_dir = NULL;

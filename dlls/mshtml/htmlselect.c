@@ -649,7 +649,7 @@ dispex_static_data_t HTMLOptionElementFactory_dispex = {
     &HTMLOptionElementFactory_dispex_vtbl,
     PROTO_ID_NULL,
     IHTMLOptionElementFactory_tid,
-    HTMLOptionElementFactory_iface_tids
+    HTMLOptionElementFactory_iface_tids,
 };
 
 static HRESULT HTMLOptionCtor_value(DispatchEx *iface, LCID lcid, WORD flags, DISPPARAMS *params,

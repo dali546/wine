@@ -7698,28 +7698,6 @@ static void test_xhr(IHTMLDocument2 *doc)
     IDispatchEx_Release(dispex);
 }
 
-static void test_xdr(IHTMLDocument2 *doc)
-{
-    IHTMLWindow2 *window;
-    IDispatchEx *dispex;
-    DISPID id;
-    BSTR str;
-    HRESULT hres;
-
-    hres = IHTMLDocument2_get_parentWindow(doc, &window);
-    ok(hres == S_OK, "get_parentWindow failed: %08lx\n", hres);
-
-    hres = IHTMLWindow2_QueryInterface(window, &IID_IDispatchEx, (void**)&dispex);
-    ok(hres == S_OK, "Could not get IDispatchEx iface: %08lx\n", hres);
-
-    str = SysAllocString(L"XDomainRequest");
-    hres = IDispatchEx_GetDispID(dispex, str, 0, &id);
-    ok(hres == S_OK, "GetDispID failed: %08lx\n", hres);
-    SysFreeString(str);
-
-    IHTMLWindow2_Release(window);
-}
-
 static void test_defaults(IHTMLDocument2 *doc)
 {
     IHTMLStyleSheetsCollection *stylesheetcol;
@@ -11139,7 +11117,7 @@ static IHTMLDocument2 *create_docfrag(IHTMLDocument2 *doc)
 static void test_docfrag(IHTMLDocument2 *doc)
 {
     IHTMLDocument2 *frag, *owner_doc, *doc_node;
-    IHTMLElement *div, *body, *br;
+    IHTMLElement *div, *main_body, *frag_body, *br,*html;
     IHTMLElementCollection *col;
     IHTMLLocation *location;
     HRESULT hres;
@@ -11153,19 +11131,37 @@ static void test_docfrag(IHTMLDocument2 *doc)
         ET_BR
     };
 
+    static const elem_type_t empty_types[] = {};
+
+    static const elem_type_t frag_types[] = {
+            ET_HTML,
+            ET_DIV,
+            ET_DIV,
+            ET_BODY
+    };
+
     frag = create_docfrag(doc);
 
     test_disp((IUnknown*)frag, &DIID_DispHTMLDocument, &CLSID_HTMLDocument, L"[object]");
 
-    body = (void*)0xdeadbeef;
-    hres = IHTMLDocument2_get_body(frag, &body);
+    frag_body = (void*)0xdeadbeef;
+    hres = IHTMLDocument2_get_body(frag, &frag_body);
     ok(hres == S_OK, "get_body failed: %08lx\n", hres);
-    ok(!body, "body != NULL\n");
+    ok(!frag_body, "body != NULL\n");
 
     location = (void*)0xdeadbeef;
     hres = IHTMLDocument2_get_location(frag, &location);
     ok(hres == E_UNEXPECTED, "get_location failed: %08lx\n", hres);
     ok(location == (void*)0xdeadbeef, "location changed\n");
+
+    col = NULL;
+    hres = IHTMLDocument2_get_all(frag, &col);
+    ok(hres == S_OK, "get_all failed: %08lx\n", hres);
+    ok(col != NULL, "got null elements collection\n");
+    if (col) {
+        test_elem_collection((IUnknown *) col, empty_types, ARRAY_SIZE(empty_types));
+        IHTMLElementCollection_Release(col);
+    }
 
     br = test_create_elem(doc, L"BR");
     test_elem_source_index(br, -1);
@@ -11184,6 +11180,52 @@ static void test_docfrag(IHTMLDocument2 *doc)
     ok(hres == S_OK, "get_all failed: %08lx\n", hres);
     test_elem_collection((IUnknown*)col, all_types, ARRAY_SIZE(all_types));
     IHTMLElementCollection_Release(col);
+
+    html = test_create_elem(doc, L"HTML");
+    test_elem_source_index(html, -1);
+    test_node_append_child((IUnknown*)frag, (IUnknown*)html);
+    test_elem_source_index(html, 0);
+
+    div = test_create_elem(doc, L"DIV");
+    test_elem_source_index(div, -1);
+    test_node_append_child((IUnknown*)html, (IUnknown*)div);
+    test_elem_source_index(div, 1);
+    IHTMLElement_Release(div);
+
+    div = test_create_elem(doc, L"DIV");
+    test_elem_source_index(div, -1);
+    test_node_append_child((IUnknown*)html, (IUnknown*)div);
+    test_elem_source_index(div, 2);
+
+    frag_body = test_create_elem(doc, L"BODY");
+    test_elem_source_index(frag_body, -1);
+    test_node_append_child((IUnknown*)div, (IUnknown*)frag_body);
+    test_elem_source_index(frag_body, 3);
+    IHTMLElement_Release(frag_body);
+    IHTMLElement_Release(div);
+    IHTMLElement_Release(html);
+
+    hres = IHTMLDocument2_get_body(doc, &main_body);
+    ok(hres == S_OK, "get_body failed: %08lx\n", hres);
+    ok(main_body != NULL, "body == NULL\n");
+
+    hres = IHTMLDocument2_get_body(frag, &frag_body);
+    ok(hres == S_OK, "get_body failed: %08lx\n", hres);
+    ok(frag_body != NULL, "body == NULL\n");
+    if (frag_body) {
+        ok(!iface_cmp((IUnknown *) frag_body, (IUnknown *) main_body), "frag_body == main_body\n");
+        IHTMLElement_Release(frag_body);
+    }
+    IHTMLElement_Release(main_body);
+
+    col = NULL;
+    hres = IHTMLDocument2_get_all(frag, &col);
+    ok(hres == S_OK, "get_all failed: %08lx\n", hres);
+    ok(col != NULL, "got null elements collection\n");
+    if (col) {
+        test_elem_collection((IUnknown *) col, frag_types, ARRAY_SIZE(frag_types));
+        IHTMLElementCollection_Release(col);
+    }
 
     div = test_create_elem(frag, L"div");
     owner_doc = get_owner_doc((IUnknown*)div);
@@ -11961,14 +12003,16 @@ static void test_document_mode_lock(void)
     IEventTarget *event_target;
     IPersistStreamInit *init;
     IHTMLWindow7 *window7;
-    IHTMLWindow6 *window6;
     IHTMLWindow5 *window5;
     IHTMLWindow2 *window;
+    IDispatchEx *dispex;
     IStream *stream;
+    DISPID dispid;
     HRESULT hres;
     HGLOBAL mem;
     VARIANT var;
     SIZE_T len;
+    BSTR bstr;
     MSG msg;
 
     notif_doc = doc = create_document();
@@ -12012,14 +12056,6 @@ static void test_document_mode_lock(void)
     ok(V_VT(&var) == VT_EMPTY, "V_VT(XMLHttpRequest) = %d\n", V_VT(&var));
     IHTMLWindow5_Release(window5);
 
-    V_VT(&var) = VT_NULL;
-    hres = IHTMLWindow2_QueryInterface(window, &IID_IHTMLWindow6, (void**)&window6);
-    ok(hres == S_OK, "Could not get IHTMLWindow6: %08lx\n", hres);
-    hres = IHTMLWindow6_get_XDomainRequest(window6, &var);
-    ok(hres == S_OK, "get_XDomainRequest failed: %08lx\n", hres);
-    ok(V_VT(&var) == VT_EMPTY, "V_VT(XDomainRequest) = %d\n", V_VT(&var));
-    IHTMLWindow6_Release(window6);
-
     hres = IHTMLWindow2_QueryInterface(window, &IID_IHTMLWindow7, (void**)&window7);
     ok(hres == S_OK, "Could not get IHTMLWindow7: %08lx\n", hres);
     hres = IHTMLWindow7_get_performance(window7, &var);
@@ -12030,6 +12066,14 @@ static void test_document_mode_lock(void)
     IHTMLWindow7_Release(window7);
     IHTMLWindow2_Release(window);
     VariantClear(&var);
+
+    bstr = SysAllocString(L"wineTestProp");
+    hres = IHTMLLocation_QueryInterface(location, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "Could not get IDispatchEx: %08lx\n", hres);
+    hres = IDispatchEx_GetDispID(dispex, bstr, fdexNameEnsure, &dispid);
+    ok(hres == S_OK, "GetDispID(wineTestProp) returned: %08lx\n", hres);
+    IDispatchEx_Release(dispex);
+    SysFreeString(bstr);
 
     len = strlen(doc_blank_ie9);
     mem = GlobalAlloc(0, len);
@@ -12069,8 +12113,13 @@ static void test_document_mode_lock(void)
     hres = IHTMLWindow2_get_location(window, &location2);
     ok(hres == S_OK, "get_location failed: %08lx\n", hres);
     ok(location == location2, "location != location2\n");
+
+    bstr = SysAllocString(L"wineTestProp");
+    hres = IHTMLLocation_GetIDsOfNames(location2, &IID_NULL, &bstr, 1, 0, &dispid);
+    ok(hres == DISP_E_UNKNOWNNAME, "GetIDsOfNames(wineTestProp) returned: %08lx\n", hres);
     IHTMLLocation_Release(location2);
     IHTMLLocation_Release(location);
+    SysFreeString(bstr);
 
     hres = IHTMLWindow2_get_navigator(window, &navigator2);
     ok(hres == S_OK, "get_navigator failed: %08lx\n", hres);

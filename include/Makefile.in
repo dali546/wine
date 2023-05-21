@@ -183,6 +183,9 @@ SOURCES = \
 	dciddi.h \
 	dciman.h \
 	dcommon.idl \
+	dcomp.idl \
+	dcompanimation.idl \
+	dcomptypes.idl \
 	dde.h \
 	dde.rh \
 	ddeml.h \
@@ -631,6 +634,7 @@ SOURCES = \
 	ras.h \
 	rasdlg.h \
 	raserror.h \
+	realtimeapiset.h \
 	reason.h \
 	regstr.h \
 	relogger.idl \
@@ -752,6 +756,7 @@ SOURCES = \
 	uiautomationcore.idl \
 	uiautomationcoreapi.h \
 	uiribbon.idl \
+	uiviewsettingsinterop.idl \
 	unexposeenums2managed.h \
 	unknwn.idl \
 	urlhist.idl \
@@ -818,17 +823,17 @@ SOURCES = \
 	windows.media.idl \
 	windows.media.speechrecognition.idl \
 	windows.media.speechsynthesis.idl \
-	windows.networking.idl \
-	windows.networking.connectivity.idl \
+	windows.security.credentials.idl \
 	windows.security.cryptography.idl \
 	windows.security.exchangeactivesyncprovisioning.idl \
 	windows.storage.streams.idl \
 	windows.system.idl \
 	windows.system.power.idl \
-	windows.system.profile.idl \
+	windows.system.profile.systemmanufacturers.idl \
 	windows.system.threading.idl \
 	windows.system.userprofile.idl \
 	windows.ui.idl \
+	windows.ui.viewmanagement.idl \
 	windowscontracts.idl \
 	windowsx.h \
 	wine/afd.h \

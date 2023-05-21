@@ -635,14 +635,13 @@ static BOOL add_printer_driver( const WCHAR *name, const WCHAR *ppd_dir )
 {
     WCHAR *ppd = get_ppd_filename( ppd_dir, name );
     struct get_ppd_params ppd_params;
-    UNICODE_STRING nt_ppd;
+    UNICODE_STRING nt_ppd = { .Buffer = NULL };
     DRIVER_INFO_3W di3;
     unsigned int i;
     BOOL res = FALSE;
     WCHAR raw[] = L"RAW", driver_nt[] = L"wineps.drv";
 
     if (!ppd) return FALSE;
-    RtlInitUnicodeString( &nt_ppd, NULL );
     if (!RtlDosPathNameToNtPathName_U( ppd, &nt_ppd, NULL, NULL )) goto end;
 
     ppd_params.printer = name;
@@ -887,7 +886,7 @@ static LPWSTR get_servername_from_name(LPCWSTR name)
     if (name == NULL) return NULL;
     if ((name[0] != '\\') || (name[1] != '\\')) return NULL;
 
-    server = wcsdup(&name[2]);     /* skip over both backslash */
+    server = wcsdup(&name[2]);     /* skip over both backslashes */
     if (server == NULL) return NULL;
 
     /* strip '\' and the printername */
@@ -1928,12 +1927,14 @@ BOOL WINAPI IsValidDevmodeW(PDEVMODEW dm, SIZE_T size)
 #undef F_SIZE
     };
     int i;
+    const DWORD fields_off = FIELD_OFFSET(DEVMODEW, dmFields) + sizeof(dm->dmFields);
 
     if (!dm) return FALSE;
-    if (size < FIELD_OFFSET(DEVMODEW, dmFields) + sizeof(dm->dmFields)) return FALSE;
+    if (size < fields_off) return FALSE;
+    if (dm->dmSize < fields_off || size < dm->dmSize + dm->dmDriverExtra) return FALSE;
 
     for (i = 0; i < ARRAY_SIZE(map); i++)
-        if ((dm->dmFields & map[i].flag) && size < map[i].size)
+        if ((dm->dmFields & map[i].flag) && dm->dmSize < map[i].size)
             return FALSE;
 
     return TRUE;
@@ -7491,9 +7492,6 @@ static BOOL is_port(const WCHAR *port_list, const WCHAR *output)
 {
     size_t len;
 
-    if (!output)
-        return FALSE;
-
     if (wcschr(output, ':'))
         return TRUE;
 
@@ -7533,7 +7531,7 @@ LPWSTR WINAPI StartDocDlgW( HANDLE hPrinter, DOCINFOW *doc )
 
     /* Check whether default port is FILE: */
     b = !doc->lpszOutput && (!pi5->pPortName || wcscmp( pi5->pPortName, L"FILE:" ));
-    if (!b)
+    if (!b && doc->lpszOutput && wcscmp( doc->lpszOutput, L"FILE:" ))
         b = is_port(pi5->pPortName, doc->lpszOutput);
     free(pi5);
     if (b)

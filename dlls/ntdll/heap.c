@@ -299,7 +299,7 @@ struct heap
     DWORD            pending_pos;   /* Position in pending free requests ring */
     struct block   **pending_free;  /* Ring buffer for pending free requests */
     RTL_CRITICAL_SECTION cs;
-    struct entry     free_lists[FREE_LIST_COUNT];
+    struct entry     free_lists[HEAP_NB_FREE_LISTS];
     struct bin      *bins;
     SUBHEAP          subheap;
 };
@@ -2127,7 +2127,6 @@ static NTSTATUS heap_resize_large( struct heap *heap, ULONG flags, struct block 
     SIZE_T old_block_size = large->block_size;
     *old_size = large->data_size;
 
-    if (block_size < HEAP_MIN_LARGE_BLOCK_SIZE / 4) return STATUS_NO_MEMORY;  /* shrinking large block to small block */
     if (old_block_size < block_size) return STATUS_NO_MEMORY;
 
     /* FIXME: we could remap zero-pages instead */

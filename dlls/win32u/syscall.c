@@ -225,7 +225,6 @@ static void * const syscalls[] =
     NtUserInvalidateRgn,
     NtUserIsClipboardFormatAvailable,
     NtUserIsMouseInPointerEnabled,
-    NtUserIsTouchWindow,
     NtUserKillTimer,
     NtUserLockWindowUpdate,
     NtUserLogicalToPerMonitorDPIPhysicalPoint,

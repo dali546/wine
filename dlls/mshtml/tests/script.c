@@ -119,7 +119,6 @@ DEFINE_EXPECT(SetProperty_ABBREVIATE_GLOBALNAME_RESOLUTION_TRUE);
 DEFINE_EXPECT(SetProperty2_HACK_TRIDENTEVENTSINK);
 DEFINE_EXPECT(SetProperty2_INVOKEVERSIONING);
 DEFINE_EXPECT(SetProperty2_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
-DEFINE_EXPECT(SetProperty2_ABBREVIATE_GLOBALNAME_RESOLUTION_TRUE);
 DEFINE_EXPECT(SetScriptSite);
 DEFINE_EXPECT(SetScriptSite2);
 DEFINE_EXPECT(GetScriptState);
@@ -130,7 +129,6 @@ DEFINE_EXPECT(AddNamedItem);
 DEFINE_EXPECT(AddNamedItem2);
 DEFINE_EXPECT(ParseScriptText_script);
 DEFINE_EXPECT(ParseScriptText_script2);
-DEFINE_EXPECT(ParseScriptText_script_with_prescript_site);
 DEFINE_EXPECT(ParseScriptText_execScript);
 DEFINE_EXPECT(GetScriptDispatch);
 DEFINE_EXPECT(funcDisp);
@@ -3553,13 +3551,9 @@ static HRESULT WINAPI ActiveScriptProperty2_SetProperty(IActiveScriptProperty *i
         ok(V_I4(pvarValue) == 1, "V_I4(pvarValue) = %ld\n", V_I4(pvarValue));
         break;
     case SCRIPTPROP_ABBREVIATE_GLOBALNAME_RESOLUTION:
-        if(V_BOOL(pvarValue))
-            CHECK_EXPECT(SetProperty2_ABBREVIATE_GLOBALNAME_RESOLUTION_TRUE);
-        else {
-            CHECK_EXPECT(SetProperty2_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
-            SET_EXPECT(SetProperty_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
-        }
+        CHECK_EXPECT(SetProperty2_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
         ok(V_VT(pvarValue) == VT_BOOL, "V_VT(pvarValue) = %d\n", V_VT(pvarValue));
+        ok(!V_BOOL(pvarValue), "ABBREVIATE_GLOBALNAME_RESOLUTION is TRUE\n");
         break;
     case 0x70000003: /* Undocumented property set by IE10 */
         return E_NOTIMPL;
@@ -3602,7 +3596,6 @@ static HRESULT WINAPI ActiveScriptParse2_ParseScriptText(IActiveScriptParse *ifa
         ok(!lstrcmpW(pstrItemName, L"window"), "pstrItemName = %s\n", wine_dbgstr_w(pstrItemName));
         ok(!lstrcmpW(pstrDelimiter, L"</SCRIPT>"), "pstrDelimiter = %s\n", wine_dbgstr_w(pstrDelimiter));
         ok(dwFlags == (SCRIPTTEXT_ISVISIBLE | SCRIPTTEXT_HOSTMANAGESSOURCE), "dwFlags = %08lx\n", dwFlags);
-        test_sp();
         return S_OK;
     }
 
@@ -3719,10 +3712,6 @@ static HRESULT WINAPI ActiveScript2_AddNamedItem(IActiveScript *iface, LPCOLESTR
     IHTMLWindow2_Release(window);
 
     IUnknown_Release(unk);
-
-    /* IE8 */
-    CHECK_CALLED_BROKEN(SetProperty_ABBREVIATE_GLOBALNAME_RESOLUTION_TRUE);
-    SET_EXPECT(SetProperty2_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
     return S_OK;
 }
 
@@ -3834,6 +3823,7 @@ typedef struct {
     IInternetProtocolSink *sink;
     BINDINFO bind_info;
 
+    HANDLE delay_event;
     BSTR content_type;
     IStream *stream;
     char *data;
@@ -3844,12 +3834,17 @@ typedef struct {
     IUri *uri;
 } ProtocolHandler;
 
+static ProtocolHandler *delay_with_signal_handler;
+
 static DWORD WINAPI delay_proc(void *arg)
 {
     PROTOCOLDATA protocol_data = {PI_FORCE_ASYNC};
     ProtocolHandler *protocol_handler = arg;
 
-    Sleep(protocol_handler->delay);
+    if(protocol_handler->delay_event)
+        WaitForSingleObject(protocol_handler->delay_event, INFINITE);
+    else
+        Sleep(protocol_handler->delay);
     protocol_handler->delay = -1;
     IInternetProtocolSink_Switch(protocol_handler->sink, &protocol_data);
     return 0;
@@ -3894,7 +3889,7 @@ static void report_data(ProtocolHandler *This)
 
         IHttpNegotiate_Release(http_negotiate);
 
-        if(This->delay) {
+        if(This->delay || This->delay_event) {
             IInternetProtocolEx_AddRef(&This->IInternetProtocolEx_iface);
             QueueUserWorkItem(delay_proc, This, 0);
             return;
@@ -4039,6 +4034,8 @@ static ULONG WINAPI Protocol_Release(IInternetProtocolEx *iface)
     LONG ref = InterlockedDecrement(&This->ref);
 
     if(!ref) {
+        if(This->delay_event)
+            CloseHandle(This->delay_event);
         if(This->sink)
             IInternetProtocolSink_Release(This->sink);
         if(This->stream)
@@ -4220,8 +4217,20 @@ static HRESULT WINAPI ProtocolEx_StartEx(IInternetProtocolEx *iface, IUri *uri, 
 
     hres = IUri_GetQuery(uri, &query);
     if(SUCCEEDED(hres)) {
-        if(!lstrcmpW(query, L"?delay"))
+        if(!wcscmp(query, L"?delay"))
             This->delay = 1000;
+        else if(!wcscmp(query, L"?delay_with_signal")) {
+            if(delay_with_signal_handler) {
+                ProtocolHandler *delayed = delay_with_signal_handler;
+                delay_with_signal_handler = NULL;
+                SetEvent(delayed->delay_event);
+                This->delay = 30;
+            }else {
+                delay_with_signal_handler = This;
+                This->delay_event = CreateEventW(NULL, FALSE, FALSE, NULL);
+                ok(This->delay_event != NULL, "CreateEvent failed: %08lx\n", GetLastError());
+            }
+        }
         else if(!wcsncmp(query, L"?content-type=", sizeof("?content-type=")-1))
             This->content_type = SysAllocString(query + sizeof("?content-type=")-1);
         SysFreeString(query);
@@ -4337,14 +4346,48 @@ static const char simple_script_str[] =
     "<html><head></head><body>"
     "<div id=\"divid\"></div>"
     "<script language=\"TestScript1\">simple script</script>"
-    "<script language=\"TestScript2\">second script</script>"
     "</body></html>";
 
-static const char simple_script_with_prescript_site_str[] =
-    "<html><head><meta http-equiv=\"x-ua-compatible\" content=\"IE=9\" /></head><body>"
-    "<script language=\"TestScript1\">with pre-script site</script>"
-    "<script>if(true) try { Object.getPrototypeOf(Object); document.fail_prop = 1; } catch(e) {}</script>"
-    "</body></html>";
+static void test_insert_script_elem(IHTMLDocument2 *doc, const WCHAR *code, const WCHAR *lang)
+{
+    IHTMLDOMNode *node, *body_node, *inserted_node;
+    IHTMLScriptElement *script;
+    IHTMLElement *elem, *body;
+    HRESULT hres;
+    BSTR bstr;
+
+    bstr = SysAllocString(L"script");
+    hres = IHTMLDocument2_createElement(doc, bstr, &elem);
+    ok(hres == S_OK, "createElement failed: %08lx\n", hres);
+    SysFreeString(bstr);
+
+    bstr = SysAllocString(lang);
+    hres = IHTMLElement_put_language(elem, bstr);
+    ok(hres == S_OK, "put_language failed: %08lx\n", hres);
+    SysFreeString(bstr);
+
+    bstr = SysAllocString(code);
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLScriptElement, (void**)&script);
+    ok(hres == S_OK, "Could not get IHTMLScriptElement iface: %08lx\n", hres);
+    hres = IHTMLScriptElement_put_text(script, bstr);
+    ok(hres == S_OK, "put_text failed: %08lx\n", hres);
+    IHTMLScriptElement_Release(script);
+    SysFreeString(bstr);
+
+    hres = IHTMLDocument2_get_body(doc, &body);
+    ok(hres == S_OK, "get_body failed: %08lx\n", hres);
+    hres = IHTMLElement_QueryInterface(elem, &IID_IHTMLDOMNode, (void**)&node);
+    ok(hres == S_OK, "Could not get IHTMLDOMNode iface: %08lx\n", hres);
+    hres = IHTMLElement_QueryInterface(body, &IID_IHTMLDOMNode, (void**)&body_node);
+    ok(hres == S_OK, "Could not get IHTMLDOMNode iface: %08lx\n", hres);
+    hres = IHTMLDOMNode_appendChild(body_node, node, &inserted_node);
+    ok(hres == S_OK, "appendChild failed: %08lx\n", hres);
+    IHTMLDOMNode_Release(inserted_node);
+    IHTMLDOMNode_Release(body_node);
+    IHTMLDOMNode_Release(node);
+    IHTMLElement_Release(body);
+    IHTMLElement_Release(elem);
+}
 
 static void test_exec_script(IHTMLDocument2 *doc, const WCHAR *codew, const WCHAR *langw)
 {
@@ -4537,54 +4580,50 @@ static void test_simple_script(void)
     CHECK_CALLED(ParseScriptText_script_with_prescript_site);
     CHECK_CALLED(SetScriptState_CONNECTED);
 
+    SET_EXPECT(CreateInstance2);
+    SET_EXPECT(GetInterfaceSafetyOptions2);
+    SET_EXPECT(SetInterfaceSafetyOptions2);
+    SET_EXPECT(SetProperty2_INVOKEVERSIONING);
+    SET_EXPECT(SetProperty2_HACK_TRIDENTEVENTSINK);
+    SET_EXPECT(InitNew2);
+    SET_EXPECT(SetScriptSite2);
+    SET_EXPECT(AddNamedItem2);
+    SET_EXPECT(SetProperty_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
+    SET_EXPECT(SetProperty2_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
+    SET_EXPECT(ParseScriptText_script2);
+
+    test_insert_script_elem(doc, L"second script", L"TestScript2");
+
+    CHECK_CALLED(CreateInstance2);
+    CHECK_CALLED(GetInterfaceSafetyOptions2);
+    CHECK_CALLED(SetInterfaceSafetyOptions2);
+    CHECK_CALLED(SetProperty2_INVOKEVERSIONING);
+    CHECK_CALLED(SetProperty2_HACK_TRIDENTEVENTSINK);
+    CHECK_CALLED(InitNew2);
+    CHECK_CALLED(SetScriptSite2);
+    CHECK_CALLED(AddNamedItem2);
+    CHECK_CALLED(SetProperty_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
+    CHECK_CALLED(SetProperty2_ABBREVIATE_GLOBALNAME_RESOLUTION_FALSE);
+    CHECK_CALLED(ParseScriptText_script2);
+
+    test_exec_script(doc, L"execScript call", L"TestScript1");
+
     if(site)
         IActiveScriptSite_Release(site);
-
-    bstr = SysAllocString(L"fail_prop");
-    hres = IHTMLDocument2_GetIDsOfNames(doc, &IID_NULL, &bstr, 1, 0, &dispid);
-    ok(hres == DISP_E_UNKNOWNNAME, "GetIDsOfNames(fail_prop) returned: %08lx\n", hres);
-    SysFreeString(bstr);
-
-    hres = IHTMLDocument2_get_parentWindow(doc, &window);
-    ok(hres == S_OK, "get_parentWindow failed: %08lx\n", hres);
-
-    hres = IHTMLWindow2_get_document(window, &doc_node);
-    ok(hres == S_OK, "get_document failed: %08lx\n", hres);
-    IHTMLWindow2_Release(window);
-
-    hres = IHTMLDocument2_QueryInterface(doc_node, &IID_IHTMLDocument6, (void**)&doc6);
-    ok(hres == S_OK, "Could not get IHTMLDocument6 iface: %08lx\n", hres);
-    hres = IHTMLDocument6_get_documentMode(doc6, &v);
-    ok(V_VT(&v) == VT_R4, "V_VT(documentMode) = %d\n", V_VT(&v));
-    ok(V_R4(&v) == 5.0, "V_R4(documentMode) = %f\n", V_R4(&v));
-    IHTMLDocument6_Release(doc6);
-
-    hres = IHTMLDocument2_QueryInterface(doc_node, &IID_IServiceProvider, (void**)&sp);
-    ok(hres == S_OK, "Could not get IServiceProvider iface: %08lx\n", hres);
-    IHTMLDocument2_Release(doc_node);
-
-    hres = IServiceProvider_QueryService(sp, &IID_IActiveScriptSite, &IID_IOleCommandTarget, (void**)&cmdtarget);
-    ok(hres == S_OK, "QueryService(IID_IActiveScriptSite->IID_IOleCommandTarget) failed: %08lx\n", hres);
-    ok(cmdtarget != NULL, "cmdtarget == NULL\n");
-
-    hres = IOleCommandTarget_QueryInterface(cmdtarget, &IID_IActiveScriptSite, (void**)&site);
-    ok(hres == S_OK, "Command Target QI for IActiveScriptSite failed: %08lx\n", hres);
-    ok(site == site2, "site != site2\n");
-    IOleCommandTarget_Release(cmdtarget);
-    IServiceProvider_Release(sp);
+    if(site2)
+        IActiveScriptSite_Release(site2);
+    if(window_dispex)
+        IDispatchEx_Release(window_dispex);
 
     SET_EXPECT(SetScriptState_DISCONNECTED);
     SET_EXPECT(Close);
+    SET_EXPECT(Close2);
 
     IHTMLDocument2_Release(doc);
 
     CHECK_CALLED(SetScriptState_DISCONNECTED);
     CHECK_CALLED(Close);
-
-    IActiveScriptSite_Release(site2);
-    IActiveScriptSite_Release(site);
-    if(window_dispex)
-        IDispatchEx_Release(window_dispex);
+    CHECK_CALLED(Close2);
 }
 
 static void run_from_moniker(IMoniker *mon)

@@ -79,7 +79,7 @@ static DWORD (WINAPI *pCtrlRoutine)(void *);
 
 SYSTEM_DLL_INIT_BLOCK LdrSystemDllInitBlock = { 0xf0 };
 
-unixlib_handle_t ntdll_unix_handle = 0;
+unixlib_handle_t __wine_unixlib_handle = 0;
 
 /* windows directory */
 const WCHAR windows_dir[] = L"C:\\windows";
@@ -1463,14 +1463,9 @@ static NTSTATUS fixup_imports( WINE_MODREF *wm, LPCWSTR load_path )
     {
         dep_after = wm->ldr.DdagNode->Dependencies.Tail;
         if (!import_dll( wm->ldr.DllBase, &imports[i], load_path, &imp ))
-        {
-            imp = NULL;
             status = STATUS_DLL_NOT_FOUND;
-        }
-        else if (imp && !is_import_dll_system( &wm->ldr, &imports[i] ))
-        {
+        else if (imp && imp->ldr.DdagNode != node_ntdll && imp->ldr.DdagNode != node_kernel32)
             add_module_dependency_after( wm->ldr.DdagNode, imp->ldr.DdagNode, dep_after );
-        }
     }
     current_modref = prev;
     if (wm->ldr.ActivationContext) RtlDeactivateActivationContext( 0, cookie );
@@ -2349,10 +2344,9 @@ static NTSTATUS build_module( LPCWSTR load_path, const UNICODE_STRING *nt_name, 
  */
 static void build_ntdll_module( HMODULE module )
 {
-    UNICODE_STRING nt_name;
+    UNICODE_STRING nt_name = RTL_CONSTANT_STRING( L"\\??\\C:\\windows\\system32\\ntdll.dll" );
     WINE_MODREF *wm;
 
-    RtlInitUnicodeString( &nt_name, L"\\??\\C:\\windows\\system32\\ntdll.dll" );
     wm = alloc_module( module, &nt_name, TRUE );
     assert( wm );
     wm->ldr.Flags &= ~LDR_DONT_RESOLVE_REFS;
@@ -2526,7 +2520,7 @@ static inline WCHAR *append_path( WCHAR *p, const WCHAR *str, int len )
 static NTSTATUS get_dll_load_path( LPCWSTR module, LPCWSTR dll_dir, ULONG safe_mode, WCHAR **path )
 {
     const WCHAR *mod_end = module;
-    UNICODE_STRING name, value;
+    UNICODE_STRING name = RTL_CONSTANT_STRING( L"PATH" ), value;
     WCHAR *p, *ret;
     int len = ARRAY_SIZE(system_path) + 1, path_len = 0;
 
@@ -2536,7 +2530,6 @@ static NTSTATUS get_dll_load_path( LPCWSTR module, LPCWSTR dll_dir, ULONG safe_m
         len += (mod_end - module) + 1;
     }
 
-    RtlInitUnicodeString( &name, L"PATH" );
     value.Length = 0;
     value.MaximumLength = 0;
     value.Buffer = NULL;
@@ -2785,7 +2778,7 @@ static NTSTATUS load_so_dll( LPCWSTR load_path, const UNICODE_STRING *nt_name,
     struct load_so_dll_params params = { *nt_name, &module };
 
     TRACE( "trying %s as so lib\n", debugstr_us(nt_name) );
-    if ((status = NTDLL_UNIX_CALL( load_so_dll, &params )))
+    if ((status = WINE_UNIX_CALL( unix_load_so_dll, &params )))
     {
         WARN( "failed to load .so lib %s\n", debugstr_us(nt_name) );
         if (status == STATUS_INVALID_IMAGE_FORMAT) status = STATUS_INVALID_IMAGE_NOT_MZ;
@@ -3375,7 +3368,7 @@ static NTSTATUS load_dll( const WCHAR *load_path, const WCHAR *libname, DWORD fl
     switch (nts)
     {
     case STATUS_INVALID_IMAGE_NOT_MZ:  /* not in PE format, maybe it's a .so file */
-        if (ntdll_unix_handle) nts = load_so_dll( load_path, &nt_name, flags, pwm );
+        if (__wine_unixlib_handle) nts = load_so_dll( load_path, &nt_name, flags, pwm );
         break;
 
     case STATUS_SUCCESS:  /* valid PE file */
@@ -3420,6 +3413,49 @@ NTSTATUS WINAPI __wine_unix_call( unixlib_handle_t handle, unsigned int code, vo
     return __wine_unix_call_dispatcher( handle, code, args );
 }
 
+
+/***********************************************************************
+ *           __wine_unix_spawnvp
+ */
+NTSTATUS WINAPI __wine_unix_spawnvp( char * const argv[], int wait )
+{
+    struct wine_spawnvp_params params = { (char **)argv, wait };
+
+    return WINE_UNIX_CALL( unix_wine_spawnvp, &params );
+}
+
+
+/***********************************************************************
+ *           wine_server_call
+ */
+unsigned int CDECL wine_server_call( void *req_ptr )
+{
+    return WINE_UNIX_CALL( unix_wine_server_call, req_ptr );
+}
+
+
+/***********************************************************************
+ *           wine_server_fd_to_handle
+ */
+NTSTATUS CDECL wine_server_fd_to_handle( int fd, unsigned int access, unsigned int attributes,
+                                         HANDLE *handle )
+{
+    struct wine_server_fd_to_handle_params params = { fd, access, attributes, handle };
+
+    return WINE_UNIX_CALL( unix_wine_server_fd_to_handle, &params );
+}
+
+
+/***********************************************************************
+ *           wine_server_handle_to_fd (NTDLL.@)
+ */
+NTSTATUS CDECL wine_server_handle_to_fd( HANDLE handle, unsigned int access, int *unix_fd,
+                                         unsigned int *options )
+{
+    struct wine_server_handle_to_fd_params params = { handle, access, unix_fd, options };
+
+    return WINE_UNIX_CALL( unix_wine_server_handle_to_fd, &params );
+}
 
 /******************************************************************
  *		LdrLoadDll (NTDLL.@)
@@ -4186,23 +4222,22 @@ static void load_global_options(void)
     char buffer[256];
     KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
     OBJECT_ATTRIBUTES attr;
-    UNICODE_STRING name_str, val_str;
-    struct known_dll *known_dll;
-    ULONG idx = 0, size;
-    NTSTATUS status;
+    UNICODE_STRING bootstrap_mode_str = RTL_CONSTANT_STRING( L"WINEBOOTSTRAPMODE" );
+    UNICODE_STRING session_manager_str =
+        RTL_CONSTANT_STRING( L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Session Manager" );
+    UNICODE_STRING val_str;
     HANDLE hkey;
 
-    RtlInitUnicodeString( &name_str, L"WINEBOOTSTRAPMODE" );
     val_str.MaximumLength = 0;
-    is_prefix_bootstrap = RtlQueryEnvironmentVariable_U( NULL, &name_str, &val_str ) != STATUS_VARIABLE_NOT_FOUND;
+    is_prefix_bootstrap =
+        RtlQueryEnvironmentVariable_U( NULL, &bootstrap_mode_str, &val_str ) != STATUS_VARIABLE_NOT_FOUND;
 
     attr.Length = sizeof(attr);
     attr.RootDirectory = 0;
-    attr.ObjectName = &name_str;
+    attr.ObjectName = &session_manager_str;
     attr.Attributes = OBJ_CASE_INSENSITIVE;
     attr.SecurityDescriptor = NULL;
     attr.SecurityQualityOfService = NULL;
-    RtlInitUnicodeString( &name_str, L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Session Manager" );
 
     if (!NtOpenKey( &hkey, KEY_QUERY_VALUE, &attr ))
     {
@@ -4276,12 +4311,11 @@ static void map_wow64cpu(void)
 {
     SIZE_T size = 0;
     OBJECT_ATTRIBUTES attr;
-    UNICODE_STRING string;
+    UNICODE_STRING string = RTL_CONSTANT_STRING( L"\\??\\C:\\windows\\sysnative\\wow64cpu.dll" );
     HANDLE file, section;
     IO_STATUS_BLOCK io;
     NTSTATUS status;
 
-    RtlInitUnicodeString( &string, L"\\??\\C:\\windows\\sysnative\\wow64cpu.dll" );
     InitializeObjectAttributes( &attr, &string, 0, NULL, NULL );
     if ((status = NtOpenFile( &file, GENERIC_READ | SYNCHRONIZE, &attr, &io, FILE_SHARE_READ,
                               FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE )))
@@ -4374,16 +4408,14 @@ void WINAPI LdrInitializeThunk( CONTEXT *context, ULONG_PTR unknown2, ULONG_PTR 
     if (!imports_fixup_done)
     {
         MEMORY_BASIC_INFORMATION meminfo;
-        int i;
-        ANSI_STRING func_name;
+        ANSI_STRING base_thread_init_thunk = RTL_CONSTANT_STRING( "BaseThreadInitThunk" );
+        ANSI_STRING ctrl_routine = RTL_CONSTANT_STRING( "CtrlRoutine" );
         WINE_MODREF *kernel32;
         PEB *peb = NtCurrentTeb()->Peb;
         WCHAR env_str[16];
 
         NtQueryVirtualMemory( GetCurrentProcess(), LdrInitializeThunk, MemoryBasicInformation,
                               &meminfo, sizeof(meminfo), NULL );
-        NtQueryVirtualMemory( GetCurrentProcess(), meminfo.AllocationBase, MemoryWineUnixFuncs,
-                              &ntdll_unix_handle, sizeof(ntdll_unix_handle), NULL );
 
         peb->LdrData            = &ldr;
         peb->FastPebLock        = &peb_lock;
@@ -4405,7 +4437,8 @@ void WINAPI LdrInitializeThunk( CONTEXT *context, ULONG_PTR unknown2, ULONG_PTR 
         RtlInitializeBitMap( &tls_bitmap, peb->TlsBitmapBits, sizeof(peb->TlsBitmapBits) * 8 );
         RtlInitializeBitMap( &tls_expansion_bitmap, peb->TlsExpansionBitmapBits,
                              sizeof(peb->TlsExpansionBitmapBits) * 8 );
-        RtlSetBits( peb->TlsBitmap, 0, 1 ); /* TLS index 0 is reserved and should be initialized to NULL. */
+        /* TLS index 0 is always reserved, and wow64 reserves extra TLS entries */
+        RtlSetBits( peb->TlsBitmap, 0, NtCurrentTeb()->WowTebOffset ? WOW64_TLS_MAX_NUMBER : 1 );
 
         /* initialize hash table */
         for (i = 0; i < HASH_MAP_SIZE; i++)
@@ -4430,15 +4463,13 @@ void WINAPI LdrInitializeThunk( CONTEXT *context, ULONG_PTR unknown2, ULONG_PTR 
             NtTerminateProcess( GetCurrentProcess(), status );
         }
         node_kernel32 = kernel32->ldr.DdagNode;
-        RtlInitAnsiString( &func_name, "BaseThreadInitThunk" );
-        if ((status = LdrGetProcedureAddress( kernel32->ldr.DllBase, &func_name,
+        if ((status = LdrGetProcedureAddress( kernel32->ldr.DllBase, &base_thread_init_thunk,
                                               0, (void **)&pBaseThreadInitThunk )) != STATUS_SUCCESS)
         {
             MESSAGE( "wine: could not find BaseThreadInitThunk in kernel32.dll, status %lx\n", status );
             NtTerminateProcess( GetCurrentProcess(), status );
         }
-        RtlInitAnsiString( &func_name, "CtrlRoutine" );
-        LdrGetProcedureAddress( kernel32->ldr.DllBase, &func_name, 0, (void **)&pCtrlRoutine );
+        LdrGetProcedureAddress( kernel32->ldr.DllBase, &ctrl_routine, 0, (void **)&pCtrlRoutine );
 
         actctx_init();
         locale_init();
@@ -4601,6 +4632,15 @@ PVOID WINAPI RtlImageRvaToVa( const IMAGE_NT_HEADERS *nt, HMODULE module,
     return (char *)module + sec->PointerToRawData + (rva - sec->VirtualAddress);
 }
 
+
+/***********************************************************************
+ *           RtlAddressInSectionTable   (NTDLL.@)
+ */
+PVOID WINAPI RtlAddressInSectionTable( const IMAGE_NT_HEADERS *nt, HMODULE module,
+                                       DWORD rva )
+{
+    return RtlImageRvaToVa( nt, module, rva, NULL );
+}
 
 /***********************************************************************
  *           RtlPcToFileHeader   (NTDLL.@)
@@ -4827,9 +4867,8 @@ NTSTATUS WINAPI RtlGetExePath( PCWSTR name, PWSTR *path )
     /* same check as NeedCurrentDirectoryForExePathW */
     if (!wcschr( name, '\\' ))
     {
-        UNICODE_STRING name, value = { 0 };
+        UNICODE_STRING name = RTL_CONSTANT_STRING( L"NoDefaultCurrentDirectoryInExePath" ), value = { 0 };
 
-        RtlInitUnicodeString( &name, L"NoDefaultCurrentDirectoryInExePath" );
         if (RtlQueryEnvironmentVariable_U( NULL, &name, &value ) != STATUS_VARIABLE_NOT_FOUND)
             dlldir = L"";
     }

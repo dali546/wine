@@ -727,21 +727,6 @@ HRESULT WINAPI DllGetActivationFactory(HSTRING classid, IActivationFactory **fac
         *factory = &language_factory.IActivationFactory_iface;
         IUnknown_AddRef(*factory);
     }
-    else if (!wcscmp(name, RuntimeClass_Windows_Globalization_GeographicRegion))
-    {
-        *factory = (IActivationFactory *)globalization_geographic_region_factory;
-        IUnknown_AddRef(*factory);
-    }
-    else if (!wcscmp(name, RuntimeClass_Windows_System_Profile_AnalyticsInfo))
-    {
-        *factory = (IActivationFactory *)system_profile_analytics_info_factory;
-        IUnknown_AddRef(*factory);
-    }
-    else if (!wcscmp(name, RuntimeClass_Windows_System_UserProfile_AdvertisingManager))
-    {
-        *factory = (IActivationFactory *)system_user_profile_advertising_manager_factory;
-        IUnknown_AddRef(*factory);
-    }
 
     if (*factory) return S_OK;
     return CLASS_E_CLASSNOTAVAILABLE;

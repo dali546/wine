@@ -2393,8 +2393,8 @@ VkResult wine_vkCreateSwapchainKHR(VkDevice device_handle, const VkSwapchainCrea
     if (create_info_host.oldSwapchain)
         create_info_host.oldSwapchain = wine_swapchain_from_handle(create_info_host.oldSwapchain)->swapchain;
 
-    if (vk_funcs->query_fs_hack &&
-            vk_funcs->query_fs_hack(create_info_host.surface, &object->real_extent, &user_sz,
+    if (vk_funcs->p_query_fs_hack &&
+            vk_funcs->p_query_fs_hack(create_info_host.surface, &object->real_extent, &user_sz,
                                     &object->blit_dst, &object->fs_hack_filter) &&
             create_info_host.imageExtent.width == user_sz.width &&
             create_info_host.imageExtent.height == user_sz.height)
@@ -3052,8 +3052,8 @@ VkResult wine_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice handle,
     if (res == VK_SUCCESS)
         adjust_max_image_count(phys_dev, capabilities);
 
-    if (res == VK_SUCCESS && vk_funcs->query_fs_hack &&
-        vk_funcs->query_fs_hack(surface->driver_surface, NULL, &user_res, NULL, NULL))
+    if (res == VK_SUCCESS && vk_funcs->p_query_fs_hack &&
+        vk_funcs->p_query_fs_hack(surface->driver_surface, NULL, &user_res, NULL, NULL))
     {
         capabilities->currentExtent = user_res;
         capabilities->minImageExtent = user_res;
@@ -3082,8 +3082,8 @@ VkResult wine_vkGetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice handle
     if (res == VK_SUCCESS)
         adjust_max_image_count(phys_dev, &capabilities->surfaceCapabilities);
 
-    if (res == VK_SUCCESS && vk_funcs->query_fs_hack &&
-        vk_funcs->query_fs_hack(wine_surface_from_handle(surface_info->surface)->driver_surface, NULL, &user_res, NULL, NULL))
+    if (res == VK_SUCCESS && vk_funcs->p_query_fs_hack &&
+        vk_funcs->p_query_fs_hack(wine_surface_from_handle(surface_info->surface)->driver_surface, NULL, &user_res, NULL, NULL))
     {
         capabilities->surfaceCapabilities.currentExtent = user_res;
         capabilities->surfaceCapabilities.minImageExtent = user_res;

@@ -6812,18 +6812,6 @@ static inline void convert_VkMemoryAllocateInfo_win32_to_host(struct conversion_
             out_header = (void *)out_ext;
             break;
         }
-        case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
-        {
-            VkImportMemoryFdInfoKHR *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
-            const VkImportMemoryFdInfoKHR32 *in_ext = (const VkImportMemoryFdInfoKHR32 *)in_header;
-            out_ext->sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
-            out_ext->pNext = NULL;
-            out_ext->handleType = in_ext->handleType;
-            out_ext->fd = in_ext->fd;
-            out_header->pNext = (void *)out_ext;
-            out_header = (void *)out_ext;
-            break;
-        }
         case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO:
         {
             VkMemoryAllocateFlagsInfo *out_ext = conversion_context_alloc(ctx, sizeof(*out_ext));
